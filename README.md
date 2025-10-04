@@ -1,16 +1,7 @@
-# surra_application
+# Surra
 
-A new Flutter project.
+Surra is a mobile application designed to help individuals in Saudi Arabia manage their spending, track expenses, and build stronger saving habits. The goal of the project is to address overspending and limited financial awareness by providing AI-powered insights, receipt scanning for automatic expense categorization, saving goals, and guardian-controlled child accounts. In addition, the app introduces localized features such as gold price prediction to support smarter investment decisions.
 
-## Getting Started
+The project is developed using Flutter and Dart for the mobile frontend, while Python is used on the backend and for building the models. OCR will be integrated through Tesseract or Google Vision API and firestore is used as the cloud database for storing user profiles and financial records, while GitHub and Jira support collaboration and project management.
 
-This project is a starting point for a Flutter application.
-
-A few resources to get you started if this is your first Flutter project:
-
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+To launch the application, the repository should be cloned and dependencies installed for both the frontend and backend. Firestore must be connected as the database, the frontend can then be run using Flutter on a simulator, enabling users to access the main features of the app.

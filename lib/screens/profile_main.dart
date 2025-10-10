@@ -256,7 +256,7 @@ class ProfileMainPage extends StatelessWidget {
 
 class _CategoryCard extends StatelessWidget {
   final String title, amount, percent;
-  const _CategoryCard(this.title, this.amount, this.percent, {super.key});
+  const _CategoryCard(this.title, this.amount, this.percent);
 
   @override
   Widget build(BuildContext context) {
@@ -312,7 +312,7 @@ class _CategoryCard extends StatelessWidget {
 }
 
 class _EmptyCategoryCard extends StatelessWidget {
-  const _EmptyCategoryCard({super.key});
+  const _EmptyCategoryCard();
   @override
   Widget build(BuildContext context) {
     return Container(

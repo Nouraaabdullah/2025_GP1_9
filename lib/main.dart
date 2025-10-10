@@ -1,31 +1,46 @@
 import 'package:flutter/material.dart';
-import 'dashboard_page.dart';
+import 'screens/welcome_screen.dart';
+import 'screens/login_screen.dart';
 import 'screens/profile_main.dart';
-import 'screens/edit_profile.dart';
 import 'screens/spending_insight.dart';
+import 'screens/signup_screen.dart';
 
-void main() => runApp(const SurraTestApp());
+import 'screens/profile_setup/setup_name_screen.dart';
+import 'screens/profile_setup/setup_income_screen.dart';
+import 'screens/profile_setup/setup_expenses_screen.dart';
+import 'screens/profile_setup/setup_balance_screen.dart';
+void main() => runApp(const SurraApp());
 
-class SurraTestApp extends StatelessWidget {
-  const SurraTestApp({super.key});
+class SurraApp extends StatelessWidget {
+  const SurraApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Surra Test',
+      title: 'Surra',
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF7959F5)),
+        scaffoldBackgroundColor: const Color(0xFF1D1B32),
         useMaterial3: true,
         fontFamily: 'Poppins',
       ),
-      initialRoute: '/',
+      initialRoute: '/welcome',
       routes: {
-        '/': (context) => const ProfileMainPage(),
-        '/dashboard': (context) => const DashboardPage(),
-        '/editProfile': (context) => const EditProfilePage(),
-        '/spendingInsight': (context) => const SpendingInsightPage(),
+        '/welcome': (context) => const WelcomeScreen(),
+        '/login': (context) => const LoginScreen(),
+        '/profile': (context) => const ProfileMainPage(),
+       '/dashboard': (context) => const SpendingInsightPage(), // 👈 this is now your dashboard
+       '/signup': (context) => const SignUpScreen(),
+
+       '/setupName': (context) => const SetupNameScreen(),
+      '/setupIncome': (context) => const SetupIncomeScreen(),
+       '/setupExpenses': (context) => const SetupExpensesScreen(),
+      '/setupBalance': (context) => const SetupBalanceScreen(),
+
+
       },
+
     );
   }
 }

@@ -7,6 +7,7 @@ class SurraBottomBar extends StatelessWidget {
   final VoidCallback onTapSavings;
   final VoidCallback? onTapProfile;
   final VoidCallback? onTapAssistant;
+  final VoidCallback? onTapAdd; // Add button callback
 
   const SurraBottomBar({
     super.key,
@@ -14,52 +15,90 @@ class SurraBottomBar extends StatelessWidget {
     required this.onTapSavings,
     this.onTapProfile,
     this.onTapAssistant,
+    this.onTapAdd,
   });
 
   @override
   Widget build(BuildContext context) {
-    // Check if there's a FAB in the scaffold
-    final scaffold = Scaffold.maybeOf(context);
-    final hasFAB = scaffold != null;
-    
-    return SizedBox(
-      height: 100,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          // Custom curved bottom bar
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: CustomPaint(
-              size: Size(MediaQuery.of(context).size.width, 100),
-              painter: _CurvedBottomBarPainter(
-                color: AppColors.card,
-              ),
-            ),
-          ),
-          // Navigation items
-          Positioned.fill(
-            child: SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.only(top: 30, bottom: 5),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    _item('AI assistant', Icons.android, onTapAssistant ?? () {}),
-                    _item('Dashboard', Icons.pie_chart, onTapDashboard),
-                    const SizedBox(width: 80), // space for center FAB
-                    _item('Savings', Icons.savings, onTapSavings),
-                    _item('Profile', Icons.person, onTapProfile ?? () {}),
-                  ],
+    return Stack(
+      clipBehavior: Clip.none,
+      alignment: Alignment.topCenter,
+      children: [
+        // Bottom bar
+        SizedBox(
+          height: 100,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              // Custom curved bottom bar
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: CustomPaint(
+                  size: Size(MediaQuery.of(context).size.width, 100),
+                  painter: _CurvedBottomBarPainter(
+                    color: AppColors.card,
+                  ),
                 ),
               ),
+              // Navigation items
+              Positioned.fill(
+                child: SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 30, bottom: 5),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        _item('AI assistant', Icons.android, onTapAssistant ?? () {}),
+                        _item('Dashboard', Icons.pie_chart, onTapDashboard),
+                        const SizedBox(width: 80), // space for center FAB
+                        _item('Savings', Icons.savings, onTapSavings),
+                        _item('Profile', Icons.person, onTapProfile ?? () {}),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        // Center FAB - Always visible
+        Positioned(
+          top: -10,
+          child: GestureDetector(
+            onTap: onTapAdd ?? () {},
+            child: Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    AppColors.accent,
+                    AppColors.accent.withOpacity(0.85),
+                  ],
+                ),
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.accent.withOpacity(0.6),
+                    blurRadius: 24,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: const Icon(
+                Icons.add_rounded,
+                color: Colors.white,
+                size: 28,
+              ),
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 

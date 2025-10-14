@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../widgets/bottom_nav_bar.dart';
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
@@ -6,7 +7,7 @@ class DashboardPage extends StatefulWidget {
   State<DashboardPage> createState() => _DashboardPageState();
 }
 
-/* ===== Theme pieces and timing ===== */
+/* Theme */
 const _bg = Color(0xFF1D1B32);
 const _panel = Color(0xFF211E41);
 const _card = Color(0xFF211E41);
@@ -71,7 +72,8 @@ class _DashboardPageState extends State<DashboardPage> {
       body: SafeArea(
         child: SingleChildScrollView(
           physics: const BouncingScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+          // extra bottom padding so content stays above the fixed bar
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, kBottomNavigationBarHeight + 24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -79,7 +81,6 @@ class _DashboardPageState extends State<DashboardPage> {
                 periodIndex: _periodIndex,
                 onPeriodChanged: (i) => setState(() => _periodIndex = i),
               ),
-
               const SizedBox(height: 12),
 
               SizedBox(
@@ -99,16 +100,16 @@ class _DashboardPageState extends State<DashboardPage> {
 
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
+                children: const [
                   Text(
-                    _chartIndex == 1 ? 'Categories' : 'Legend',
-                    style: const TextStyle(
+                    'Legend',
+                    style: TextStyle(
                       color: _inactive,
                       fontSize: 15,
                       fontWeight: FontWeight.w500,
                     ),
                   ),
-                  _Dots(count: 3, index: _chartIndex),
+                  _Dots(count: 3, index: 0),
                 ],
               ),
 
@@ -161,11 +162,18 @@ class _DashboardPageState extends State<DashboardPage> {
           ),
         ),
       ),
+
+      bottomNavigationBar: SurraBottomBar(
+        onTapDashboard: () => Navigator.pushReplacementNamed(context, '/dashboard'),
+        onTapSavings:   () {}, // already here
+        onTapProfile:   () => Navigator.pushReplacementNamed(context, '/profile'),
+       
+      ),
     );
   }
 }
 
-/* ===== Header with chips ===== */
+/* Header with chips */
 class _HeaderPanel extends StatelessWidget {
   final int periodIndex;
   final ValueChanged<int> onPeriodChanged;
@@ -241,7 +249,7 @@ class _HeaderPanel extends StatelessWidget {
   }
 }
 
-/* ===== Legend ===== */
+/* Legend */
 class _LegendItem {
   final String title;
   final String value;
@@ -301,7 +309,7 @@ class _LegendCard extends StatelessWidget {
   }
 }
 
-/* ===== Goals with glow dots ===== */
+/* Goals with glow dots */
 class _GoalCardGlowy extends StatelessWidget {
   final String title;
   final double percent;
@@ -404,12 +412,12 @@ class _GlowDot extends StatelessWidget {
       height: size,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: color.withOpacity(0.25),
+        color: color.withOpacity(0.15),
         boxShadow: [
           BoxShadow(
             color: color.withOpacity(0.75),
             blurRadius: blur,
-            spreadRadius: blur * 0.35,
+            spreadRadius: blur * 0.85,
           ),
         ],
       ),
@@ -417,7 +425,7 @@ class _GlowDot extends StatelessWidget {
   }
 }
 
-/* ===== Motivation card ===== */
+/* Motivation card */
 class _MotivationCard extends StatelessWidget {
   final String title;
   final String body;
@@ -476,7 +484,7 @@ class _MotivationCard extends StatelessWidget {
   }
 }
 
-/* ===== Chart placeholders ===== */
+/* Chart placeholders */
 class _ChartSemicircleGauge extends StatelessWidget {
   final double percent;
   final String label;
@@ -493,7 +501,7 @@ class _ChartSemicircleGauge extends StatelessWidget {
           children: [
             CustomPaint(
               size: const Size(275, 268),
-              painter: _ArcPainter(color: const Color(0xFF3A3A5A), sweep: 180),
+              painter: _ArcPainter(color: Color(0xFF3A3A5A), sweep: 180),
             ),
             CustomPaint(
               size: const Size(275, 268),
@@ -618,15 +626,15 @@ class _ArcPainter extends CustomPainter {
       old.color != color || old.sweep != sweep;
 }
 
-/* ===== Small helpers ===== */
+/* Small helpers */
 class _SectionTitle extends StatelessWidget {
   final String text;
   const _SectionTitle(this.text);
   @override
   Widget build(BuildContext context) {
-    return Text(
-      text,
-      style: const TextStyle(
+    return const Text(
+      'Goals Progress',
+      style: TextStyle(
         color: Colors.white,
         fontSize: 20,
         fontWeight: FontWeight.w500,

@@ -219,6 +219,7 @@ class ProfileMainPage extends StatelessWidget {
 
       bottomNavigationBar: SurraBottomBar(
         onTapDashboard: () => Navigator.pushNamed(context, '/dashboard'),
+        onTapSavings:   () => Navigator.pushNamed(context, '/savings'),
         onTapProfile: () {}, // already on profile
       ),
     );

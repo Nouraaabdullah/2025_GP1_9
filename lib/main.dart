@@ -9,6 +9,8 @@ import 'screens/profile_setup/setup_name_screen.dart';
 import 'screens/profile_setup/setup_income_screen.dart';
 import 'screens/profile_setup/setup_expenses_screen.dart';
 import 'screens/profile_setup/setup_balance_screen.dart';
+
+import 'screens/Savings/savings_page.dart';
 void main() => runApp(const SurraApp());
 
 class SurraApp extends StatelessWidget {
@@ -30,9 +32,9 @@ class SurraApp extends StatelessWidget {
         '/welcome': (context) => const WelcomeScreen(),
         '/login': (context) => const LoginScreen(),
         '/profile': (context) => const ProfileMainPage(),
-       '/dashboard': (context) => const SpendingInsightPage(), // 👈 this is now your dashboard
+       '/dashboard': (context) => const SpendingInsightPage(), 
        '/signup': (context) => const SignUpScreen(),
-
+      '/savings': (context) => const SavingsPage(),
        '/setupName': (context) => const SetupNameScreen(),
       '/setupIncome': (context) => const SetupIncomeScreen(),
        '/setupExpenses': (context) => const SetupExpensesScreen(),

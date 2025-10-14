@@ -1,57 +1,167 @@
+// lib/widgets/bottom_nav_bar.dart
 import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 
 class SurraBottomBar extends StatelessWidget {
   final VoidCallback onTapDashboard;
-  final VoidCallback? onTapProfile; // optional
+  final VoidCallback onTapSavings;
+  final VoidCallback? onTapProfile;
+  final VoidCallback? onTapAssistant;
+
   const SurraBottomBar({
     super.key,
     required this.onTapDashboard,
+    required this.onTapSavings,
     this.onTapProfile,
+    this.onTapAssistant,
   });
 
   @override
   Widget build(BuildContext context) {
-    return BottomAppBar(
-      color: AppColors.card,
-      height: 88, // extra height avoids overflow
-      shape: const CircularNotchedRectangle(),
-      notchMargin: 8,
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
+    // Check if there's a FAB in the scaffold
+    final scaffold = Scaffold.maybeOf(context);
+    final hasFAB = scaffold != null;
+    
+    return SizedBox(
+      height: 100,
+      child: Stack(
+        clipBehavior: Clip.none,
         children: [
-          _item('AI assistant', Icons.android, () {}),
-          _item('Dashboard', Icons.pie_chart, onTapDashboard),
-          const SizedBox(width: 56), // wider notch spacing for FAB
-          _item('Savings', Icons.savings, () {}),
-          _item('Profile', Icons.person, onTapProfile ?? () {}),
+          // Custom curved bottom bar
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: CustomPaint(
+              size: Size(MediaQuery.of(context).size.width, 100),
+              painter: _CurvedBottomBarPainter(
+                color: AppColors.card,
+              ),
+            ),
+          ),
+          // Navigation items
+          Positioned.fill(
+            child: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.only(top: 30, bottom: 5),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    _item('AI assistant', Icons.android, onTapAssistant ?? () {}),
+                    _item('Dashboard', Icons.pie_chart, onTapDashboard),
+                    const SizedBox(width: 80), // space for center FAB
+                    _item('Savings', Icons.savings, onTapSavings),
+                    _item('Profile', Icons.person, onTapProfile ?? () {}),
+                  ],
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );
   }
 
   Widget _item(String label, IconData icon, VoidCallback onTap) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: 22, color: AppColors.textGrey),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: const TextStyle(
-                color: AppColors.textGrey,
-                fontSize: 10, // small & safe for all phones
-                fontWeight: FontWeight.w500,
+    return Flexible(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(4),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 20, color: AppColors.textGrey),
+              const SizedBox(height: 2),
+              Text(
+                label,
+                style: const TextStyle(
+                  color: AppColors.textGrey,
+                  fontSize: 8,
+                  fontWeight: FontWeight.w500,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.clip,
+                textAlign: TextAlign.center,
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
+}
+
+class _CurvedBottomBarPainter extends CustomPainter {
+  final Color color;
+
+  _CurvedBottomBarPainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
+
+    final path = Path();
+
+    // Start from bottom left
+    path.moveTo(0, size.height);
+    
+    // Left side curve up
+    path.lineTo(0, 40);
+    path.quadraticBezierTo(0, 25, 15, 20);
+    
+    // Top left horizontal
+    path.lineTo(size.width * 0.35, 20);
+    
+    // Curve down into center notch
+    path.quadraticBezierTo(
+      size.width * 0.38, 20,
+      size.width * 0.40, 25,
+    );
+    
+    // Left side of center circle
+    path.quadraticBezierTo(
+      size.width * 0.43, 35,
+      size.width * 0.45, 50,
+    );
+    
+    // Bottom of center notch
+    path.arcToPoint(
+      Offset(size.width * 0.55, 50),
+      radius: const Radius.circular(30),
+      clockwise: false,
+    );
+    
+    // Right side of center circle
+    path.quadraticBezierTo(
+      size.width * 0.57, 35,
+      size.width * 0.60, 25,
+    );
+    
+    // Curve up from center notch
+    path.quadraticBezierTo(
+      size.width * 0.62, 20,
+      size.width * 0.65, 20,
+    );
+    
+    // Top right horizontal
+    path.lineTo(size.width - 15, 20);
+    
+    // Right side curve down
+    path.quadraticBezierTo(size.width, 25, size.width, 40);
+    path.lineTo(size.width, size.height);
+    
+    // Bottom
+    path.lineTo(0, size.height);
+    path.close();
+
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

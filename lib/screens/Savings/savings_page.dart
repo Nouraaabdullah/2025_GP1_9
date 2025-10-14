@@ -32,7 +32,7 @@ class SavingsPage extends StatelessWidget {
                       decoration: BoxDecoration(
                         gradient: RadialGradient(
                           colors: [
-                            AppColors.accent.withOpacity(0.3),
+                            AppColors.accent.withValues(alpha: 0.3),
                             Colors.transparent,
                           ],
                         ),
@@ -72,7 +72,7 @@ class SavingsPage extends StatelessWidget {
                         end: Alignment.bottomCenter,
                         colors: [
                           AppColors.accent,
-                          AppColors.accent.withOpacity(0.3),
+                          AppColors.accent.withValues(alpha: 0.3),
                         ],
                       ),
                       borderRadius: BorderRadius.circular(2),
@@ -129,18 +129,18 @@ class SavingsPage extends StatelessWidget {
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                     colors: [
-                      AppColors.card.withOpacity(0.4),
-                      AppColors.card.withOpacity(0.2),
+                      AppColors.card.withValues(alpha: 0.4),
+                      AppColors.card.withValues(alpha: 0.2),
                     ],
                   ),
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(
-                    color: Colors.white.withOpacity(0.12),
+                    color: Colors.white.withValues(alpha: 0.12),
                     width: 1.5,
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: AppColors.accent.withOpacity(0.15),
+                      color: AppColors.accent.withValues(alpha: 0.15),
                       blurRadius: 24,
                       offset: const Offset(0, 8),
                     ),
@@ -155,7 +155,7 @@ class SavingsPage extends StatelessWidget {
                         Text(
                           'Total Savings',
                           style: TextStyle(
-                            color: AppColors.textGrey.withOpacity(0.8),
+                            color: AppColors.textGrey.withValues(alpha: 0.8),
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
                             letterSpacing: 0.5,
@@ -183,10 +183,10 @@ class SavingsPage extends StatelessWidget {
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: AppColors.accent.withOpacity(0.2),
+                        color: AppColors.accent.withValues(alpha: 0.2),
                         shape: BoxShape.circle,
                         border: Border.all(
-                          color: AppColors.accent.withOpacity(0.4),
+                          color: AppColors.accent.withValues(alpha: 0.4),
                           width: 2,
                         ),
                       ),
@@ -242,7 +242,7 @@ class SavingsPage extends StatelessWidget {
                             end: Alignment.bottomCenter,
                             colors: [
                               AppColors.accent,
-                              AppColors.accent.withOpacity(0.3),
+                              AppColors.accent.withValues(alpha: 0.3),
                             ],
                           ),
                           borderRadius: BorderRadius.circular(2),
@@ -269,13 +269,13 @@ class SavingsPage extends StatelessWidget {
                         end: Alignment.bottomRight,
                         colors: [
                           AppColors.accent,
-                          AppColors.accent.withOpacity(0.8),
+                          AppColors.accent.withValues(alpha: 0.8),
                         ],
                       ),
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
-                          color: AppColors.accent.withOpacity(0.5),
+                          color: AppColors.accent.withValues(alpha: 0.5),
                           blurRadius: 20,
                           offset: const Offset(0, 6),
                         ),
@@ -329,7 +329,9 @@ class SavingsPage extends StatelessWidget {
         onTapDashboard: () => Navigator.pushReplacementNamed(context, '/dashboard'),
         onTapSavings:   () {}, // already here
         onTapProfile:   () => Navigator.pushReplacementNamed(context, '/profile'),
-       
+        onTapAdd: () {
+          // TODO: open "Add saving / Assign to goal" flow
+        },
       ),
     );
   }
@@ -353,35 +355,40 @@ class _MonthCard extends StatelessWidget {
       margin: const EdgeInsets.only(right: 16),
       padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(28),
+        borderRadius: BorderRadius.circular(24),
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: current
               ? [
-                  AppColors.card.withOpacity(0.7),
-                  AppColors.card.withOpacity(0.5),
+                  AppColors.card.withValues(alpha: 0.8),
+                  AppColors.card.withValues(alpha: 0.6),
                 ]
               : [
-                  AppColors.card.withOpacity(0.4),
-                  AppColors.card.withOpacity(0.25),
+                  AppColors.card.withValues(alpha: 0.5),
+                  AppColors.card.withValues(alpha: 0.35),
                 ],
         ),
         border: Border.all(
           color: current
-              ? AppColors.accent.withOpacity(0.3)
-              : Colors.white.withOpacity(0.08),
-          width: current ? 2 : 1,
+              ? AppColors.accent.withValues(alpha: 0.4)
+              : Colors.white.withValues(alpha: 0.1),
+          width: current ? 1.5 : 1,
         ),
-        boxShadow: current
-            ? [
-                BoxShadow(
-                  color: AppColors.accent.withOpacity(0.25),
-                  blurRadius: 24,
-                  offset: const Offset(0, 8),
-                ),
-              ]
-            : [],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.4),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+          if (current)
+            BoxShadow(
+              color: AppColors.accent.withValues(alpha: 0.3),
+              blurRadius: 30,
+              offset: const Offset(0, 12),
+              spreadRadius: -5,
+            ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -396,7 +403,7 @@ class _MonthCard extends StatelessWidget {
                   Text(
                     year,
                     style: TextStyle(
-                      color: AppColors.textGrey.withOpacity(0.7),
+                      color: AppColors.textGrey.withValues(alpha: 0.7),
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
                       letterSpacing: 0.5,
@@ -406,10 +413,10 @@ class _MonthCard extends StatelessWidget {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
-                        color: AppColors.accent.withOpacity(0.2),
+                        color: AppColors.accent.withValues(alpha: 0.2),
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(
-                          color: AppColors.accent.withOpacity(0.4),
+                          color: AppColors.accent.withValues(alpha: 0.4),
                           width: 1,
                         ),
                       ),
@@ -450,7 +457,7 @@ class _MonthCard extends StatelessWidget {
                   shadows: current
                       ? [
                           Shadow(
-                            color: AppColors.accent.withOpacity(0.3),
+                            color: AppColors.accent.withValues(alpha: 0.3),
                             blurRadius: 8,
                           ),
                         ]
@@ -495,12 +502,12 @@ class _SummaryCard extends StatelessWidget {
         gradient: gradient,
         borderRadius: BorderRadius.circular(24),
         border: Border.all(
-          color: Colors.white.withOpacity(0.1),
+          color: Colors.white.withValues(alpha: 0.1),
           width: 1,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.3),
+            color: Colors.black.withValues(alpha: 0.3),
             blurRadius: 20,
             offset: const Offset(0, 8),
           ),
@@ -516,7 +523,7 @@ class _SummaryCard extends StatelessWidget {
                 child: Text(
                   title,
                   style: TextStyle(
-                    color: AppColors.textGrey.withOpacity(0.9),
+                    color: AppColors.textGrey.withValues(alpha: 0.9),
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
                     letterSpacing: 0.3,
@@ -526,12 +533,12 @@ class _SummaryCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.1),
+                  color: Colors.white.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Icon(
                   icon,
-                  color: AppColors.accent.withOpacity(0.8),
+                  color: AppColors.accent.withValues(alpha: 0.8),
                   size: 20,
                 ),
               ),
@@ -563,7 +570,7 @@ class _SummaryCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(24),
                 ),
                 padding: EdgeInsets.zero,
-                shadowColor: AppColors.accent.withOpacity(0.4),
+                shadowColor: AppColors.accent.withValues(alpha: 0.4),
               ).copyWith(
                 elevation: MaterialStateProperty.all(8),
               ),
@@ -606,15 +613,15 @@ class _GoalCard extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            AppColors.card.withOpacity(0.5),
-            AppColors.card.withOpacity(0.3),
+            AppColors.card.withValues(alpha: 0.5),
+            AppColors.card.withValues(alpha: 0.3),
           ],
         ),
         borderRadius: BorderRadius.circular(24),
         border: Border.all(
           color: status == _GoalStatus.done
-              ? const Color(0xFF4CAF50).withOpacity(0.3)
-              : Colors.white.withOpacity(0.08),
+              ? const Color(0xFF4CAF50).withValues(alpha: 0.3)
+              : Colors.white.withValues(alpha: 0.08),
           width: 1,
         ),
       ),
@@ -657,7 +664,7 @@ class _GoalCard extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF4CAF50).withOpacity(0.2),
+                      color: const Color(0xFF4CAF50).withValues(alpha: 0.2),
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(
@@ -670,7 +677,7 @@ class _GoalCard extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.1),
+                      color: Colors.white.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
@@ -696,7 +703,7 @@ class _GoalCard extends StatelessWidget {
                     Container(
                       height: 8,
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.1),
+                        color: Colors.white.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(8),
                       ),
                     ),
@@ -708,13 +715,13 @@ class _GoalCard extends StatelessWidget {
                           gradient: LinearGradient(
                             colors: [
                               AppColors.accent,
-                              AppColors.accent.withOpacity(0.7),
+                              AppColors.accent.withValues(alpha: 0.7),
                             ],
                           ),
                           borderRadius: BorderRadius.circular(8),
                           boxShadow: [
                             BoxShadow(
-                              color: AppColors.accent.withOpacity(0.5),
+                              color: AppColors.accent.withValues(alpha: 0.5),
                               blurRadius: 8,
                             ),
                           ],

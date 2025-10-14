@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'dashboard_page.dart';
+import 'screens/Dashboard/dashboard_page.dart';
 import 'screens/profile_main.dart';
 import 'screens/edit_profile.dart';
 import 'screens/spending_insight.dart';

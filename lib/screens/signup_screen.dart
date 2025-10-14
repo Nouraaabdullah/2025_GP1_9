@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart'; // For Google icon (add to pubspec)
 
 class SignUpScreen extends StatelessWidget {
   const SignUpScreen({super.key});
@@ -161,7 +160,6 @@ class SignUpScreen extends StatelessWidget {
                     onPressed: () {
                       // TODO: implement Google Sign-In logic here
                     },
-                    icon: const FaIcon(FontAwesomeIcons.google, color: Colors.white),
                     label: const Text(
                       'Continue with Google',
                       style: TextStyle(

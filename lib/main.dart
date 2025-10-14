@@ -4,11 +4,12 @@ import 'screens/login_screen.dart';
 import 'screens/profile_main.dart';
 import 'screens/spending_insight.dart';
 import 'screens/signup_screen.dart';
-
+import 'screens/edit_profile.dart';
 import 'screens/profile_setup/setup_name_screen.dart';
 import 'screens/profile_setup/setup_income_screen.dart';
 import 'screens/profile_setup/setup_expenses_screen.dart';
 import 'screens/profile_setup/setup_balance_screen.dart';
+
 void main() => runApp(const SurraApp());
 
 class SurraApp extends StatelessWidget {
@@ -30,17 +31,15 @@ class SurraApp extends StatelessWidget {
         '/welcome': (context) => const WelcomeScreen(),
         '/login': (context) => const LoginScreen(),
         '/profile': (context) => const ProfileMainPage(),
-       '/dashboard': (context) => const SpendingInsightPage(), // 👈 this is now your dashboard
-       '/signup': (context) => const SignUpScreen(),
-
-       '/setupName': (context) => const SetupNameScreen(),
-      '/setupIncome': (context) => const SetupIncomeScreen(),
-       '/setupExpenses': (context) => const SetupExpensesScreen(),
-      '/setupBalance': (context) => const SetupBalanceScreen(),
-
-
+        '/dashboard': (context) =>
+            const SpendingInsightPage(), // 👈 this is now your dashboard
+        '/signup': (context) => const SignUpScreen(),
+        '/editProfile': (context) => const EditProfilePage(),
+        '/setupName': (context) => const SetupNameScreen(),
+        '/setupIncome': (context) => const SetupIncomeScreen(),
+        '/setupExpenses': (context) => const SetupExpensesScreen(),
+        '/setupBalance': (context) => const SetupBalanceScreen(),
       },
-
     );
   }
 }

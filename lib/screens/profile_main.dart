@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 import '../widgets/top_gradient.dart';
+import '../widgets/curved_dark_section.dart';
 import '../widgets/bottom_nav_bar.dart';
 import 'spending_insight.dart';
 
@@ -18,229 +19,192 @@ class ProfileMainPage extends StatelessWidget {
       extendBody: true,
       body: Stack(
         children: [
-          // We use a regular scroll view to avoid sliver hit-test issues.
-          SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // ======= Gradient + Header (same visuals) =======
-                Stack(
-                  children: [
-                    const TopGradient(height: 380),
-                    SafeArea(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 20,
-                          vertical: 12,
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                const Text(
-                                  'Welcome Layan',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 28,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                IconButton(
-                                  icon: const Icon(
-                                    Icons.edit,
-                                    color: Colors.white,
-                                  ),
-                                  onPressed: () => Navigator.pushNamed(
-                                    context,
-                                    '/editProfile',
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 12),
-                            // Total Balance
-                            Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.all(18),
-                              decoration: BoxDecoration(
-                                color: AppColors.card,
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: const Column(
-                                children: [
-                                  Text(
-                                    'Total Balance',
-                                    style: TextStyle(
-                                      color: Color(0xFFD9D9D9),
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                  SizedBox(height: 8),
-                                  Text(
-                                    '7,783.00 ر.س',
-                                    style: TextStyle(
-                                      color: Color(0xFFD9D9D9),
-                                      fontSize: 28,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 18),
-                            // Expense / Income
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: _mini('Expense', '2,560.00 ر.س'),
-                                ),
-                                const SizedBox(width: 16),
-                                Expanded(
-                                  child: _mini('Income', '2,560.00 ر.س'),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+          // Gradient background
+          const TopGradient(height: 450),
 
-                // ======= Dark Section (lifted slightly; rounded) =======
-                Transform.translate(
-                  offset: const Offset(
-                    0,
-                    -64,
-                  ), // keep the “close” look without sliver issues
-                  child: Container(
-                    decoration: const BoxDecoration(
-                      color: AppColors.bg,
-                      borderRadius: BorderRadius.only(
-                        topLeft: Radius.circular(48),
-                        topRight: Radius.circular(48),
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black26,
-                          blurRadius: 8,
-                          offset: Offset(0, -3),
+          // Content on top of gradient
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Welcome Layan',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 28,
+                          fontWeight: FontWeight.w600,
                         ),
-                      ],
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.edit, color: Colors.white),
+                        onPressed: () =>
+                            Navigator.pushNamed(context, '/editProfile'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  // Total Balance
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(18),
+                    decoration: BoxDecoration(
+                      color: AppColors.card,
+                      borderRadius: BorderRadius.circular(20),
                     ),
-                    padding: EdgeInsets.fromLTRB(16, 12, 16, bottomPad),
-                    child: Column(
+                    child: const Column(
                       children: [
-                        Row(
-                          children: [
-                            const Expanded(
-                              child: Text(
-                                'Categories',
-                                style: TextStyle(
-                                  color: AppColors.textGrey,
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ),
-                            // ✅ Button guaranteed to work (direct push)
-                            TextButton(
-                              style: TextButton.styleFrom(
-                                foregroundColor: AppColors.textGrey,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 6,
-                                ),
-                                minimumSize: Size.zero,
-                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                              ),
-                              onPressed: () {
-                                Navigator.of(context).push(
-                                  MaterialPageRoute(
-                                    builder: (_) => const SpendingInsightPage(),
-                                  ),
-                                );
-                              },
-                              child: const Text(
-                                'View all',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w400,
-                                ),
-                              ),
-                            ),
-                          ],
+                        Text(
+                          'Total Balance',
+                          style: TextStyle(
+                            color: Color(0xFFD9D9D9),
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
-                        const SizedBox(height: 12),
-
-                        // Grid (2 filled + 2 empty like your mock)
-                        GridView.count(
-                          crossAxisCount: 2,
-                          mainAxisSpacing: 16,
-                          crossAxisSpacing: 16,
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          children: const [
-                            _CategoryCard(
-                              'Transportation',
-                              '6012.00 ر.س',
-                              '31%',
-                            ),
-                            _CategoryCard(
-                              'Utilities & Bills',
-                              '6012.00 ر.س',
-                              '31%',
-                            ),
-                            _EmptyCategoryCard(),
-                            _EmptyCategoryCard(),
-                          ],
+                        SizedBox(height: 8),
+                        Text(
+                          '7,783.00 SAR',
+                          style: TextStyle(
+                            color: Color(0xFFD9D9D9),
+                            fontSize: 28,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
                       ],
                     ),
                   ),
-                ),
-              ],
+                  const SizedBox(height: 18),
+                  // Expense / Income
+                  Row(
+                    children: [
+                      Expanded(child: _mini('Expense', '2,560.00 SAR', true)),
+                      const SizedBox(width: 16),
+                      Expanded(child: _mini('Income', '2,560.00 SAR', false)),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // Dark section with categories
+          CurvedDarkSection(
+            top: 340,
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(20, 32, 20, bottomPad),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          'Categories',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                      TextButton(
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 6,
+                          ),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        onPressed: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const SpendingInsightPage(),
+                            ),
+                          );
+                        },
+                        child: const Text(
+                          'View Details',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w400,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Grid (3 columns, scrollable)
+                  Expanded(
+                    child: GridView.count(
+                      crossAxisCount: 3,
+                      mainAxisSpacing: 12,
+                      crossAxisSpacing: 12,
+                      childAspectRatio: 0.9,
+                      children: const [
+                        _CategoryCard('Transportation', '6012.00 SAR', '31%'),
+                        _CategoryCard(
+                          'Utilities & Bills',
+                          '6012.00 SAR',
+                          '31%',
+                        ),
+                        _EmptyCategoryCard(),
+                        _EmptyCategoryCard(),
+                        _EmptyCategoryCard(),
+                        _EmptyCategoryCard(),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
       ),
 
-      // FAB (decorative)
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: AppColors.accent,
-        onPressed: () {},
-        child: const Icon(Icons.add, color: Colors.white),
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-
       bottomNavigationBar: SurraBottomBar(
         onTapDashboard: () => Navigator.pushNamed(context, '/dashboard'),
-        onTapSavings:   () => Navigator.pushNamed(context, '/savings'),
+        onTapSavings: () => Navigator.pushNamed(context, '/savings'),
         onTapProfile: () {}, // already on profile
       ),
     );
   }
 
-  Widget _mini(String label, String value) {
+  Widget _mini(String label, String value, bool isExpense) {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 16),
+      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
       decoration: BoxDecoration(
         color: AppColors.card,
         borderRadius: BorderRadius.circular(18),
       ),
       child: Column(
         children: [
-          Text(
-            label,
-            style: const TextStyle(
-              color: Color(0xFFD9D9D9),
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                isExpense ? Icons.arrow_downward : Icons.arrow_upward,
+                color: isExpense
+                    ? const Color(0xFFFF6B9D)
+                    : const Color(0xFF4ECDC4),
+                size: 16,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: const TextStyle(
+                  color: Color(0xFFD9D9D9),
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 4),
           Text(
@@ -266,49 +230,85 @@ class _CategoryCard extends StatelessWidget {
         color: AppColors.card,
         borderRadius: BorderRadius.circular(18),
       ),
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(10),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
+          // Icon placeholder - you can add your icon here
+          Icon(
+            _getIconForCategory(title),
+            color: _getColorForCategory(title),
+            size: 32,
+          ),
+          const SizedBox(height: 6),
           Text(
             title,
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
             style: const TextStyle(
-              color: AppColors.textGrey,
-              fontSize: 13,
+              color: Colors.white,
+              fontSize: 10,
               fontWeight: FontWeight.w500,
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 4),
           Text(
             amount,
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               color: Colors.white,
-              fontSize: 14,
+              fontSize: 11,
               fontWeight: FontWeight.w600,
             ),
           ),
-          const Spacer(),
-          Align(
-            alignment: Alignment.bottomRight,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: AppColors.bg,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Text(
-                percent,
-                style: const TextStyle(
-                  color: AppColors.textGrey,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                ),
+          const SizedBox(height: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+            decoration: BoxDecoration(
+              color: AppColors.bg,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Text(
+              '$percent budget used',
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.visible,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 8,
+                fontWeight: FontWeight.w500,
               ),
             ),
           ),
         ],
       ),
     );
+  }
+
+  IconData _getIconForCategory(String category) {
+    switch (category.toLowerCase()) {
+      case 'transportation':
+        return Icons.directions_car;
+      case 'utilities & bills':
+        return Icons.receipt_long;
+      default:
+        return Icons.category;
+    }
+  }
+
+  Color _getColorForCategory(String category) {
+    switch (category.toLowerCase()) {
+      case 'transportation':
+        return const Color(0xFF9B7EDE);
+      case 'utilities & bills':
+        return const Color(0xFFFF8A65);
+      default:
+        return AppColors.textGrey;
+    }
   }
 }
 

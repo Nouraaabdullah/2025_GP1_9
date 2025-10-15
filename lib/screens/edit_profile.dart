@@ -10,7 +10,7 @@ class EditProfilePage extends StatefulWidget {
 }
 
 class _EditProfilePageState extends State<EditProfilePage> {
-  // State variables
+  // ===== Demo data (wire to backend later) =====
   final List<Map<String, dynamic>> _incomes = [
     {
       'name': 'Salary',
@@ -30,6 +30,16 @@ class _EditProfilePageState extends State<EditProfilePage> {
     },
   ];
 
+  // === Helper: close sheet/dialog, then update on next frame (prevents _dependents.isEmpty) ===
+  void _closeThenUpdate(VoidCallback update, {BuildContext? popContext}) {
+    final ctx = popContext ?? context;
+    if (Navigator.canPop(ctx)) Navigator.pop(ctx);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(update);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -37,11 +47,11 @@ class _EditProfilePageState extends State<EditProfilePage> {
       extendBody: true,
       body: CustomScrollView(
         slivers: [
-          // Top gradient + title bar
+          // Top header
           SliverToBoxAdapter(
             child: Stack(
               children: [
-                const TopGradient(height: 320),
+                const TopGradient(height: 260),
                 SafeArea(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(
@@ -76,7 +86,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
             ),
           ),
 
-          // Main form card
+          // Content card
           SliverToBoxAdapter(
             child: Container(
               decoration: const BoxDecoration(
@@ -90,7 +100,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Monthly Income Section with Add Button
+                  // ===== Incomes =====
                   Row(
                     children: [
                       const Expanded(
@@ -107,25 +117,27 @@ class _EditProfilePageState extends State<EditProfilePage> {
                     ],
                   ),
                   const SizedBox(height: 12),
-
-                  // Income List
                   ..._incomes.map(
                     (income) => Padding(
                       padding: const EdgeInsets.only(bottom: 8),
                       child: _incomeItem(
-                        name: income['name'],
-                        amount: income['amount'],
-                        payDay: income['payDay'],
-                        onDelete: () {
-                          setState(() => _incomes.remove(income));
-                        },
+                        name: income['name'] ?? '',
+                        amount: income['amount'] ?? '0',
+                        payDay: income['payDay'] as DateTime,
+                        onEdit: () => _openAddIncomeSheet(income: income),
+                        onDelete: () => _confirmDelete(
+                          context,
+                          'Income',
+                          income['name'] ?? '',
+                          () => _incomes.remove(income),
+                        ),
                       ),
                     ),
                   ),
 
                   const SizedBox(height: 20),
 
-                  // Add New Fixed Expense with Add Button
+                  // ===== Fixed expenses =====
                   Row(
                     children: [
                       const Expanded(
@@ -142,25 +154,28 @@ class _EditProfilePageState extends State<EditProfilePage> {
                     ],
                   ),
                   const SizedBox(height: 12),
-
-                  // Fixed Expenses List
                   ..._fixedExpenses.map(
                     (expense) => Padding(
                       padding: const EdgeInsets.only(bottom: 8),
                       child: _expenseItem(
-                        name: expense['name'],
-                        amount: expense['amount'],
-                        dueDate: expense['dueDate'],
-                        onDelete: () {
-                          setState(() => _fixedExpenses.remove(expense));
-                        },
+                        name: expense['name'] ?? '',
+                        amount: expense['amount'] ?? '0',
+                        dueDate: expense['dueDate'] as DateTime,
+                        onEdit: () =>
+                            _openAddFixedExpenseSheet(expense: expense),
+                        onDelete: () => _confirmDelete(
+                          context,
+                          'Expense',
+                          expense['name'] ?? '',
+                          () => _fixedExpenses.remove(expense),
+                        ),
                       ),
                     ),
                   ),
 
                   const SizedBox(height: 20),
 
-                  // Create New Category with Add Button
+                  // ===== Categories =====
                   Row(
                     children: [
                       const Expanded(
@@ -177,44 +192,43 @@ class _EditProfilePageState extends State<EditProfilePage> {
                     ],
                   ),
                   const SizedBox(height: 12),
-
-                  // Categories List
                   ..._categories.map(
                     (cat) => Padding(
                       padding: const EdgeInsets.only(bottom: 8),
                       child: _categoryItem(
-                        name: cat['name'],
-                        icon: cat['icon'],
-                        color: cat['color'],
-                        limit: cat['limit'],
+                        name: cat['name'] ?? '',
+                        icon: cat['icon'] as IconData,
+                        color: cat['color'] as Color,
+                        limit: cat['limit'] ?? '0',
                         onEdit: () => _openCategorySheet(category: cat),
-                        onDelete: () {
-                          setState(() => _categories.remove(cat));
-                        },
+                        onDelete: () => _confirmDelete(
+                          context,
+                          'Category',
+                          cat['name'] ?? '',
+                          () => _categories.remove(cat),
+                        ),
                       ),
                     ),
                   ),
 
                   const SizedBox(height: 22),
 
-                  // Save Button
                   Center(
                     child: _glowPrimaryButton(
                       text: 'Save',
                       onPressed: () {
+                        if (!mounted) return;
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(content: Text('Saved ✓')),
                         );
                       },
                     ),
                   ),
-
                   const SizedBox(height: 8),
                 ],
               ),
             ),
           ),
-
           const SliverToBoxAdapter(child: SizedBox(height: 100)),
         ],
       ),
@@ -222,38 +236,69 @@ class _EditProfilePageState extends State<EditProfilePage> {
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
       bottomNavigationBar: SurraBottomBar(
         onTapDashboard: () => Navigator.pushNamed(context, '/dashboard'),
-        onTapSavings:   () => Navigator.pushNamed(context, '/savings'),
+        onTapSavings: () {}, // avoid route error if /savings doesn't exist yet
         onTapProfile: () => Navigator.pop(context),
       ),
     );
   }
 
-  // ======= List Item Widgets =======
+  // ===================== Item cards (unified dark style) =====================
 
   Widget _incomeItem({
     required String name,
     required String amount,
     required DateTime payDay,
+    required VoidCallback onEdit,
     required VoidCallback onDelete,
   }) {
     return Container(
       height: 48,
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: const Color(0xFF2A2840),
         borderRadius: BorderRadius.circular(16),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 12),
       child: Row(
         children: [
-          Text(
-            '$amount SAR',
-            style: const TextStyle(
-              color: Color(0xFF1E1E1E),
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
+          Container(
+            height: 32,
+            width: 32,
+            decoration: const BoxDecoration(
+              color: Color(0xFF5E52E6),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.attach_money,
+              color: Colors.white,
+              size: 18,
             ),
           ),
-          const Spacer(),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              '$name - $amount SAR',
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          InkWell(
+            onTap: onEdit,
+            borderRadius: BorderRadius.circular(8),
+            child: Container(
+              height: 28,
+              width: 28,
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(.08),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.edit, size: 16, color: Colors.white),
+            ),
+          ),
+          const SizedBox(width: 8),
           IconButton(
             icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
             onPressed: onDelete,
@@ -269,35 +314,57 @@ class _EditProfilePageState extends State<EditProfilePage> {
     required String name,
     required String amount,
     required DateTime dueDate,
+    required VoidCallback onEdit,
     required VoidCallback onDelete,
   }) {
     return Container(
       height: 48,
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: const Color(0xFF2A2840),
         borderRadius: BorderRadius.circular(16),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 12),
       child: Row(
         children: [
-          Text(
-            name,
-            style: const TextStyle(
-              color: Color(0xFF1E1E1E),
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
+          Container(
+            height: 32,
+            width: 32,
+            decoration: const BoxDecoration(
+              color: Color(0xFFB388FF),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.receipt_long,
+              color: Colors.white,
+              size: 18,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              '$name - $amount SAR',
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          InkWell(
+            onTap: onEdit,
+            borderRadius: BorderRadius.circular(8),
+            child: Container(
+              height: 28,
+              width: 28,
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(.08),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.edit, size: 16, color: Colors.white),
             ),
           ),
           const SizedBox(width: 8),
-          Text(
-            '$amount SAR',
-            style: const TextStyle(
-              color: Color(0xFF666666),
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const Spacer(),
           IconButton(
             icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
             onPressed: onDelete,
@@ -326,7 +393,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
       padding: const EdgeInsets.symmetric(horizontal: 12),
       child: Row(
         children: [
-          // Circular icon with color
           Container(
             height: 32,
             width: 32,
@@ -334,16 +400,17 @@ class _EditProfilePageState extends State<EditProfilePage> {
             child: Icon(icon, color: Colors.white, size: 18),
           ),
           const SizedBox(width: 12),
-          Text(
-            name,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
+          Expanded(
+            child: Text(
+              name,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ),
-          const Spacer(),
-          // Edit button
           InkWell(
             onTap: onEdit,
             borderRadius: BorderRadius.circular(8),
@@ -358,7 +425,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
             ),
           ),
           const SizedBox(width: 8),
-          // Delete button
           IconButton(
             icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
             onPressed: onDelete,
@@ -370,7 +436,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
     );
   }
 
-  // ======= UI Components =======
+  // ===================== Buttons & helpers =====================
 
   Widget _purpleCircleButton({required VoidCallback onTap}) {
     return InkWell(
@@ -427,23 +493,78 @@ class _EditProfilePageState extends State<EditProfilePage> {
     );
   }
 
-  // ====== Bottom Sheet Popups ======
+  void _confirmDelete(
+    BuildContext context,
+    String type,
+    String name,
+    VoidCallback removeCallback,
+  ) {
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1F1D33),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(
+          'Delete $type',
+          style: const TextStyle(color: Colors.white),
+        ),
+        content: Text(
+          'Are you sure you want to delete "$name" $type?',
+          style: const TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              if (Navigator.canPop(ctx)) Navigator.pop(ctx);
+            },
+            child: const Text(
+              'Cancel',
+              style: TextStyle(color: Colors.white70),
+            ),
+          ),
+          // bright purple like the "+" button
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF5E52E6),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            onPressed: () {
+              _closeThenUpdate(removeCallback, popContext: ctx);
+            },
+            child: const Text('Delete', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
 
-  void _openAddIncomeSheet() {
-    final nameCtrl = TextEditingController();
-    final amountCtrl = TextEditingController();
-    DateTime payDay = DateTime(DateTime.now().year, DateTime.now().month, 27);
+  // ===================== Sheets =====================
+
+  void _openAddIncomeSheet({Map<String, dynamic>? income}) {
+    final nameCtrl = TextEditingController(text: income?['name'] ?? '');
+    final amountCtrl = TextEditingController(text: income?['amount'] ?? '');
+    DateTime payDay =
+        income?['payDay'] ??
+        DateTime(DateTime.now().year, DateTime.now().month, 27);
 
     _openCardSheet(
-      title: 'Monthly Income',
+      title: income == null ? 'Add Monthly Income' : 'Edit Monthly Income',
       child: StatefulBuilder(
         builder: (context, setM) {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              _sheetLabel('Income Name'),
+              const SizedBox(height: 8),
+              _sheetWhiteField(controller: nameCtrl),
+              const SizedBox(height: 16),
+              _sheetLabel('Income Amount'),
+              const SizedBox(height: 8),
               _sheetWhiteField(
                 controller: amountCtrl,
-                icon: Icons.edit,
                 suffix: 'SAR',
                 keyboard: const TextInputType.numberWithOptions(decimal: true),
               ),
@@ -460,19 +581,24 @@ class _EditProfilePageState extends State<EditProfilePage> {
               const SizedBox(height: 18),
               Center(
                 child: _sheetGlowButton(
-                  text: 'Add',
+                  text: income == null ? 'Add' : 'Save',
                   onPressed: () {
-                    if (amountCtrl.text.trim().isEmpty) return;
-                    setState(() {
-                      _incomes.add({
-                        'name': nameCtrl.text.trim().isEmpty
-                            ? 'Income'
-                            : nameCtrl.text.trim(),
-                        'amount': amountCtrl.text.trim(),
-                        'payDay': payDay,
-                      });
+                    if (nameCtrl.text.trim().isEmpty ||
+                        amountCtrl.text.trim().isEmpty)
+                      return;
+                    _closeThenUpdate(() {
+                      if (income == null) {
+                        _incomes.add({
+                          'name': nameCtrl.text.trim(),
+                          'amount': amountCtrl.text.trim(),
+                          'payDay': payDay,
+                        });
+                      } else {
+                        income['name'] = nameCtrl.text.trim();
+                        income['amount'] = amountCtrl.text.trim();
+                        income['payDay'] = payDay;
+                      }
                     });
-                    Navigator.pop(context);
                   },
                 ),
               ),
@@ -486,19 +612,23 @@ class _EditProfilePageState extends State<EditProfilePage> {
     });
   }
 
-  void _openAddFixedExpenseSheet() {
-    final nameCtrl = TextEditingController();
-    final amountCtrl = TextEditingController();
-    DateTime due = DateTime(DateTime.now().year, DateTime.now().month, 27);
+  void _openAddFixedExpenseSheet({Map<String, dynamic>? expense}) {
+    final nameCtrl = TextEditingController(text: expense?['name'] ?? '');
+    final amountCtrl = TextEditingController(text: expense?['amount'] ?? '');
+    DateTime due =
+        expense?['dueDate'] ??
+        DateTime(DateTime.now().year, DateTime.now().month, 27);
 
     _openCardSheet(
-      title: 'Expense Name',
+      title: expense == null ? 'Add Fixed Expense' : 'Edit Fixed Expense',
       child: StatefulBuilder(
         builder: (context, setM) {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _sheetWhiteField(controller: nameCtrl, icon: Icons.edit),
+              _sheetLabel('Expense Name'),
+              const SizedBox(height: 8),
+              _sheetWhiteField(controller: nameCtrl),
               const SizedBox(height: 16),
               _sheetLabel('Due Date'),
               const SizedBox(height: 8),
@@ -514,25 +644,29 @@ class _EditProfilePageState extends State<EditProfilePage> {
               const SizedBox(height: 8),
               _sheetWhiteField(
                 controller: amountCtrl,
-                icon: Icons.edit,
                 keyboard: const TextInputType.numberWithOptions(decimal: true),
               ),
               const SizedBox(height: 18),
               Center(
                 child: _sheetGlowButton(
-                  text: 'Add',
+                  text: expense == null ? 'Add' : 'Save',
                   onPressed: () {
                     if (nameCtrl.text.trim().isEmpty ||
                         amountCtrl.text.trim().isEmpty)
                       return;
-                    setState(() {
-                      _fixedExpenses.add({
-                        'name': nameCtrl.text.trim(),
-                        'amount': amountCtrl.text.trim(),
-                        'dueDate': due,
-                      });
+                    _closeThenUpdate(() {
+                      if (expense == null) {
+                        _fixedExpenses.add({
+                          'name': nameCtrl.text.trim(),
+                          'amount': amountCtrl.text.trim(),
+                          'dueDate': due,
+                        });
+                      } else {
+                        expense['name'] = nameCtrl.text.trim();
+                        expense['amount'] = amountCtrl.text.trim();
+                        expense['dueDate'] = due;
+                      }
                     });
-                    Navigator.pop(context);
                   },
                 ),
               ),
@@ -553,22 +687,18 @@ class _EditProfilePageState extends State<EditProfilePage> {
     Color pickedColor = category?['color'] ?? const Color(0xFF7D5EF6);
 
     _openCardSheet(
-      title: 'Category Name',
+      title: category == null ? 'Add Category' : 'Edit Category',
       child: StatefulBuilder(
         builder: (context, setS) {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              _sheetLabel('Category Name'),
+              const SizedBox(height: 8),
               Row(
                 children: [
-                  Expanded(
-                    child: _sheetWhiteField(
-                      controller: nameCtrl,
-                      icon: Icons.edit,
-                    ),
-                  ),
+                  Expanded(child: _sheetWhiteField(controller: nameCtrl)),
                   const SizedBox(width: 10),
-                  // Icon/Color picker button
                   InkWell(
                     onTap: () async {
                       final result =
@@ -587,8 +717,8 @@ class _EditProfilePageState extends State<EditProfilePage> {
                           );
                       if (result != null) {
                         setS(() {
-                          pickedColor = result['color'];
-                          pickedIcon = result['icon'];
+                          pickedColor = result['color'] as Color;
+                          pickedIcon = result['icon'] as IconData;
                         });
                       }
                     },
@@ -610,16 +740,15 @@ class _EditProfilePageState extends State<EditProfilePage> {
               const SizedBox(height: 8),
               _sheetWhiteField(
                 controller: limitCtrl,
-                icon: Icons.edit,
                 keyboard: const TextInputType.numberWithOptions(decimal: true),
               ),
               const SizedBox(height: 18),
               Center(
                 child: _sheetGlowButton(
-                  text: category == null ? 'Add' : 'Edit',
+                  text: category == null ? 'Add' : 'Save',
                   onPressed: () {
                     if (nameCtrl.text.trim().isEmpty) return;
-                    setState(() {
+                    _closeThenUpdate(() {
                       if (category == null) {
                         _categories.add({
                           'name': nameCtrl.text.trim(),
@@ -634,7 +763,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
                         category['limit'] = limitCtrl.text.trim();
                       }
                     });
-                    Navigator.pop(context);
                   },
                 ),
               ),
@@ -681,20 +809,19 @@ class _EditProfilePageState extends State<EditProfilePage> {
     );
   }
 
-  Widget _sheetLabel(String text) {
-    return Text(
-      text,
-      style: const TextStyle(
-        color: Colors.white,
-        fontSize: 14,
-        fontWeight: FontWeight.w500,
-      ),
-    );
-  }
+  // ===================== Sheet UI bits =====================
+
+  Widget _sheetLabel(String text) => Text(
+    text,
+    style: const TextStyle(
+      color: Colors.white,
+      fontSize: 14,
+      fontWeight: FontWeight.w500,
+    ),
+  );
 
   Widget _sheetWhiteField({
     required TextEditingController controller,
-    required IconData icon,
     TextInputType? keyboard,
     String? suffix,
   }) {
@@ -731,8 +858,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
                 fontWeight: FontWeight.w600,
               ),
             ),
-          const SizedBox(width: 8),
-          Icon(icon, color: AppColors.bg, size: 20),
         ],
       ),
     );
@@ -806,7 +931,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
     );
   }
 
-  // ===== Helpers =====
+  // ===================== Utils =====================
 
   Future<DateTime?> _pickDate(DateTime initial) {
     final now = DateTime.now();
@@ -848,9 +973,8 @@ class _EditProfilePageState extends State<EditProfilePage> {
   }
 }
 
-// ======= Components =======
+// ===================== Icon/Color picker =====================
 
-// Icon/Color picker sheet
 class _IconColorPicker extends StatefulWidget {
   final Color color;
   final IconData icon;

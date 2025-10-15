@@ -13,10 +13,7 @@ class CurvedDarkSection extends StatelessWidget {
       child: Container(
         decoration: const BoxDecoration(
           color: AppColors.bg,
-          borderRadius: BorderRadius.only(
-            topLeft: Radius.circular(40),
-            topRight: Radius.circular(40),
-          ),
+          borderRadius: BorderRadius.all(Radius.circular(48)),
         ),
         child: child,
       ),

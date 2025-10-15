@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../theme/app_colors.dart';
 import '../../widgets/bottom_nav_bar.dart';
 
 class DashboardPage extends StatefulWidget {
@@ -7,156 +8,170 @@ class DashboardPage extends StatefulWidget {
   State<DashboardPage> createState() => _DashboardPageState();
 }
 
-/* Theme */
-const _bg = Color(0xFF1D1B32);
-const _panel = Color(0xFF211E41);
-const _card = Color(0xFF211E41);
-const _inactive = Color(0xFFA6A6A6);
-const _accentPrimary = Color(0xFF4A37E1);
-const _accentSecondary = Color(0xFFBA55D6);
-const _accentTertiary = Color(0xFF64CFF6);
-const _barBg = Color(0xFF8C89B4);
-
-const kFigmaAnim = Duration(milliseconds: 300);
-const kFigmaCurve = Curves.easeInOut;
-
 class _DashboardPageState extends State<DashboardPage> {
-  final _chartController = PageController();
-  final _legendController = PageController(viewportFraction: 0.92);
-
-  int _chartIndex = 0;
   int _periodIndex = 0;
+  bool _showAllCategories = false;
 
-  final List<List<_LegendItem>> _legendsPerPage = [
-    const [
-      _LegendItem('Income', '451 SAR'),
-      _LegendItem('Earnings', '451 SAR'),
-      _LegendItem('Expenses', '451 SAR'),
-    ],
-    const [
-      _LegendItem('Food', '451 SAR'),
-      _LegendItem('Transport', '210 SAR'),
-      _LegendItem('Bills', '320 SAR'),
-      _LegendItem('Shopping', '165 SAR'),
-      _LegendItem('Other', '90 SAR'),
-    ],
-    const [
-      _LegendItem('Income', '451 SAR'),
-      _LegendItem('Earnings', '451 SAR'),
-      _LegendItem('Expenses', '451 SAR'),
-    ],
+  // Accent palette (matches SavingsPage vibe)
+  static const _violet = Color(0xFF8B5CF6);
+  static const _cyan   = Color(0xFF22D3EE);
+  static const _amber  = Color(0xFFFFB020);
+  static const _rose   = Color(0xFFFF7AB6);
+  static const _mint   = Color(0xFF34D399);
+  static const _muted  = Color(0xFF8C89B4);
+
+  // Legends
+  final List<_LegendItem> _incomeLegends = const [
+    _LegendItem('Expenses', '451 SAR', _violet),
+    _LegendItem('Earnings', '300 SAR', _cyan),
+    _LegendItem('Income',   '151 SAR', _muted),
   ];
 
-  @override
-  void dispose() {
-    _chartController.dispose();
-    _legendController.dispose();
-    super.dispose();
-  }
+  final List<_LegendItem> _monthlyLegends = const [
+    _LegendItem('Expenses', '451 SAR', _violet),
+    _LegendItem('Earnings', '300 SAR', _cyan),
+    _LegendItem('Income',   '151 SAR', _muted),
+  ];
 
-  void _onChartChanged(int i) {
-    setState(() => _chartIndex = i);
-    _legendController.animateToPage(
-      0,
-      duration: kFigmaAnim,
-      curve: kFigmaCurve,
-    );
-  }
+  final List<_LegendItem> _categoryLegends = const [
+    _LegendItem('Food',      '451 SAR', _rose),
+    _LegendItem('Transport', '210 SAR', _cyan),
+    _LegendItem('Bills',     '320 SAR', _amber),
+    _LegendItem('Shopping',  '165 SAR', _violet),
+    _LegendItem('Other',      '90 SAR', _mint),
+  ];
+
+  static const double _betweenTitleAndCard = 10; // extra breathing space
 
   @override
   Widget build(BuildContext context) {
-    final legends = _legendsPerPage[_chartIndex];
-
     return Scaffold(
-      backgroundColor: _bg,
+      backgroundColor: AppColors.bg,
       body: SafeArea(
         child: SingleChildScrollView(
           physics: const BouncingScrollPhysics(),
-          // extra bottom padding so content stays above the fixed bar
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, kBottomNavigationBarHeight + 24),
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, kBottomNavigationBarHeight + 24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Page title (sits cleanly at the very top)
+              Stack(
+                children: [
+                  Positioned(
+                    left: 0,
+                    top: 6,
+                    child: Container(
+                      width: 220,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        gradient: RadialGradient(
+                          colors: [
+                            AppColors.accent.withOpacity(0.27),
+                            Colors.transparent,
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  const Text(
+                    'Statistics Dashboard',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 34,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.5,
+                      shadows: [
+                        Shadow(
+                          color: Color(0x33000000),
+                          offset: Offset(0, 2),
+                          blurRadius: 4,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 18),
+
               _HeaderPanel(
                 periodIndex: _periodIndex,
                 onPeriodChanged: (i) => setState(() => _periodIndex = i),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 18),
 
-              SizedBox(
-                height: 280,
-                child: PageView(
-                  controller: _chartController,
-                  onPageChanged: _onChartChanged,
-                  children: const [
-                    _ChartSemicircleGauge(percent: 0.75, label: '%75\nbalance left'),
-                    _ChartRing(label: 'Total Expenses\n2300 SAR'),
-                    _ChartBars(),
+              // Income Overview
+              const _BlockTitle('Income Overview'),
+              const SizedBox(height: _betweenTitleAndCard),
+              _SectionCard(
+                onInfo: () => _showInfo(context, 'Shows remaining income and recent distribution.'),
+                child: Column(
+                  children: [
+                    const SizedBox(height: 8),
+                    const _ChartSemicircleGauge(percent: 0.50, label: '50% of\nincome left'),
+                    const SizedBox(height: 12),
+                    _LegendRow(items: _incomeLegends),
                   ],
                 ),
               ),
+              const SizedBox(height: 16),
 
-              const SizedBox(height: 8),
-
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: const [
-                  Text(
-                    'Legend',
-                    style: TextStyle(
-                      color: _inactive,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  _Dots(count: 3, index: 0),
-                ],
-              ),
-
-              const SizedBox(height: 10),
-
-              SizedBox(
-                height: 96,
-                child: PageView.builder(
-                  controller: _legendController,
-                  padEnds: false,
-                  itemCount: (legends.length / 3).ceil(),
-                  itemBuilder: (context, page) {
-                    final start = page * 3;
-                    final end = (start + 3).clamp(0, legends.length);
-                    final slice = legends.sublist(start, end);
-                    return Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: slice
-                          .map((e) => _LegendCard(title: e.title, value: e.value))
-                          .toList(),
-                    );
-                  },
+              // Monthly Trends
+              const _BlockTitle('Monthly Trends'),
+              const SizedBox(height: _betweenTitleAndCard),
+              _SectionCard(
+                onInfo: () => _showInfo(context, 'Monthly bars for expenses, earnings, and income.'),
+                child: Column(
+                  children: [
+                    const SizedBox(height: 8),
+                    const _ChartBars(),
+                    const SizedBox(height: 12),
+                    _LegendRow(items: _monthlyLegends),
+                  ],
                 ),
               ),
+              const SizedBox(height: 16),
 
-              const SizedBox(height: 18),
-
-              const _SectionTitle('Goals Progress'),
-              const SizedBox(height: 10),
-
-              const _GoalCardGlowy(
-                title: 'Buy a new Car',
-                percent: 0.75,
-                tip: 'You should save 5% more this week!',
+              // Savings Over Time (no legend here)
+              const _BlockTitle('Savings Over Time'),
+              const SizedBox(height: _betweenTitleAndCard),
+              _SectionCard(
+                onInfo: () => _showInfo(context, 'Line of savings balance across months.'),
+                child: const Padding(
+                  padding: EdgeInsets.only(top: 8, bottom: 10),
+                  child: _ChartLinePlaceholder(),
+                ),
               ),
-              const SizedBox(height: 12),
-              const _GoalCardGlowy(
-                title: 'Buy a new Car',
-                percent: 0.75,
-                tip: 'You should save 5% more this week!',
-              ),
+              const SizedBox(height: 16),
 
-              const SizedBox(height: 14),
+              // Category Breakdown
+              const _BlockTitle('Category Breakdown'),
+              const SizedBox(height: _betweenTitleAndCard),
+              _SectionCard(
+                onInfo: () => _showInfo(context, 'Your expenses grouped by category.'),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SizedBox(height: 8),
+                    const _ChartRing(label: 'Total Expenses\n﷼ 2300'),
+                    const SizedBox(height: 12),
 
-              const _MotivationCard(
-                title: 'Keep it up!',
-                body: 'You’re making great progress.',
+                    _CategoryGrid(
+                      items: _categoryLegends,
+                      showAll: _showAllCategories,
+                      initialCount: 3, // 3 per row to avoid crowding
+                    ),
+
+                    const SizedBox(height: 8),
+                    TextButton(
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 6),
+                      ),
+                      onPressed: () => setState(() => _showAllCategories = !_showAllCategories),
+                      child: Text(_showAllCategories ? 'Show less' : 'Show more'),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
@@ -165,15 +180,43 @@ class _DashboardPageState extends State<DashboardPage> {
 
       bottomNavigationBar: SurraBottomBar(
         onTapDashboard: () => Navigator.pushReplacementNamed(context, '/dashboard'),
-        onTapSavings:   () {}, // already here
+        onTapSavings:   () {},
         onTapProfile:   () => Navigator.pushReplacementNamed(context, '/profile'),
-       
+      ),
+    );
+  }
+
+  void _showInfo(BuildContext context, String text) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.card,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.info_outline, color: AppColors.accent),
+                const SizedBox(width: 8),
+                const Text('About this chart', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700)),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(text, style: TextStyle(color: AppColors.textGrey, fontSize: 14, height: 1.4)),
+            const SizedBox(height: 10),
+          ],
+        ),
       ),
     );
   }
 }
 
-/* Header with chips */
+/* ================= Header with chips (SavingsPage vibe) ================= */
 class _HeaderPanel extends StatelessWidget {
   final int periodIndex;
   final ValueChanged<int> onPeriodChanged;
@@ -187,20 +230,26 @@ class _HeaderPanel extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         onTap: () => onPeriodChanged(i),
         child: AnimatedContainer(
-          duration: kFigmaAnim,
-          curve: kFigmaCurve,
+          duration: const Duration(milliseconds: 250),
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
           decoration: BoxDecoration(
-            color: _bg,
-            border: Border.all(color: _panel, width: 0.5),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                AppColors.card.withOpacity(0.7),
+                AppColors.card.withOpacity(0.45),
+              ],
+            ),
+            border: Border.all(color: Colors.white.withOpacity(0.08), width: 1),
             borderRadius: BorderRadius.circular(16),
           ),
           child: Text(
             label,
             style: TextStyle(
-              color: selected ? Colors.white : _inactive,
+              color: selected ? Colors.white : AppColors.textGrey,
               fontSize: 11,
-              fontWeight: FontWeight.w500,
+              fontWeight: FontWeight.w700,
             ),
           ),
         ),
@@ -209,31 +258,27 @@ class _HeaderPanel extends StatelessWidget {
 
     return Container(
       decoration: BoxDecoration(
-        color: _panel,
-        borderRadius: BorderRadius.circular(30),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            AppColors.card.withOpacity(0.6),
+            AppColors.card.withOpacity(0.4),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(32),
+        border: Border.all(color: Colors.white.withOpacity(0.10), width: 1),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.25), blurRadius: 20, offset: const Offset(0, 8)),
+        ],
       ),
-      padding: const EdgeInsets.fromLTRB(24, 20, 24, 14),
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Statistics Dashboard',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 24,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 6),
-          const Text(
-            'Income: 3000SAR',
-            style: TextStyle(
-              color: _inactive,
-              fontSize: 15.4,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(height: 14),
+          Text('Balance: 3000SAR',
+              style: TextStyle(color: AppColors.textGrey, fontSize: 15, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 12),
           Row(
             children: [
               chip('Weekly', 0),
@@ -249,17 +294,89 @@ class _HeaderPanel extends StatelessWidget {
   }
 }
 
-/* Legend */
+/* ================= Section card with i icon ================= */
+class _SectionCard extends StatelessWidget {
+  final Widget child;
+  final VoidCallback onInfo;
+  const _SectionCard({required this.child, required this.onInfo});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            AppColors.card.withOpacity(0.55),
+            AppColors.card.withOpacity(0.35),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.white.withOpacity(0.08), width: 1),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.25), blurRadius: 22, offset: const Offset(0, 10)),
+        ],
+      ),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+      child: Stack(
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(right: 6, top: 2),
+            child: child,
+          ),
+          Positioned(
+            right: 0,
+            top: 0,
+            child: IconButton(
+              icon: Icon(Icons.info_outline, color: AppColors.textGrey),
+              onPressed: onInfo,
+              splashRadius: 18,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/* ================= Titles outside the cards ================= */
+class _BlockTitle extends StatelessWidget {
+  final String text;
+  const _BlockTitle(this.text);
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      text,
+      style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: 0.3),
+    );
+  }
+}
+
+/* ================= Legend UI ================= */
 class _LegendItem {
   final String title;
   final String value;
-  const _LegendItem(this.title, this.value);
+  final Color color;
+  const _LegendItem(this.title, this.value, this.color);
+}
+
+class _LegendRow extends StatelessWidget {
+  final List<_LegendItem> items;
+  const _LegendRow({required this.items});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: items.map((e) => _LegendCard(item: e)).toList(),
+    );
+  }
 }
 
 class _LegendCard extends StatelessWidget {
-  final String title;
-  final String value;
-  const _LegendCard({required this.title, required this.value});
+  final _LegendItem item;
+  const _LegendCard({required this.item});
 
   @override
   Widget build(BuildContext context) {
@@ -267,40 +384,22 @@ class _LegendCard extends StatelessWidget {
       width: 98,
       height: 86,
       decoration: BoxDecoration(
-        color: _card,
-        borderRadius: BorderRadius.circular(10),
+        color: AppColors.card.withOpacity(0.6),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.18), blurRadius: 10, offset: const Offset(0, 6)),
+        ],
       ),
       padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Container(
-            width: 29,
-            height: 29,
-            decoration: const BoxDecoration(
-              color: _bg,
-              shape: BoxShape.circle,
-            ),
-          ),
+          _LegendDot(color: item.color),
           Column(
             children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  color: _inactive,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
+              Text(item.title, style: TextStyle(color: AppColors.textGrey, fontSize: 11, fontWeight: FontWeight.w600)),
               const SizedBox(height: 2),
-              Text(
-                value,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
+              Text(item.value, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w800)),
             ],
           ),
         ],
@@ -309,182 +408,59 @@ class _LegendCard extends StatelessWidget {
   }
 }
 
-/* Goals with glow dots */
-class _GoalCardGlowy extends StatelessWidget {
-  final String title;
-  final double percent;
-  final String tip;
-  const _GoalCardGlowy({
-    required this.title,
-    required this.percent,
-    required this.tip,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF373542),
-        borderRadius: BorderRadius.circular(13.4),
-      ),
-      padding: const EdgeInsets.all(14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              Text(
-                '${(percent * 100).round()}%',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Stack(
-            children: [
-              Container(
-                height: 21,
-                decoration: BoxDecoration(
-                  color: _barBg,
-                  borderRadius: BorderRadius.circular(14.5),
-                ),
-              ),
-              LayoutBuilder(
-                builder: (context, c) => AnimatedContainer(
-                  duration: kFigmaAnim,
-                  curve: kFigmaCurve,
-                  height: 21,
-                  width: c.maxWidth * percent,
-                  decoration: BoxDecoration(
-                    color: _accentPrimary,
-                    borderRadius: BorderRadius.circular(14.5),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: const [
-              _GlowDot(color: _accentPrimary, size: 28, blur: 28),
-              SizedBox(width: 12),
-              _GlowDot(color: _accentSecondary, size: 28, blur: 28),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Text(
-            tip,
-            style: const TextStyle(
-              color: _inactive,
-              fontSize: 13.4,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _GlowDot extends StatelessWidget {
+class _LegendDot extends StatelessWidget {
   final Color color;
-  final double size;
-  final double blur;
-  const _GlowDot({required this.color, this.size = 24, this.blur = 24});
-
+  const _LegendDot({required this.color});
   @override
   Widget build(BuildContext context) {
+    // softer glow
     return Container(
-      width: size,
-      height: size,
+      width: 24,
+      height: 24,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: color.withOpacity(0.15),
+        gradient: RadialGradient(
+          colors: [
+            color.withOpacity(0.85),
+            color.withOpacity(0.15),
+          ],
+          stops: const [0.0, 1.0],
+        ),
         boxShadow: [
-          BoxShadow(
-            color: color.withOpacity(0.75),
-            blurRadius: blur,
-            spreadRadius: blur * 0.85,
-          ),
+          BoxShadow(color: color.withOpacity(0.25), blurRadius: 6, spreadRadius: 0.5),
         ],
+        border: Border.all(color: color.withOpacity(0.8), width: 1),
       ),
     );
   }
 }
 
-/* Motivation card */
-class _MotivationCard extends StatelessWidget {
-  final String title;
-  final String body;
-  const _MotivationCard({required this.title, required this.body});
+/* ============ Category legend: 3 per row, more on expand ============ */
+class _CategoryGrid extends StatelessWidget {
+  final List<_LegendItem> items;
+  final bool showAll;
+  final int initialCount;
+  const _CategoryGrid({required this.items, required this.showAll, this.initialCount = 3});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 80,
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.centerLeft,
-          end: Alignment.centerRight,
-          colors: [Color(0xFFF8E8FF), Color(0xFFF2EFFF)],
-        ),
-        borderRadius: BorderRadius.circular(15),
+    final visible = showAll ? items : items.take(initialCount).toList();
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: visible.length,
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 3,                 // less crowded
+        mainAxisSpacing: 12,
+        crossAxisSpacing: 12,
+        childAspectRatio: 98 / 86,
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 18),
-      child: Row(
-        children: [
-          Container(
-            width: 35,
-            height: 35,
-            decoration: const BoxDecoration(
-              color: Color(0xFFFFF8AF),
-              shape: BoxShape.circle,
-            ),
-          ),
-          const SizedBox(width: 16),
-          Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  color: Colors.black,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                body,
-                style: const TextStyle(
-                  color: Color(0xFF696868),
-                  fontSize: 12.8,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
+      itemBuilder: (_, i) => _LegendCard(item: visible[i]),
     );
   }
 }
 
-/* Chart placeholders */
+/* ================= Charts ================= */
 class _ChartSemicircleGauge extends StatelessWidget {
   final double percent;
   final String label;
@@ -499,27 +475,10 @@ class _ChartSemicircleGauge extends StatelessWidget {
         child: Stack(
           alignment: Alignment.center,
           children: [
-            CustomPaint(
-              size: const Size(275, 268),
-              painter: _ArcPainter(color: Color(0xFF3A3A5A), sweep: 180),
-            ),
-            CustomPaint(
-              size: const Size(275, 268),
-              painter: _ArcPainter(color: _accentSecondary, sweep: 180 * percent * 0.3),
-            ),
-            CustomPaint(
-              size: const Size(275, 268),
-              painter: _ArcPainter(color: _accentTertiary, sweep: 180 * percent),
-            ),
-            Text(
-              label,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 22.6,
-                fontWeight: FontWeight.w400,
-              ),
-            ),
+            CustomPaint(size: const Size(275, 268), painter: _ArcPainter(color: const Color(0xFF3A3A5A), sweep: 180)),
+            CustomPaint(size: const Size(275, 268), painter: _ArcPainter(color: Color(0xFF8B5CF6), sweep: 180 * percent * 0.3)),
+            CustomPaint(size: const Size(275, 268), painter: _ArcPainter(color: Color(0xFF22D3EE), sweep: 180 * percent)),
+            Text(label, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 22.6, fontWeight: FontWeight.w400)),
           ],
         ),
       ),
@@ -540,9 +499,9 @@ class _ChartRing extends StatelessWidget {
           Container(
             width: 220,
             height: 220,
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: _panel,
+              color: AppColors.card.withOpacity(0.8),
             ),
           ),
           Container(
@@ -553,18 +512,10 @@ class _ChartRing extends StatelessWidget {
               value: 0.72,
               backgroundColor: const Color(0xFF3A3A5A),
               strokeWidth: 22,
-              color: _accentPrimary,
+              color: AppColors.accent,
             ),
           ),
-          Text(
-            label,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 20,
-              fontWeight: FontWeight.w600,
-            ),
-          )
+          Text(label, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700)),
         ],
       ),
     );
@@ -573,28 +524,51 @@ class _ChartRing extends StatelessWidget {
 
 class _ChartBars extends StatelessWidget {
   const _ChartBars();
-
   @override
   Widget build(BuildContext context) {
     final bars = [0.9, 0.55, 0.8, 0.62, 0.95, 0.5, 0.7, 0.6];
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 16),
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: bars
-            .map((v) => AnimatedContainer(
-                  duration: kFigmaAnim,
-                  curve: kFigmaCurve,
-                  width: 16,
-                  height: 170 * v,
-                  decoration: BoxDecoration(
-                    color: v > 0.8 ? _accentTertiary : _accentPrimary,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ))
+            .map(
+              (v) => AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                width: 16,
+                height: 170 * v,
+                decoration: BoxDecoration(
+                  color: v > 0.8 ? const Color(0xFF22D3EE) : AppColors.accent,
+                  borderRadius: BorderRadius.circular(8),
+                  boxShadow: [
+                    BoxShadow(color: AppColors.accent.withOpacity(0.18), blurRadius: 6),
+                  ],
+                ),
+              ),
+            )
             .toList(),
       ),
+    );
+  }
+}
+
+class _ChartLinePlaceholder extends StatelessWidget {
+  const _ChartLinePlaceholder();
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 190,
+      decoration: BoxDecoration(
+        color: AppColors.card.withOpacity(0.6),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      alignment: Alignment.center,
+      child: Text('Line chart placeholder', style: TextStyle(color: AppColors.textGrey)),
     );
   }
 }
@@ -603,7 +577,6 @@ class _ArcPainter extends CustomPainter {
   final double sweep;
   final Color color;
   const _ArcPainter({required this.color, required this.sweep});
-
   @override
   void paint(Canvas canvas, Size size) {
     final rect = Rect.fromLTWH(0, 0, size.width, size.height);
@@ -612,58 +585,8 @@ class _ArcPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 22
       ..strokeCap = StrokeCap.round;
-    canvas.drawArc(
-      rect.deflate(14),
-      3.1415926,
-      sweep * 3.1415926 / 180,
-      false,
-      paint,
-    );
+    canvas.drawArc(rect.deflate(14), 3.1415926, sweep * 3.1415926 / 180, false, paint);
   }
-
   @override
-  bool shouldRepaint(covariant _ArcPainter old) =>
-      old.color != color || old.sweep != sweep;
-}
-
-/* Small helpers */
-class _SectionTitle extends StatelessWidget {
-  final String text;
-  const _SectionTitle(this.text);
-  @override
-  Widget build(BuildContext context) {
-    return const Text(
-      'Goals Progress',
-      style: TextStyle(
-        color: Colors.white,
-        fontSize: 20,
-        fontWeight: FontWeight.w500,
-      ),
-    );
-  }
-}
-
-class _Dots extends StatelessWidget {
-  final int count;
-  final int index;
-  const _Dots({required this.count, required this.index});
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: List.generate(count, (i) {
-        final active = i == index;
-        return AnimatedContainer(
-          duration: kFigmaAnim,
-          curve: kFigmaCurve,
-          margin: const EdgeInsets.symmetric(horizontal: 3),
-          width: active ? 18 : 8,
-          height: 8,
-          decoration: BoxDecoration(
-            color: const Color(0xFF4E4B74),
-            borderRadius: BorderRadius.circular(6),
-          ),
-        );
-      }),
-    );
-  }
+  bool shouldRepaint(covariant _ArcPainter old) => old.color != color || old.sweep != sweep;
 }

@@ -1,15 +1,117 @@
 import 'package:flutter/material.dart';
-
-// match your tree:
-// lib/screens/Savings/savings_page.dart  ->  ../../theme & ../../widgets
+import 'package:flutter/services.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/bottom_nav_bar.dart';
 
-class SavingsPage extends StatelessWidget {
+/// ---------------- Domain ----------------
+enum GoalType { active, completed, uncompleted }
+
+class Goal {
+  final String title;
+  final GoalType type;
+  final double targetAmount;
+  final DateTime createdAt;
+  final double savedAmount;
+  final DateTime? targetDate; // persist a real target date
+
+  const Goal({
+    required this.title,
+    required this.type,
+    required this.targetAmount,
+    required this.createdAt,
+    this.savedAmount = 0.0,
+    this.targetDate,
+  });
+
+  double get remaining =>
+      (targetAmount - savedAmount).clamp(0.0, double.infinity);
+
+  double get progress =>
+      targetAmount == 0 ? 0.0 : (savedAmount / targetAmount).clamp(0.0, 1.0);
+
+  Goal copyWith({
+    String? title,
+    double? targetAmount,
+    double? savedAmount,
+    GoalType? type,
+    DateTime? createdAt,
+    DateTime? targetDate,
+  }) {
+    return Goal(
+      title: title ?? this.title,
+      targetAmount: targetAmount ?? this.targetAmount,
+      savedAmount: savedAmount ?? this.savedAmount,
+      type: type ?? this.type,
+      createdAt: createdAt ?? this.createdAt,
+      targetDate: targetDate ?? this.targetDate,
+    );
+  }
+}
+
+/// ---------------- Page ----------------
+class SavingsPage extends StatefulWidget {
   const SavingsPage({super.key});
 
   @override
+  State<SavingsPage> createState() => _SavingsPageState();
+}
+
+class _SavingsPageState extends State<SavingsPage> {
+  GoalType _selected = GoalType.active;
+
+  // Monthly savings (dummy data for now)
+  final Map<String, double> _monthlySavings = {};
+
+  // Derived balances for assigning
+  double _unassignedBalance = 0;
+
+  final List<Goal> _goals = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _generateMonthlySavings();
+  }
+
+  void _generateMonthlySavings() {
+    final now = DateTime.now();
+    final currentYear = now.year;
+    final currentMonth = now.month;
+
+    for (int m = currentMonth; m >= 1; m--) {
+      final monthName = _monthName(m);
+      _monthlySavings['$monthName $currentYear'] = (m * 500) + 1000;
+    }
+
+    _unassignedBalance =
+        _monthlySavings.values.fold(0.0, (sum, v) => sum + v);
+  }
+
+  String _monthName(int month) {
+    const months = [
+      'January','February','March','April','May','June',
+      'July','August','September','October','November','December'
+    ];
+    return months[month - 1];
+  }
+
+  // Computed
+  double get _assignedBalance =>
+      _goals.fold(0.0, (sum, g) => sum + g.savedAmount);
+  double get totalSavings =>
+      _monthlySavings.values.fold(0.0, (sum, v) => sum + v);
+
+  String _fmt(double value) {
+    final s = value.round().toString();
+    return s.replaceAllMapped(
+        RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]},');
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final filtered =
+        _goals.where((g) => g.type == _selected).toList(growable: false);
+
     return Scaffold(
       backgroundColor: AppColors.bg,
       body: SafeArea(
@@ -19,10 +121,9 @@ class SavingsPage extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // ===== Enhanced Header with Animated Glow =====
+              // Title
               Stack(
                 children: [
-                  // Glow effect behind text
                   Positioned(
                     left: 0,
                     top: 5,
@@ -31,10 +132,7 @@ class SavingsPage extends StatelessWidget {
                       height: 40,
                       decoration: BoxDecoration(
                         gradient: RadialGradient(
-                          colors: [
-                            AppColors.accent.withValues(alpha: 0.3),
-                            Colors.transparent,
-                          ],
+                          colors: [AppColors.accent.withOpacity(0.30), Colors.transparent],
                         ),
                       ),
                     ),
@@ -42,159 +140,100 @@ class SavingsPage extends StatelessWidget {
                   const Text(
                     'Savings',
                     style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 36,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: -0.5,
-                      shadows: [
-                        Shadow(
-                          color: Color(0x33000000),
-                          offset: Offset(0, 2),
-                          blurRadius: 4,
-                        ),
-                      ],
+                      color: Colors.white, fontSize: 36, fontWeight: FontWeight.w800, letterSpacing: -0.5,
+                      shadows: [Shadow(color: Color(0x33000000), offset: Offset(0, 2), blurRadius: 4)],
                     ),
                   ),
                 ],
               ),
-
               const SizedBox(height: 32),
-              
-              // ===== Section Header with Accent Line =====
+
+              // Monthly Saving header
               Row(
                 children: [
                   Container(
-                    width: 4,
-                    height: 24,
+                    width: 4, height: 24,
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          AppColors.accent,
-                          AppColors.accent.withValues(alpha: 0.3),
-                        ],
+                        colors: [AppColors.accent, AppColors.accent.withOpacity(0.30)],
+                        begin: Alignment.topCenter, end: Alignment.bottomCenter,
                       ),
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
                   const SizedBox(width: 10),
-                  const Text(
-                    'Monthly Balance',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 22,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.3,
-                    ),
-                  ),
+                  const Text('Monthly Saving',
+                      style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700, letterSpacing: 0.3)),
                 ],
               ),
               const SizedBox(height: 18),
 
-              // ===== Enhanced Horizontal month cards =====
+              // Months list
               SizedBox(
                 height: 190,
-                child: ListView(
+                child: ListView.builder(
                   scrollDirection: Axis.horizontal,
                   physics: const BouncingScrollPhysics(),
-                  children: const [
-                    _MonthCard(
-                      year: '2025',
-                      month: 'September',
-                      amount: '2700 SAR',
-                      current: true,
-                    ),
-                    _MonthCard(
-                      year: '2025',
-                      month: 'August',
-                      amount: '1020 SAR',
-                    ),
-                    _MonthCard(
-                      year: '2025',
-                      month: 'July',
-                      amount: '3100 SAR',
-                    ),
-                  ],
+                  padding: const EdgeInsets.only(bottom: 6, right: 8),
+                  itemCount: _monthlySavings.length,
+                  itemBuilder: (context, index) {
+                    final entry = _monthlySavings.entries.elementAt(index);
+                    final parts = entry.key.split(' ');
+                    final month = parts[0];
+                    final year = parts[1];
+                    final amount = entry.value;
+
+                    final now = DateTime.now();
+                    final isCurrent =
+                        month == _monthName(now.month) && year == now.year.toString();
+
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 16),
+                      child: _MonthCard(
+                        year: year,
+                        month: month,
+                        amount: '${_fmt(amount)} SAR',
+                        current: isCurrent,
+                      ),
+                    );
+                  },
                 ),
               ),
 
               const SizedBox(height: 32),
 
-              // ===== Total with Glassmorphic Container =====
+              // Total Savings
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      AppColors.card.withValues(alpha: 0.4),
-                      AppColors.card.withValues(alpha: 0.2),
-                    ],
+                    begin: Alignment.topLeft, end: Alignment.bottomRight,
+                    colors: [AppColors.card.withOpacity(0.40), AppColors.card.withOpacity(0.20)],
                   ),
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.12),
-                    width: 1.5,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppColors.accent.withValues(alpha: 0.15),
-                      blurRadius: 24,
-                      offset: const Offset(0, 8),
-                    ),
-                  ],
+                  border: Border.all(color: Colors.white.withOpacity(0.12), width: 1.5),
+                  boxShadow: [BoxShadow(color: AppColors.accent.withOpacity(0.15), blurRadius: 24, offset: Offset(0, 8))],
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Total Savings',
-                          style: TextStyle(
-                            color: AppColors.textGrey.withValues(alpha: 0.8),
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        const Text(
-                          '23000 SAR',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 32,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: -0.5,
-                            shadows: [
-                              Shadow(
-                                color: Color(0x44000000),
-                                offset: Offset(0, 2),
-                                blurRadius: 4,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
+                    Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text('Total Savings',
+                          style: TextStyle(color: AppColors.textGrey.withOpacity(0.80), fontSize: 14, fontWeight: FontWeight.w600, letterSpacing: 0.5)),
+                      const SizedBox(height: 4),
+                      Text('${_fmt(totalSavings)} SAR',
+                          style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.w900, letterSpacing: -0.5,
+                            shadows: [Shadow(color: Color(0x44000000), offset: Offset(0, 2), blurRadius: 4)],
+                          )),
+                    ]),
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: AppColors.accent.withValues(alpha: 0.2),
+                        color: AppColors.accent.withOpacity(0.20),
                         shape: BoxShape.circle,
-                        border: Border.all(
-                          color: AppColors.accent.withValues(alpha: 0.4),
-                          width: 2,
-                        ),
+                        border: Border.all(color: AppColors.accent.withOpacity(0.40), width: 2),
                       ),
-                      child: Icon(
-                        Icons.trending_up,
-                        color: AppColors.accent,
-                        size: 28,
-                      ),
+                      child: Icon(Icons.trending_up, color: AppColors.accent, size: 28),
                     ),
                   ],
                 ),
@@ -202,121 +241,72 @@ class SavingsPage extends StatelessWidget {
 
               const SizedBox(height: 24),
 
-              // ===== Enhanced Summary Cards =====
+              // Summary cards
               Row(
-                children: const [
+                children: [
                   Expanded(
                     child: _SummaryCard(
                       title: 'Assigned to Goals',
-                      amount: '20000 SAR',
+                      amount: '${_fmt(_assignedBalance)} SAR',
                       buttonText: 'Unassign',
                       icon: Icons.flag_rounded,
+                      onPressed: _openUnassignPicker,
                     ),
                   ),
-                  SizedBox(width: 14),
+                  const SizedBox(width: 14),
                   Expanded(
                     child: _SummaryCard(
                       title: 'Unassigned Balance',
-                      amount: '3000 SAR',
+                      amount: '${_fmt(_unassignedBalance)} SAR',
                       buttonText: 'Assign',
                       icon: Icons.account_balance_wallet_rounded,
+                      onPressed: _openAssignSheet,
                     ),
                   ),
                 ],
               ),
 
               const SizedBox(height: 32),
-              
-              // ===== Goals Header with Add Button =====
+
+              // Goals header + add
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Row(
-                    children: [
-                      Container(
-                        width: 4,
-                        height: 24,
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [
-                              AppColors.accent,
-                              AppColors.accent.withValues(alpha: 0.3),
-                            ],
-                          ),
-                          borderRadius: BorderRadius.circular(2),
+                  Row(children: [
+                    Container(
+                      width: 4, height: 24,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [AppColors.accent, AppColors.accent.withOpacity(0.30)],
+                          begin: Alignment.topCenter, end: Alignment.bottomCenter,
                         ),
-                      ),
-                      const SizedBox(width: 10),
-                      const Text(
-                        'Savings Goals',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 22,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.3,
-                        ),
-                      ),
-                    ],
-                  ),
-                  Container(
-                    width: 52,
-                    height: 52,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          AppColors.accent,
-                          AppColors.accent.withValues(alpha: 0.8),
-                        ],
-                      ),
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppColors.accent.withValues(alpha: 0.5),
-                          blurRadius: 20,
-                          offset: const Offset(0, 6),
-                        ),
-                      ],
-                    ),
-                    child: Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        onTap: () {
-                          // TODO: open "Add saving / Assign to goal" flow
-                        },
-                        borderRadius: BorderRadius.circular(26),
-                        child: const Icon(
-                          Icons.add_rounded,
-                          color: Colors.white,
-                          size: 28,
-                        ),
+                        borderRadius: BorderRadius.circular(2),
                       ),
                     ),
-                  ),
+                    const SizedBox(width: 10),
+                    const Text('Savings Goals',
+                        style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700, letterSpacing: 0.3)),
+                  ]),
+                  AddGoalFab(onPressed: _openAddGoalSheet),
                 ],
               ),
-              const SizedBox(height: 18),
+              const SizedBox(height: 14),
 
-              const _GoalCard(
-                title: 'Buy a new car',
-                subtitle: '25000 SAR left',
-                progress: 0.44,
-                status: _GoalStatus.inProgress,
+              // Filter
+              _GoalTypeSelector(
+                selected: _selected,
+                onChanged: (t) => setState(() => _selected = t),
               ),
-              const _GoalCard(
-                title: 'Save 2000 SAR',
-                subtitle: '1000 SAR left',
-                progress: 0.50,
-                status: _GoalStatus.inProgress,
-              ),
-              const _GoalCard(
-                title: 'Save 500 SAR monthly',
-                subtitle: 'Completed',
-                progress: 1.0,
-                status: _GoalStatus.done,
+              const SizedBox(height: 12),
+
+              // Goals list
+              ListView.separated(
+                key: ValueKey(_selected),
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: filtered.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 12),
+                itemBuilder: (_, i) => _GoalTile(goal: filtered[i]),
               ),
 
               const SizedBox(height: 80),
@@ -326,18 +316,205 @@ class SavingsPage extends StatelessWidget {
       ),
 
       bottomNavigationBar: SurraBottomBar(
-        onTapDashboard: () => Navigator.pushReplacementNamed(context, '/dashboard'),
-        onTapSavings:   () {}, // already here
-        onTapProfile:   () => Navigator.pushReplacementNamed(context, '/profile'),
-        onTapAdd: () {
-          // TODO: open "Add saving / Assign to goal" flow
+        onTapDashboard: () =>
+            Navigator.pushReplacementNamed(context, '/dashboard'),
+        onTapSavings: () {},
+        onTapProfile: () =>
+            Navigator.pushReplacementNamed(context, '/profile'),
+        onTapAdd: () {},
+      ),
+    );
+  }
+
+  /// -------- Actions / Sheets --------
+  void _openAddGoalSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => AddGoalSheet(
+        onSubmit: (title, amount, targetDate) {
+          setState(() {
+            _goals.add(Goal(
+              title: title.trim(),
+              type: GoalType.active,
+              targetAmount: amount,
+              createdAt: DateTime.now(),
+              targetDate: targetDate, // USE the picked date
+            ));
+            _selected = GoalType.active;
+          });
+          Navigator.of(context).pop();
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Goal created')),
+          );
         },
+      ),
+    );
+  }
+
+  void _openAssignSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => AssignAmountSheet(
+        goals: _goals
+            .where((g) => g.type == GoalType.active && g.remaining > 0)
+            .toList(),
+        unassignedBalance: _unassignedBalance,
+        onAssign: (goal, amount) {
+          if (amount <= 0) return;
+          if (amount > _unassignedBalance) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Not enough unassigned balance')),
+            );
+            return;
+          }
+          if (amount > goal.remaining) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Amount exceeds goal remaining')),
+            );
+            return;
+          }
+
+          setState(() {
+            final i = _goals.indexOf(goal);
+            _goals[i] = goal.copyWith(savedAmount: goal.savedAmount + amount);
+            _unassignedBalance -= amount;
+
+            if (_goals[i].remaining == 0) {
+              _goals[i] = _goals[i].copyWith(type: GoalType.completed);
+            }
+          });
+
+          Navigator.pop(context);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Assigned ${_fmt(amount)} SAR to ${goal.title}')),
+          );
+        },
+      ),
+    );
+  }
+
+  void _openUnassignPicker() {
+    final canUnassign = _goals.where((g) => g.savedAmount > 0).toList();
+    if (canUnassign.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No assigned amounts to unassign')),
+      );
+      return;
+    }
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) => Material(
+        color: Colors.transparent,
+        child: SafeArea(
+          child: Container(
+            decoration: BoxDecoration(
+              color: AppColors.bg,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+            ),
+            child: ListView.separated(
+              padding: const EdgeInsets.all(16),
+              shrinkWrap: true,
+              itemBuilder: (c, idx) {
+                final g = canUnassign[idx];
+                return ListTile(
+                  title: Text(g.title, style: const TextStyle(color: Colors.white)),
+                  subtitle: Text('Assigned: ${_fmt(g.savedAmount)} SAR',
+                      style: const TextStyle(color: Colors.white70)),
+                  trailing: const Icon(Icons.chevron_right, color: Colors.white70),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _openUnassignSheet(g);
+                  },
+                );
+              },
+              separatorBuilder: (_, __) => const Divider(color: Colors.white24),
+              itemCount: canUnassign.length,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _openUnassignSheet(Goal goal) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => UnassignAmountSheet(
+        goal: goal,
+        onUnassign: (amount) {
+          if (amount <= 0 || amount > goal.savedAmount) return;
+
+          setState(() {
+            final i = _goals.indexOf(goal);
+            _goals[i] = goal.copyWith(savedAmount: goal.savedAmount - amount);
+            _unassignedBalance += amount;
+
+            if (_goals[i].type == GoalType.completed && _goals[i].remaining > 0) {
+              _goals[i] = _goals[i].copyWith(type: GoalType.active);
+            }
+          });
+
+          Navigator.pop(context);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Unassigned ${_fmt(amount)} SAR from ${goal.title}')),
+          );
+        },
+      ),
+    );
+  }
+
+  /// -------- Delete Goal (NEW) --------
+  Future<void> _confirmDelete(Goal goal) async {
+    final bool? ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.card,
+        title: const Text('Delete goal', style: TextStyle(color: Colors.white)),
+        content: Text(
+          'Are you sure you want to delete "${goal.title}" goal?\n\n',
+          style: const TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel',style: TextStyle(color: Color.fromARGB(255, 246, 242, 242))),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete', style: TextStyle(color: Color.fromARGB(255, 246, 242, 242))),
+          ),
+        ],
+      ),
+    );
+
+    if (ok == true) _deleteGoal(goal);
+  }
+
+  void _deleteGoal(Goal goal) {
+    setState(() {
+      _unassignedBalance += goal.savedAmount; // return assigned funds
+      _goals.remove(goal);                     // remove goal
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Deleted "${goal.title}". Returned ${_fmt(goal.savedAmount)} SAR to Unassigned.',
+        ),
       ),
     );
   }
 }
 
-/// =============================== MONTH CARD ================================
+/// ---------------- Widgets ----------------
+
 class _MonthCard extends StatelessWidget {
   final String year, month, amount;
   final bool current;
@@ -360,111 +537,68 @@ class _MonthCard extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: current
-              ? [
-                  AppColors.card.withValues(alpha: 0.8),
-                  AppColors.card.withValues(alpha: 0.6),
-                ]
-              : [
-                  AppColors.card.withValues(alpha: 0.5),
-                  AppColors.card.withValues(alpha: 0.35),
-                ],
+              ? [AppColors.card.withOpacity(0.45), AppColors.card.withOpacity(0.25)]
+              : [AppColors.card.withOpacity(0.30), AppColors.card.withOpacity(0.16)],
         ),
         border: Border.all(
-          color: current
-              ? AppColors.accent.withValues(alpha: 0.4)
-              : Colors.white.withValues(alpha: 0.1),
-          width: current ? 1.5 : 1,
+          color: current ? AppColors.accent.withOpacity(0.22) : Colors.white.withOpacity(0.06),
+          width: 1,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.4),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
+            color: AppColors.accent.withOpacity(current ? 0.20 : 0.10),
+            blurRadius: 24,
+            spreadRadius: 0,
+            offset: const Offset(0, 8),
           ),
-          if (current)
-            BoxShadow(
-              color: AppColors.accent.withValues(alpha: 0.3),
-              blurRadius: 30,
-              offset: const Offset(0, 12),
-              spreadRadius: -5,
-            ),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    year,
-                    style: TextStyle(
-                      color: AppColors.textGrey.withValues(alpha: 0.7),
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 0.5,
-                    ),
+          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+            Text(
+              year,
+              style: TextStyle(
+                color: AppColors.textGrey.withOpacity(0.70),
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.5,
+              ),
+            ),
+            
+            if (current)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppColors.accent.withOpacity(0.20),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppColors.accent.withOpacity(0.40), width: 1),
+                ),
+                child: Text(
+                  'Current',
+                  style: TextStyle(
+                    color: AppColors.accent,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.5,
                   ),
-                  if (current)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: AppColors.accent.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: AppColors.accent.withValues(alpha: 0.4),
-                          width: 1,
-                        ),
-                      ),
-                      child: Text(
-                        'NOW',
-                        style: TextStyle(
-                          color: AppColors.accent,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Text(
-                month,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.3,
                 ),
               ),
-            ],
+          ]),
+          const SizedBox(height: 10),
+          const SizedBox(),
+          Text(
+            month,
+            style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700, letterSpacing: 0.3),
           ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                amount,
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 26,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: -0.5,
-                  shadows: current
-                      ? [
-                          Shadow(
-                            color: AppColors.accent.withValues(alpha: 0.3),
-                            blurRadius: 8,
-                          ),
-                        ]
-                      : [],
-                ),
-              ),
-            ],
+          Text(
+            amount,
+            style: TextStyle(
+              color: Colors.white, fontSize: 26, fontWeight: FontWeight.w900, letterSpacing: -0.5,
+              shadows: current ? [Shadow(color: AppColors.accent.withOpacity(0.30), blurRadius: 8)] : const [],
+            ),
           ),
         ],
       ),
@@ -472,28 +606,23 @@ class _MonthCard extends StatelessWidget {
   }
 }
 
-/// ============================== SUMMARY CARD ==============================
 class _SummaryCard extends StatelessWidget {
   final String title, amount, buttonText;
   final IconData icon;
+  final VoidCallback? onPressed;
   const _SummaryCard({
     required this.title,
     required this.amount,
     required this.buttonText,
     required this.icon,
+    this.onPressed,
   });
 
   @override
   Widget build(BuildContext context) {
-    // Both cards use the same purple gradient
-    final gradient = LinearGradient(
-      begin: Alignment.topLeft,
-      end: Alignment.bottomRight,
-      colors: [
-        const Color(0xFF373542),
-        const Color(0xFF4A375E),
-        const Color(0xFF3B3548),
-      ],
+    const gradient = LinearGradient(
+      begin: Alignment.topLeft, end: Alignment.bottomRight,
+      colors: [Color(0xFF373542), Color(0xFF4A375E), Color(0xFF3B3548)],
     );
 
     return Container(
@@ -501,241 +630,1000 @@ class _SummaryCard extends StatelessWidget {
       decoration: BoxDecoration(
         gradient: gradient,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.1),
-          width: 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.3),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
+        border: Border.all(color: Colors.white.withOpacity(0.10), width: 1),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.30), blurRadius: 20, offset: const Offset(0, 8))],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+          Expanded(
+            child: Text(
+              title,
+              style: TextStyle(color: AppColors.textGrey.withOpacity(0.90), fontSize: 13, fontWeight: FontWeight.w600, letterSpacing: 0.3),
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(color: Colors.white.withOpacity(0.10), borderRadius: BorderRadius.circular(10)),
+            child: Icon(icon, color: AppColors.accent.withOpacity(0.80), size: 20),
+          ),
+        ]),
+        const SizedBox(height: 14),
+        Text(amount, style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w900, letterSpacing: -0.5)),
+        const SizedBox(height: 16),
+        SizedBox(
+          height: 44,
+          width: double.infinity,
+          child: ElevatedButton(
+            onPressed: onPressed,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.accent,
+              foregroundColor: Colors.white,
+              elevation: 8,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+              shadowColor: AppColors.accent.withOpacity(0.4),
+            ),
+            child: Text(
+              buttonText,
+              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, letterSpacing: 0.3),
+            ),
+          ),
+        )
+      ]),
+    );
+  }
+}
+
+class _GoalTypeSelector extends StatelessWidget {
+  final GoalType selected;
+  final ValueChanged<GoalType> onChanged;
+  const _GoalTypeSelector({required this.selected, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    Widget pill(String label, GoalType type, Color color) {
+      final isSelected = selected == type;
+      return Expanded(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6),
+          child: GestureDetector(
+            onTap: () => onChanged(type),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 220),
+              curve: Curves.easeOut,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(40),
+                gradient: isSelected
+                    ? LinearGradient(
+                        colors: [color.withOpacity(0.70), color.withOpacity(0.40)],
+                        begin: Alignment.topLeft, end: Alignment.bottomRight,
+                      )
+                    : const LinearGradient(
+                        colors: [Color(0xFF2A2734), Color(0xFF221E2E)],
+                        begin: Alignment.topLeft, end: Alignment.bottomRight,
+                      ),
+                boxShadow: isSelected
+                    ? [BoxShadow(color: color.withOpacity(0.35), blurRadius: 12, offset: Offset(0, 3))]
+                    : [],
+                border: Border.all(
+                  color: isSelected ? color.withOpacity(0.45) : Colors.white.withOpacity(0.10),
+                  width: 1,
+                ),
+              ),
+              child: Center(
                 child: Text(
-                  title,
+                  label,
                   style: TextStyle(
-                    color: AppColors.textGrey.withValues(alpha: 0.9),
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
+                    color: isSelected ? Colors.white : Colors.white.withOpacity(0.65),
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
                     letterSpacing: 0.3,
                   ),
                 ),
               ),
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(
-                  icon,
-                  color: AppColors.accent.withValues(alpha: 0.8),
-                  size: 20,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          Text(
-            amount,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 24,
-              fontWeight: FontWeight.w900,
-              letterSpacing: -0.5,
             ),
           ),
-          const SizedBox(height: 16),
+        ),
+      );
+    }
 
-          // Enhanced Accent Button
-          SizedBox(
-            height: 44,
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: () {},
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.accent,
-                foregroundColor: Colors.white,
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(24),
-                ),
-                padding: EdgeInsets.zero,
-                shadowColor: AppColors.accent.withValues(alpha: 0.4),
-              ).copyWith(
-                elevation: MaterialStateProperty.all(8),
-              ),
-              child: Text(
-                buttonText,
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.3,
-                ),
-              ),
+    return Row(
+      children: [
+        pill('Active', GoalType.active, const Color(0xFF4A37E1)),
+        const SizedBox(width: 16),
+        pill('Completed', GoalType.completed, const Color(0xFF4CAF50)),
+        const SizedBox(width: 16),
+        pill('Uncompleted', GoalType.uncompleted, const Color(0xFFEF5350)),
+      ],
+    );
+  }
+}
+
+class _GoalTile extends StatelessWidget {
+  final Goal goal;
+  const _GoalTile({required this.goal});
+
+  @override
+  Widget build(BuildContext context) {
+    final isActive = goal.type == GoalType.active;
+    final isCompleted = goal.type == GoalType.completed;
+    final isUncompleted = goal.type == GoalType.uncompleted;
+
+    final Color base = isCompleted
+        ? const Color(0xFF4CAF50)
+        : isUncompleted
+            ? const Color(0xFFEF5350)
+            : const Color(0xFF4A37E1);
+    final Color borderColor = base.withOpacity(0.30);
+
+    final Widget statusChip = isActive
+        ? Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: const Color(0xFF4A37E1).withOpacity(0.20),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFF4A37E1).withOpacity(0.30), width: 1),
             ),
-          ),
-        ],
+            child: Text(
+              '${(goal.progress * 100).toInt()}%',
+              style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800),
+            ),
+          )
+        : Icon(isCompleted ? Icons.check_circle : Icons.pause_circle_filled, color: base, size: 22);
+
+    void _openEdit() {
+      showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (_) => EditGoalSheet(
+          goal: goal,
+          onSave: (updated) {
+            final parent = context.findAncestorStateOfType<_SavingsPageState>();
+            if (parent == null) return;
+            final i = parent._goals.indexOf(goal);
+            if (i == -1) return;
+            parent.setState(() => parent._goals[i] = updated);
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Goal updated successfully')),
+            );
+          },
+        ),
+      );
+    }
+
+    void _askDelete() {
+      final parent = context.findAncestorStateOfType<_SavingsPageState>();
+      if (parent != null) parent._confirmDelete(goal); // call state method
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF373542), Color(0xFF2A2734)],
+          begin: Alignment.topLeft, end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: borderColor, width: 1),
+        boxShadow: [BoxShadow(color: borderColor.withOpacity(0.20), blurRadius: 20, offset: const Offset(0, 8))],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // title + trailing actions
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Text(
+                    goal.title,
+                    style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w700, letterSpacing: 0.2),
+                  ),
+                ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _GhostIconButton(icon: Icons.delete_outline, onTap: _askDelete),
+                    const SizedBox(width: 8),
+                    _GhostIconButton(icon: Icons.edit, onTap: _openEdit),
+                    const SizedBox(width: 8),
+                    statusChip,
+                  ],
+                ),
+              ],
+            ),
+            if (isActive) ...[
+              const SizedBox(height: 12),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: Stack(children: [
+                  Container(height: 8, color: Colors.white.withOpacity(0.10)),
+                  FractionallySizedBox(
+                    widthFactor: goal.progress.clamp(0.0, 1.0).toDouble(),
+                    child: Container(
+                      height: 8,
+                      decoration: const BoxDecoration(
+                        gradient: LinearGradient(colors: [Color(0xFF4A37E1), Color(0xFFBA55D6)]),
+                      ),
+                    ),
+                  ),
+                ]),
+              ),
+              const SizedBox(height: 6),
+              _ProgressAmounts(goal: goal),
+            ],
+          ],
+        ),
       ),
     );
   }
 }
 
-/// =============================== GOAL CARD =================================
-enum _GoalStatus { inProgress, done }
+class _ProgressAmounts extends StatelessWidget {
+  final Goal goal;
+  const _ProgressAmounts({required this.goal});
 
-class _GoalCard extends StatelessWidget {
-  final String title, subtitle;
-  final double progress;
-  final _GoalStatus status;
-  const _GoalCard({
-    required this.title,
-    required this.subtitle,
-    required this.progress,
-    required this.status,
-  });
+  String _fmt(double v) {
+    final s = v.round().toString();
+    return s.replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]},');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final double progress = goal.progress.clamp(0.0, 1.0).toDouble();
+    final double remaining =
+        (goal.targetAmount * (1 - progress)).clamp(0.0, double.infinity).toDouble();
+
+    return Row(
+      children: [
+        Text(
+          '${_fmt(remaining)} SAR left',
+          style: TextStyle(color: Colors.white.withOpacity(0.85), fontSize: 12.5, fontWeight: FontWeight.w700),
+        ),
+        const Spacer(),
+        Text(
+          '${_fmt(goal.targetAmount)} SAR total',
+          style: TextStyle(color: Colors.white.withOpacity(0.55), fontSize: 12, fontWeight: FontWeight.w600),
+        ),
+      ],
+    );
+  }
+}
+
+/// Small ghost icon button
+class _GhostIconButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+  const _GhostIconButton({required this.icon, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        padding: const EdgeInsets.all(6),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.06),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: Colors.white.withOpacity(0.14), width: 1),
+        ),
+        child: Icon(icon, size: 16, color: Colors.white70),
+      ),
+    );
+  }
+}
+
+/// Floating add button (nullable callback to avoid analyzer error)
+class AddGoalFab extends StatelessWidget {
+  final VoidCallback? onPressed;
+  const AddGoalFab({super.key, this.onPressed});
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 14),
+      width: 52, height: 52,
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            AppColors.card.withValues(alpha: 0.5),
-            AppColors.card.withValues(alpha: 0.3),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(
-          color: status == _GoalStatus.done
-              ? const Color(0xFF4CAF50).withValues(alpha: 0.3)
-              : Colors.white.withValues(alpha: 0.08),
-          width: 1,
-        ),
+        gradient: LinearGradient(colors: [AppColors.accent, AppColors.accent.withOpacity(0.80)],
+            begin: Alignment.topLeft, end: Alignment.bottomRight),
+        shape: BoxShape.circle,
+        boxShadow: [BoxShadow(color: AppColors.accent.withOpacity(0.50), blurRadius: 20, offset: const Offset(0, 6))],
       ),
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 17,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.2,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        subtitle,
-                        style: TextStyle(
-                          color: status == _GoalStatus.done
-                              ? const Color(0xFF4CAF50)
-                              : AppColors.textGrey,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                if (status == _GoalStatus.done)
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF4CAF50).withValues(alpha: 0.2),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.check_rounded,
-                      color: Color(0xFF4CAF50),
-                      size: 24,
-                    ),
-                  )
-                else
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      '${(progress * 100).toInt()}%',
-                      style: TextStyle(
-                        color: AppColors.accent,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          // Progress Bar
-          if (status == _GoalStatus.inProgress)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: Stack(
-                  children: [
-                    Container(
-                      height: 8,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    FractionallySizedBox(
-                      widthFactor: progress,
-                      child: Container(
-                        height: 8,
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [
-                              AppColors.accent,
-                              AppColors.accent.withValues(alpha: 0.7),
-                            ],
-                          ),
-                          borderRadius: BorderRadius.circular(8),
-                          boxShadow: [
-                            BoxShadow(
-                              color: AppColors.accent.withValues(alpha: 0.5),
-                              blurRadius: 8,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            )
-          else
-            const SizedBox(height: 20),
-        ],
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(26),
+          child: const Icon(Icons.add_rounded, color: Colors.white, size: 28),
+        ),
       ),
     );
   }
+}
+
+/// ---------------- Sheets (Create / Assign / Unassign / Edit) ----------------
+class AddGoalSheet extends StatefulWidget {
+  final void Function(String title, double amount, DateTime targetDate) onSubmit;
+  const AddGoalSheet({super.key, required this.onSubmit});
+
+  @override
+  State<AddGoalSheet> createState() => _AddGoalSheetState();
+}
+
+class _AddGoalSheetState extends State<AddGoalSheet> {
+  final _formKey = GlobalKey<FormState>();
+  final _titleCtrl = TextEditingController();
+  final _amountCtrl = TextEditingController();
+  final _dateCtrl = TextEditingController(); // stable controller
+  DateTime? _targetDate;
+  bool _submitting = false;
+
+  String _formatDate(DateTime d) =>
+      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  @override
+  void dispose() {
+    _titleCtrl.dispose();
+    _amountCtrl.dispose();
+    _dateCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickDate() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      firstDate: DateTime(now.year, now.month, now.day),
+      initialDate: _targetDate ?? now.add(const Duration(days: 1)),
+      lastDate: DateTime(now.year + 10),
+      helpText: 'Select target date',
+      // >>> This removes the text input and the toggle icon inside the dialog
+      initialEntryMode: DatePickerEntryMode.calendarOnly,
+      builder: (ctx, child) => Theme(
+        data: Theme.of(ctx).copyWith(
+          colorScheme: ColorScheme.dark(
+            primary: AppColors.accent,
+            surface: AppColors.card,
+            onSurface: Colors.white,
+          ),
+        ),
+        child: child!,
+      ),
+    );
+    if (picked != null) {
+      setState(() => _targetDate = DateTime(picked.year, picked.month, picked.day));
+      _dateCtrl.text = _formatDate(_targetDate!);
+    }
+  }
+
+  void _submit() {
+    final valid = _formKey.currentState?.validate() ?? false;
+    if (!valid) return;
+    setState(() => _submitting = true);
+
+    final title = _titleCtrl.text.trim();
+    final amount = double.parse(_amountCtrl.text);
+    final date = _targetDate!;
+
+    Future.delayed(const Duration(milliseconds: 200), () {
+      widget.onSubmit(title, amount, date);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottom = MediaQuery.of(context).viewInsets.bottom;
+    return Padding(
+      padding: EdgeInsets.only(bottom: bottom),
+      child: Container(
+        decoration: BoxDecoration(
+          color: AppColors.bg,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.accent.withOpacity(0.35),
+              blurRadius: 24,
+              offset: const Offset(0, -6),
+            ),
+          ],
+        ),
+        child: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                    const Text('Create Goal',
+                        style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800)),
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white70),
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                  ]),
+                  const SizedBox(height: 8),
+
+                  TextFormField(
+                    controller: _titleCtrl,
+                    textInputAction: TextInputAction.next,
+                    style: const TextStyle(color: Colors.white),
+                    decoration:
+                        _fieldDecoration('Goal name', hint: 'e.g., Buy a new phone'),
+                    validator: (v) {
+                      if (v == null || v.trim().isEmpty) return 'Name is required';
+                      if (v.trim().length < 2) {
+                        return 'Name must be at least 2 characters';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 12),
+
+                  TextFormField(
+                    controller: _amountCtrl,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    style: const TextStyle(color: Colors.white),
+                    decoration: _fieldDecoration('Target amount (SAR)',
+                        hint: 'e.g., 2000'),
+                    validator: (v) {
+                      if (v == null || v.trim().isEmpty) {
+                        return 'Amount is required';
+                      }
+                      final n = double.tryParse(v);
+                      if (n == null || n <= 0) return 'Enter a valid number';
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Non-typed date field: readOnly + onTap
+                  TextFormField(
+                    controller: _dateCtrl,
+                    readOnly: true,
+                    onTap: _pickDate,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: _fieldDecoration('Target date', hint: 'Select date')
+                        .copyWith(suffixIcon: const Icon(Icons.calendar_today, color: Colors.white70)),
+                    validator: (_) {
+                      if (_targetDate == null) return 'Target date is required';
+                      final today = DateTime.now();
+                      final d = DateTime(_targetDate!.year, _targetDate!.month, _targetDate!.day);
+                      final t = DateTime(today.year, today.month, today.day);
+                      if (d.isBefore(t)) return 'Target date cannot be in the past';
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
+
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: ElevatedButton(
+                      onPressed: _submitting ? null : _submit,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.accent,
+                        foregroundColor: Colors.white,
+                        disabledBackgroundColor:
+                            AppColors.accent.withOpacity(0.4),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14)),
+                        elevation: 8,
+                        shadowColor: AppColors.accent.withOpacity(0.4),
+                      ),
+                      child: _submitting
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor:
+                                      AlwaysStoppedAnimation(Colors.white)),
+                            )
+                          : const Text('Create Goal',
+                              style: TextStyle(fontWeight: FontWeight.w700)),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  InputDecoration _fieldDecoration(String label, {String? hint}) {
+    return InputDecoration(
+      labelText: label,
+      hintText: hint,
+      labelStyle: const TextStyle(color: Colors.white70),
+      hintStyle: const TextStyle(color: Colors.white38),
+      filled: true,
+      fillColor: Colors.white.withOpacity(0.06),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: Colors.white.withOpacity(0.10)),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide:
+            BorderSide(color: AppColors.accent.withOpacity(0.8), width: 1.5),
+      ),
+      errorBorder: const OutlineInputBorder(
+        borderRadius: BorderRadius.all(Radius.circular(12)),
+        borderSide: BorderSide(color: Colors.redAccent),
+      ),
+      focusedErrorBorder: const OutlineInputBorder(
+        borderRadius: BorderRadius.all(Radius.circular(12)),
+        borderSide: BorderSide(color: Colors.redAccent),
+      ),
+      contentPadding:
+          const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+    );
+  }
+}
+
+class AssignAmountSheet extends StatefulWidget {
+  final List<Goal> goals;
+  final double unassignedBalance;
+  final void Function(Goal goal, double amount) onAssign;
+
+  const AssignAmountSheet({
+    super.key,
+    required this.goals,
+    required this.unassignedBalance,
+    required this.onAssign,
+  });
+
+  @override
+  State<AssignAmountSheet> createState() => _AssignAmountSheetState();
+}
+
+class _AssignAmountSheetState extends State<AssignAmountSheet> {
+  final _formKey = GlobalKey<FormState>();
+  final _amountCtrl = TextEditingController();
+  Goal? _selected;
+
+  @override
+  void initState() {
+    super.initState();
+    _selected = widget.goals.isNotEmpty ? widget.goals.first : null;
+  }
+
+  @override
+  void dispose() {
+    _amountCtrl.dispose();
+    super.dispose();
+  }
+
+  String? _validateAmount(String? v) {
+    if (v == null || v.trim().isEmpty) return 'Amount is required';
+    final n = double.tryParse(v);
+    if (n == null) return 'Enter a valid number';
+    if (n <= 0) return 'Amount must be greater than 0';
+    if (_selected == null) return 'Select a goal';
+    final maxAllowed = _maxAllowed();
+    if (n > maxAllowed) return 'Max allowed is ${maxAllowed.round()} SAR';
+    return null;
+  }
+
+  double _maxAllowed() {
+    if (_selected == null) return 0;
+    return [
+      widget.unassignedBalance,
+      _selected!.remaining,
+    ].reduce((a, b) => a < b ? a : b);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottom = MediaQuery.of(context).viewInsets.bottom;
+    return Padding(
+      padding: EdgeInsets.only(bottom: bottom),
+      child: Container(
+        decoration: BoxDecoration(
+          color: AppColors.bg,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Assign to goal', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<Goal>(
+                    value: _selected,
+                    dropdownColor: AppColors.card,
+                    decoration: _ddDecoration('Goal'),
+                    items: widget.goals.map((g) {
+                      return DropdownMenuItem(
+                        value: g,
+                        child: Text(
+                          '${g.title} • remaining ${g.remaining.round()} SAR',
+                          style: const TextStyle(color: Colors.white),
+                        ),
+                      );
+                    }).toList(),
+                    onChanged: (g) => setState(() => _selected = g),
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _amountCtrl,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    style: const TextStyle(color: Colors.white),
+                    decoration: _fieldDecoration('Amount (SAR)', hint: 'e.g., 500'),
+                    validator: _validateAmount,
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        if (_formKey.currentState?.validate() ?? false) {
+                          widget.onAssign(_selected!, double.parse(_amountCtrl.text));
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.accent,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        elevation: 6,
+                      ),
+                      child: const Text('Assign'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  InputDecoration _fieldDecoration(String label, {String? hint}) => InputDecoration(
+    labelText: label,
+    hintText: hint,
+    labelStyle: const TextStyle(color: Colors.white70),
+    hintStyle: const TextStyle(color: Colors.white38),
+    filled: true,
+    fillColor: Colors.white.withOpacity(0.06),
+    enabledBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: BorderSide(color: Colors.white.withOpacity(0.10)),
+    ),
+    focusedBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: BorderSide(color: AppColors.accent.withOpacity(0.8), width: 1.5),
+    ),
+    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+  );
+
+  InputDecoration _ddDecoration(String label) => InputDecoration(
+    labelText: label,
+    labelStyle: const TextStyle(color: Colors.white70),
+    filled: true,
+    fillColor: Colors.white.withOpacity(0.06),
+    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+    enabledBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: BorderSide(color: Colors.white.withOpacity(0.10)),
+    ),
+    focusedBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: BorderSide(color: AppColors.accent.withOpacity(0.8), width: 1.5),
+    ),
+    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+  );
+}
+
+class UnassignAmountSheet extends StatefulWidget {
+  final Goal goal;
+  final void Function(double amount) onUnassign;
+
+  const UnassignAmountSheet({super.key, required this.goal, required this.onUnassign});
+
+  @override
+  State<UnassignAmountSheet> createState() => _UnassignAmountSheetState();
+}
+
+class _UnassignAmountSheetState extends State<UnassignAmountSheet> {
+  final _formKey = GlobalKey<FormState>();
+  final _amountCtrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _amountCtrl.dispose();
+    super.dispose();
+  }
+
+  String? _validate(String? v) {
+    if (v == null || v.trim().isEmpty) return 'Amount is required';
+    final n = double.tryParse(v);
+    if (n == null) return 'Enter a valid number';
+    if (n <= 0) return 'Amount must be greater than 0';
+    if (n > widget.goal.savedAmount) {
+      return 'Max you can unassign is ${widget.goal.savedAmount.round()} SAR';
+    }
+    return null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottom = MediaQuery.of(context).viewInsets.bottom;
+    return Padding(
+      padding: EdgeInsets.only(bottom: bottom),
+      child: Container(
+        decoration: BoxDecoration(
+          color: AppColors.bg,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Unassign from "${widget.goal.title}"',
+                      style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 8),
+                  Text('Currently assigned: ${widget.goal.savedAmount.round()} SAR',
+                      style: const TextStyle(color: Colors.white70)),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _amountCtrl,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    style: const TextStyle(color: Colors.white),
+                    decoration: _fieldDecoration('Amount (SAR)', hint: 'e.g., 300'),
+                    validator: _validate,
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        if (_formKey.currentState?.validate() ?? false) {
+                          widget.onUnassign(double.parse(_amountCtrl.text));
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.accent,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        elevation: 6,
+                      ),
+                      child: const Text('Unassign'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  InputDecoration _fieldDecoration(String label, {String? hint}) => InputDecoration(
+    labelText: label,
+    hintText: hint,
+    labelStyle: const TextStyle(color: Colors.white70),
+    hintStyle: const TextStyle(color: Colors.white38),
+    filled: true,
+    fillColor: Colors.white.withOpacity(0.06),
+    enabledBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: BorderSide(color: Colors.white.withOpacity(0.10)),
+    ),
+    focusedBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: BorderSide(color: AppColors.accent.withOpacity(0.8), width: 1.5),
+    ),
+    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+  );
+}
+
+class EditGoalSheet extends StatefulWidget {
+  final Goal goal;
+  final void Function(Goal updatedGoal) onSave;
+
+  const EditGoalSheet({super.key, required this.goal, required this.onSave});
+
+  @override
+  State<EditGoalSheet> createState() => _EditGoalSheetState();
+}
+
+class _EditGoalSheetState extends State<EditGoalSheet> {
+  final _formKey = GlobalKey<FormState>();
+  late TextEditingController _titleCtrl;
+  late TextEditingController _amountCtrl;
+  final _dateCtrl = TextEditingController();
+  DateTime? _targetDate;
+
+  String _formatDate(DateTime d) =>
+      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  @override
+  void initState() {
+    super.initState();
+    _titleCtrl = TextEditingController(text: widget.goal.title);
+    _amountCtrl = TextEditingController(text: widget.goal.targetAmount.toStringAsFixed(0));
+    _targetDate = widget.goal.targetDate;
+    if (_targetDate != null) _dateCtrl.text = _formatDate(_targetDate!);
+  }
+
+  @override
+  void dispose() {
+    _titleCtrl.dispose();
+    _amountCtrl.dispose();
+    _dateCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickDate() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      firstDate: DateTime(now.year, now.month, now.day),
+      lastDate: DateTime(now.year + 5),
+      initialDate: _targetDate ?? now.add(const Duration(days: 1)),
+      // >>> Remove text entry inside dialog
+      initialEntryMode: DatePickerEntryMode.calendarOnly,
+      builder: (ctx, child) => Theme(
+        data: Theme.of(ctx).copyWith(
+          colorScheme: ColorScheme.dark(
+            primary: AppColors.accent,
+            surface: AppColors.card,
+            onSurface: Colors.white,
+          ),
+        ),
+        child: child!,
+      ),
+    );
+    if (picked != null) {
+      setState(() => _targetDate = DateTime(picked.year, picked.month, picked.day));
+      _dateCtrl.text = _formatDate(_targetDate!);
+    }
+  }
+
+  void _save() {
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+
+    final newTitle = _titleCtrl.text.trim();
+    final newAmount = double.parse(_amountCtrl.text);
+
+    final updated = widget.goal.copyWith(
+      title: newTitle,
+      targetAmount: newAmount,
+      targetDate: _targetDate ?? widget.goal.targetDate,
+    );
+
+    widget.onSave(updated);
+    Navigator.pop(context);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottom = MediaQuery.of(context).viewInsets.bottom;
+    return Padding(
+      padding: EdgeInsets.only(bottom: bottom),
+      child: Container(
+        decoration: BoxDecoration(
+          color: AppColors.bg,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('Edit Goal', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _titleCtrl,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: _fieldDecoration('Goal name'),
+                    validator: (v) => v == null || v.trim().isEmpty ? 'Name required' : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _amountCtrl,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    style: const TextStyle(color: Colors.white),
+                    decoration: _fieldDecoration('Target amount (SAR)'),
+                    validator: (v) {
+                      final n = double.tryParse(v ?? '');
+                      if (n == null || n <= 0) return 'Enter a valid amount';
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _dateCtrl,
+                    readOnly: true,
+                    onTap: _pickDate,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: _fieldDecoration('Target date').copyWith(
+                      suffixIcon: const Icon(Icons.calendar_today, color: Colors.white70),
+                    ),
+                    validator: (_) {
+                      if (_targetDate == null && widget.goal.targetDate == null) {
+                        return 'Target date is required';
+                      }
+                      final today = DateTime.now();
+                      final d = (_targetDate ?? widget.goal.targetDate)!;
+                      final dd = DateTime(d.year, d.month, d.day);
+                      final t = DateTime(today.year, today.month, today.day);
+                      if (dd.isBefore(t)) return 'Target date cannot be in the past';
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 18),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: ElevatedButton(
+                      onPressed: _save,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.accent,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                      child: const Text('Save Changes', style: TextStyle(fontWeight: FontWeight.w700)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  InputDecoration _fieldDecoration(String label) => InputDecoration(
+        labelText: label,
+        labelStyle: const TextStyle(color: Colors.white70),
+        filled: true,
+        fillColor: Colors.white.withOpacity(0.06),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Colors.white.withOpacity(0.10)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide:
+              BorderSide(color: AppColors.accent.withOpacity(0.8), width: 1.5),
+        ),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      );
 }

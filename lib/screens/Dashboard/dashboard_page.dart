@@ -173,15 +173,6 @@ class _DashboardPageState extends State<DashboardPage> {
                   ],
                 ),
               ),
-
-              // Motivation card (neutral + encouraging)
-              const SizedBox(height: 20
-              ),
-              const _MotivationCard(
-                title: 'Small Wins, Big Future!',
-                subtitle:
-                    'Keep stacking small wins;\nThey grow into something big.',
-              ),
             ],
           ),
         ),
@@ -469,79 +460,6 @@ class _CategoryGrid extends StatelessWidget {
   }
 }
 
-/* ================= Motivation card ================= */
-class _MotivationCard extends StatelessWidget {
-  final String title;
-  final String subtitle;
-  const _MotivationCard({
-    required this.title,
-    required this.subtitle,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 92,
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            AppColors.card.withOpacity(0.55),
-            AppColors.card.withOpacity(0.35),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: Colors.white.withOpacity(0.08), width: 1),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.25), blurRadius: 22, offset: const Offset(0, 10)),
-        ],
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Row(
-        children: [
-          // Soft icon badge
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: const Color(0xFFFFF7D6),
-              shape: BoxShape.circle,
-            ),
-            alignment: Alignment.center,
-            child: const Icon(Icons.star_rounded, color: Color(0xFF8B5CF6)),
-          ),
-          const SizedBox(width: 12),
-          // Texts
-          Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
-                    )),
-                const SizedBox(height: 4),
-                Text(
-                  subtitle,
-                  style: TextStyle(
-                    color: AppColors.textGrey,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 /* ================= Charts ================= */
 class _ChartSemicircleGauge extends StatelessWidget {
   final double percent;
@@ -557,7 +475,7 @@ class _ChartSemicircleGauge extends StatelessWidget {
         child: Stack(
           alignment: Alignment.center,
           children: [
-            CustomPaint(size: const Size(275, 268), painter: _ArcPainter(color: Color(0xFF3A3A5A), sweep: 180)),
+            CustomPaint(size: const Size(275, 268), painter: _ArcPainter(color: const Color(0xFF3A3A5A), sweep: 180)),
             CustomPaint(size: const Size(275, 268), painter: _ArcPainter(color: Color(0xFF8B5CF6), sweep: 180 * percent * 0.3)),
             CustomPaint(size: const Size(275, 268), painter: _ArcPainter(color: Color(0xFF22D3EE), sweep: 180 * percent)),
             Text(label, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 22.6, fontWeight: FontWeight.w400)),

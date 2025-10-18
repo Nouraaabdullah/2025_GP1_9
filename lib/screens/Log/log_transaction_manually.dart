@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../theme/app_colors.dart';
 
 class LogTransactionManuallyPage extends StatefulWidget {
@@ -14,68 +13,27 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
   final _formKey = GlobalKey<FormState>();
 
   final List<String> _types = ['Expense', 'Earning'];
-
-  // categories now come from DB
-  final List<String> _categories = [];
-  bool _loadingCats = false;
+  final List<String> _categories = [
+    'Food',
+    'Education',
+    'Housing',
+    'Transport',
+    'Supplies',
+    'Health',
+    'Entertainment',
+  ];
 
   String? _selectedType;
-  String? _selectedCategory; // stores the category name
+  String? _selectedCategory;
   final TextEditingController _amountCtrl = TextEditingController();
 
   DateTime _selectedDate = DateTime.now();
   bool _datePicked = false;
 
-  // cache profile_id once we fetch it
-  String? _profileId;
-
-  SupabaseClient get _sb => Supabase.instance.client;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadCategories();
-  }
-
   @override
   void dispose() {
     _amountCtrl.dispose();
     super.dispose();
-  }
-
-  Future<void> _loadCategories() async {
-    setState(() => _loadingCats = true);
-    try {
-      // Use this when registration is ready:
-      // final profileId = await _getProfileId();
-      // Temporary hardcoded profile_id:
-      final profileId = 'e33f0c91-26fd-436a-baa3-6ad1df3a8152';
-
-      // pull this user's active expense categories by name
-      final rows = await _sb
-          .from('Category')
-          .select('name')
-          .eq('profile_id', profileId)
-          .eq('is_archived', false)
-          .eq('type', 'expense')
-          .order('name');
-
-      _categories
-        ..clear()
-        ..addAll(rows.map<String>((r) => (r['name'] as String)).toList());
-
-      if (_selectedCategory != null && !_categories.contains(_selectedCategory)) {
-        _selectedCategory = null;
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not load categories: $e')),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _loadingCats = false);
-    }
   }
 
   Future<void> _pickDate() async {
@@ -106,86 +64,24 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
     }
   }
 
-  Future<String> _getProfileId() async {
-    if (_profileId != null) return _profileId!;
-    final uid = _sb.auth.currentUser?.id;
-    if (uid == null) {
-      throw Exception('You must be signed in');
-    }
-    final row = await _sb
-        .from('User_Profile')
-        .select('profile_id')
-        .eq('user_id', uid)
-        .single();
-    _profileId = row['profile_id'] as String;
-    return _profileId!;
-  }
-
-  Future<String> _getCategoryIdByName(String name) async {
-    final row = await _sb
-        .from('Category')
-        .select('category_id')
-        .eq('name', name)
-        .single();
-    return row['category_id'] as String;
-  }
-
-  Future<void> _submitToDb() async {
-    // Use this when registration is ready:
-    // final profileId = await _getProfileId();
-    // Temporary hardcoded profile_id:
-    final profileId = 'e33f0c91-26fd-436a-baa3-6ad1df3a8152';
-
-    final typeDb = (_selectedType ?? '').toLowerCase(); // expense or earning
-    final amount = num.parse(_amountCtrl.text.trim());
-    final dateStr = _fmt(_selectedDate); // yyyy-mm-dd
-
-    final payload = <String, dynamic>{
-      'type': typeDb,
-      'amount': amount,
-      'date': dateStr,
-      'profile_id': profileId,
-    };
-
-    // only attach category for expense
-    if (typeDb == 'expense') {
-      final catName = _selectedCategory!;
-      final catId = await _getCategoryIdByName(catName);
-      payload['category_id'] = catId;
-    }
-
-    await _sb.from('Transaction').insert(payload);
-  }
-
-  void _submit() async {
+  void _submit() {
     if (_formKey.currentState?.validate() != true) return;
 
-    try {
-      await _submitToDb();
+    final preview =
+        '${_selectedType ?? ''} • ${_selectedCategory ?? ''} • ${_amountCtrl.text.trim()} • ${_fmt(_selectedDate)}';
 
-      final preview =
-          '${_selectedType ?? ''} • ${_selectedCategory ?? ''} • ${_amountCtrl.text.trim()} • ${_fmt(_selectedDate)}';
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Saved: $preview'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      Navigator.pop(context);
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not save: $e')),
-      );
-    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Saved: $preview'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+    Navigator.pop(context);
   }
 
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
-    final isEarning = _selectedType == 'Earning';
 
     return Scaffold(
       backgroundColor: const Color(0xFF1F1F33),
@@ -205,8 +101,9 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
             child: SafeArea(
               bottom: false,
               child: Column(
-                children: [
+              children: [
                   const SizedBox(height: 8),
+                  // Make Back + Down Arrow clickable
                   GestureDetector(
                     onTap: () => Navigator.pop(context),
                     child: Column(
@@ -241,7 +138,7 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
             ),
           ),
 
-          // hero target
+          // hero target for smooth grow from plus
           const Positioned(
             top: 40,
             left: 0,
@@ -289,46 +186,27 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
                           items: _types
                               .map((t) => DropdownMenuItem(value: t, child: Text(t)))
                               .toList(),
-                          onChanged: (v) {
-                            setState(() {
-                              _selectedType = v;
-                              if (v == 'Earning') {
-                                _selectedCategory = null; // clear category when earning
-                              }
-                            });
-                          },
+                          onChanged: (v) => setState(() => _selectedType = v),
                           validator: (v) => v == null ? 'Select a type' : null,
                         ),
                       ),
                       const SizedBox(height: 18),
 
-                      // Category hidden for Earning; items come from DB
-                      if (!isEarning) ...[
-                        const _FieldLabel('Category'),
-                        const SizedBox(height: 8),
-                        _rounded(
-                          child: DropdownButtonFormField<String>(
-                            value: _selectedCategory,
-                            isExpanded: true,
-                            decoration: _inputDecoration(),
-                            items: _categories
-                                .map((c) => DropdownMenuItem(value: c, child: Text(c)))
-                                .toList(),
-                            onChanged: _loadingCats
-                                ? null
-                                : (v) => setState(() => _selectedCategory = v),
-                            validator: (v) =>
-                                v == null ? 'Select a category' : null,
-                          ),
+                      const _FieldLabel('Category'),
+                      const SizedBox(height: 8),
+                      _rounded(
+                        child: DropdownButtonFormField<String>(
+                          value: _selectedCategory,
+                          isExpanded: true,
+                          decoration: _inputDecoration(),
+                          items: _categories
+                              .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                              .toList(),
+                          onChanged: (v) => setState(() => _selectedCategory = v),
+                          validator: (v) => v == null ? 'Select a category' : null,
                         ),
-                        if (_loadingCats)
-                          const Padding(
-                            padding: EdgeInsets.only(top: 8),
-                            child: Text('Loading categories...',
-                                style: TextStyle(color: Colors.white70)),
-                          ),
-                        const SizedBox(height: 18),
-                      ],
+                      ),
+                      const SizedBox(height: 18),
 
                       const _FieldLabel('Amount'),
                       const SizedBox(height: 8),

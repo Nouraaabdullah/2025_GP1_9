@@ -20,7 +20,7 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
   bool _loadingCats = false;
 
   String? _selectedType;
-  String? _selectedCategory; // stores the category *name* (unchanged)
+  String? _selectedCategory; // stores the category name
   final TextEditingController _amountCtrl = TextEditingController();
 
   DateTime _selectedDate = DateTime.now();
@@ -46,16 +46,18 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
   Future<void> _loadCategories() async {
     setState(() => _loadingCats = true);
     try {
-      // fetch current user's profile_id (you already have _getProfileId)
-      final profileId = await _getProfileId();
+      // Use this when registration is ready:
+      // final profileId = await _getProfileId();
+      // Temporary hardcoded profile_id:
+      final profileId = 'e33f0c91-26fd-436a-baa3-6ad1df3a8152';
 
       // pull this user's active expense categories by name
       final rows = await _sb
           .from('Category')
           .select('name')
           .eq('profile_id', profileId)
-          .eq('is_archived', false)         // keep if you use archiving
-          .eq('type', 'expense')            // keep if your enum has 'expense'
+          .eq('is_archived', false)
+          .eq('type', 'expense')
           .order('name');
 
       _categories
@@ -129,7 +131,10 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
   }
 
   Future<void> _submitToDb() async {
-    final profileId = await _getProfileId();
+    // Use this when registration is ready:
+    // final profileId = await _getProfileId();
+    // Temporary hardcoded profile_id:
+    final profileId = 'e33f0c91-26fd-436a-baa3-6ad1df3a8152';
 
     final typeDb = (_selectedType ?? '').toLowerCase(); // expense or earning
     final amount = num.parse(_amountCtrl.text.trim());
@@ -142,7 +147,7 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
       'profile_id': profileId,
     };
 
-    // only attach category for expense (unchanged)
+    // only attach category for expense
     if (typeDb == 'expense') {
       final catName = _selectedCategory!;
       final catId = await _getCategoryIdByName(catName);

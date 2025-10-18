@@ -1,10 +1,12 @@
 // lib/screens/profile_main.dart
 import 'package:flutter/material.dart';
-import '../theme/app_colors.dart';
-import '../widgets/top_gradient.dart';
-import '../widgets/curved_dark_section.dart';
-import '../widgets/bottom_nav_bar.dart';
-import 'spending_insight.dart';
+import 'package:surra_application/theme/app_colors.dart';
+import 'package:surra_application/widgets/top_gradient.dart';
+import 'package:surra_application/widgets/curved_dark_section.dart';
+import 'package:surra_application/widgets/bottom_nav_bar.dart';
+import 'package:surra_application/screens/spending_insight.dart';
+
+
 
 class ProfileMainPage extends StatelessWidget {
   const ProfileMainPage({super.key});

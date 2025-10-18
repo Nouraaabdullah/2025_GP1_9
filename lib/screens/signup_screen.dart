@@ -1,68 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
-class SignUpScreen extends StatefulWidget {
+class SignUpScreen extends StatelessWidget {
   const SignUpScreen({super.key});
-
-  @override
-  State<SignUpScreen> createState() => _SignUpScreenState();
-}
-
-class _SignUpScreenState extends State<SignUpScreen> {
-  final emailController = TextEditingController();
-  final passwordController = TextEditingController();
-  final supabase = Supabase.instance.client;
-  bool loading = false;
-
-  Future<void> signUpUser() async {
-  final email = emailController.text.trim();
-  final password = passwordController.text.trim();
-
-  if (email.isEmpty || password.isEmpty) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Please enter email and password")),
-    );
-    return;
-  }
-
-  setState(() => loading = true);
-
-  try {
-    // ✅ 1. Create user
-    final response = await supabase.auth.signUp(
-      email: email,
-      password: password,
-    );
-
-    // ✅ 2. Wait for Supabase to save the auth session locally
-    await Future.delayed(const Duration(seconds: 2));
-
-    // ✅ 3. Verify the user exists in auth
-    final user = supabase.auth.currentUser;
-    debugPrint("🧩 Supabase user after signup: ${user?.id}");
-
-    if (user != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("✅ Account created: ${user.email}")),
-      );
-
-      // ✅ 4. Move to Setup flow — user_id will now be available
-      Navigator.pushReplacementNamed(context, '/setupName');
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Signup failed — no user found.")),
-      );
-    }
-  } catch (e) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text("Error signing up: $e")),
-    );
-  } finally {
-    setState(() => loading = false);
-  }
-}
-
 
   @override
   Widget build(BuildContext context) {
@@ -71,7 +11,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
       body: SafeArea(
         child: Stack(
           children: [
-            // === Background ===
+            // ===== Gradient Circles (same as login) =====
             Positioned(
               left: -5,
               top: 0,
@@ -112,7 +52,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
               ),
             ),
 
-            // === Main content ===
+            // ===== MAIN CONTENT =====
             ListView(
               padding: const EdgeInsets.symmetric(horizontal: 32),
               children: [
@@ -123,6 +63,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   style: TextStyle(
                     color: Color(0xFFFCFFFF),
                     fontSize: 32,
+                    fontFamily: 'Roboto',
                     fontWeight: FontWeight.w600,
                     shadows: [
                       Shadow(
@@ -140,61 +81,94 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   style: TextStyle(
                     color: Color(0xFFB6B8B8),
                     fontSize: 18,
+                    fontFamily: 'Roboto',
+                    fontWeight: FontWeight.w400,
                   ),
                 ),
                 const SizedBox(height: 50),
 
-                // === Email Field ===
-                const Text('Email',
-                    style: TextStyle(color: Color(0xFFFCFFFF), fontSize: 15)),
+                // ===== NAME FIELD =====
+                const Text(
+                  'Full Name',
+                  style: TextStyle(
+                    color: Color(0xFFFCFFFF),
+                    fontSize: 15,
+                    fontFamily: 'Roboto',
+                  ),
+                ),
                 const SizedBox(height: 8),
-                FocusedTextField(controller: emailController, hint: 'example@email.com'),
+                _textField('Enter your full name'),
                 const SizedBox(height: 24),
 
-                // === Password Field ===
-                const Text('Password',
-                    style: TextStyle(color: Color(0xFFFCFFFF), fontSize: 15)),
+                // ===== EMAIL FIELD =====
+                const Text(
+                  'Email',
+                  style: TextStyle(
+                    color: Color(0xFFFCFFFF),
+                    fontSize: 15,
+                    fontFamily: 'Roboto',
+                  ),
+                ),
                 const SizedBox(height: 8),
-                FocusedTextField(controller: passwordController, hint: '••••••••', obscure: true),
+                _textField('example@email.com'),
+                const SizedBox(height: 24),
+
+                // ===== PASSWORD FIELD =====
+                const Text(
+                  'Password',
+                  style: TextStyle(
+                    color: Color(0xFFFCFFFF),
+                    fontSize: 15,
+                    fontFamily: 'Roboto',
+                  ),
+                ),
+                const SizedBox(height: 8),
+                _textField('••••••••', obscure: true),
                 const SizedBox(height: 40),
 
-                // === Sign Up Button ===
+                // ===== SIGN UP BUTTON =====
                 SizedBox(
                   width: double.infinity,
                   height: 50,
                   child: ElevatedButton(
-                    onPressed: loading ? null : signUpUser,
+                    onPressed: () {
+                      Navigator.pushReplacementNamed(context, '/setupName');
+                    },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF7959F5),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(33),
                       ),
                     ),
-                    child: loading
-                        ? const CircularProgressIndicator(color: Colors.white)
-                        : const Text(
-                            'Sign Up',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 22,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
+                    child: const Text(
+                      'Sign Up',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 22,
+                        fontFamily: 'Inter',
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 20),
 
-                // === Google Sign-In (Future) ===
+                // ===== Google SSO Button =====
                 SizedBox(
                   width: double.infinity,
                   height: 50,
                   child: OutlinedButton.icon(
-                    onPressed: () {},
-                    icon: const FaIcon(FontAwesomeIcons.google,
-                        color: Colors.white, size: 18),
+                    onPressed: () {
+                      // TODO: implement Google Sign-In logic here
+                    },
                     label: const Text(
                       'Continue with Google',
-                      style: TextStyle(color: Colors.white, fontSize: 16),
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontFamily: 'Roboto',
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                     style: OutlinedButton.styleFrom(
                       side: const BorderSide(color: Colors.white54),
@@ -206,21 +180,28 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 ),
                 const SizedBox(height: 24),
 
-                // === Login Redirect ===
+                // ===== LOG IN LINK =====
                 GestureDetector(
-                  onTap: () => Navigator.pushReplacementNamed(context, '/login'),
+                  onTap: () {
+                    Navigator.pushReplacementNamed(context, '/login');
+                  },
                   child: const Text.rich(
                     TextSpan(
                       children: [
                         TextSpan(
                           text: 'Already have an account? ',
-                          style: TextStyle(color: Colors.white, fontSize: 15),
+                          style: TextStyle(
+                            color: Color(0xFFFCFFFF),
+                            fontSize: 15,
+                            fontFamily: 'Roboto',
+                          ),
                         ),
                         TextSpan(
                           text: 'Log In',
                           style: TextStyle(
                             color: Color(0xFF7959F5),
                             fontSize: 15,
+                            fontFamily: 'Roboto',
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -237,69 +218,25 @@ class _SignUpScreenState extends State<SignUpScreen> {
       ),
     );
   }
-}
 
-// === Reusable Field ===
-class FocusedTextField extends StatefulWidget {
-  final String hint;
-  final bool obscure;
-  final TextEditingController controller;
-
-  const FocusedTextField({
-    required this.controller,
-    required this.hint,
-    this.obscure = false,
-    super.key,
-  });
-
-  @override
-  State<FocusedTextField> createState() => _FocusedTextFieldState();
-}
-
-class _FocusedTextFieldState extends State<FocusedTextField> {
-  final FocusNode _focusNode = FocusNode();
-  bool _isFocused = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _focusNode.addListener(() {
-      if (mounted) setState(() => _isFocused = _focusNode.hasFocus);
-    });
-  }
-
-  @override
-  void dispose() {
-    _focusNode.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 200),
+  // ===== Helper widget for text fields =====
+  Widget _textField(String hint, {bool obscure = false}) {
+    return Container(
       height: 50,
       decoration: BoxDecoration(
         color: const Color(0xFF2E2C4A),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: _isFocused ? const Color(0xFF7959F5) : Colors.transparent,
-          width: 2,
-        ),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 16),
       alignment: Alignment.centerLeft,
       child: TextField(
-        controller: widget.controller,
-        focusNode: _focusNode,
-        obscureText: widget.obscure,
+        obscureText: obscure,
         style: const TextStyle(color: Colors.white),
         decoration: InputDecoration(
-          hintText: widget.hint,
+          hintText: hint,
           hintStyle: const TextStyle(color: Color(0xFFB6B8B8)),
           border: InputBorder.none,
         ),
-        cursorColor: const Color(0xFF7959F5),
       ),
     );
   }

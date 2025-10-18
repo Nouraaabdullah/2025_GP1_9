@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../theme/app_colors.dart';
 
 class LogTransactionManuallyPage extends StatefulWidget {
@@ -13,28 +14,134 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
   final _formKey = GlobalKey<FormState>();
 
   final List<String> _types = ['Expense', 'Earning'];
-  final List<String> _categories = [
-    'Food',
-    'Education',
-    'Housing',
-    'Transport',
-    'Supplies',
-    'Health',
-    'Entertainment',
-  ];
+
+  // Categories come from DB (names only)
+  final List<String> _categories = [];
+  bool _loadingCats = false;
 
   String? _selectedType;
-  String? _selectedCategory;
+  String? _selectedCategory; // stores category *name*
   final TextEditingController _amountCtrl = TextEditingController();
 
   DateTime _selectedDate = DateTime.now();
   bool _datePicked = false;
+
+  // cache profile_id if you switch to real auth fetch
+  String? _profileId;
+
+  SupabaseClient get _sb => Supabase.instance.client;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCategories();
+  }
 
   @override
   void dispose() {
     _amountCtrl.dispose();
     super.dispose();
   }
+
+  // ====== DATA LAYER ======
+
+  // Real version (use when registration/auth is ready)
+  Future<String> _getProfileId() async {
+    if (_profileId != null) return _profileId!;
+    final uid = _sb.auth.currentUser?.id;
+    if (uid == null) {
+      throw Exception('You must be signed in');
+    }
+    final row = await _sb
+        .from('User_Profile')
+        .select('profile_id')
+        .eq('user_id', uid)
+        .single();
+    _profileId = row['profile_id'] as String;
+    return _profileId!;
+  }
+
+  Future<void> _loadCategories() async {
+    setState(() => _loadingCats = true);
+    try {
+      // When auth is wired, use this:
+      // final profileId = await _getProfileId();
+
+      // TEMP hardcoded profile_id (remove once auth is ready)
+      const profileId = 'e33f0c91-26fd-436a-baa3-6ad1df3a8152';
+
+      final rows = await _sb
+          .from('Category')
+          .select('name')
+          .eq('profile_id', profileId)
+          .eq('is_archived', false) // only active categories
+          // DO NOT filter by type here (you said your type is Fixed/Custom and you want both)
+          .order('name');
+
+      final names = rows.map<String>((r) => (r['name'] as String)).toList();
+
+      if (!mounted) return;
+      setState(() {
+        _categories
+          ..clear()
+          ..addAll(names);
+        if (_selectedCategory != null && !_categories.contains(_selectedCategory)) {
+          _selectedCategory = null;
+        }
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not load categories: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _loadingCats = false);
+    }
+  }
+
+  Future<String> _getCategoryIdByName(String name) async {
+    // Optional: also filter by profile_id to avoid cross-user name collisions
+    // final profileId = await _getProfileId();
+    const profileId = 'e33f0c91-26fd-436a-baa3-6ad1df3a8152';
+
+    final row = await _sb
+        .from('Category')
+        .select('category_id')
+        .eq('profile_id', profileId)
+        .eq('name', name)
+        .single();
+    return row['category_id'] as String;
+  }
+
+  Future<void> _submitToDb() async {
+    // When auth is wired, use the real fetch:
+    // final profileId = await _getProfileId();
+
+    // TEMP hardcoded profile_id (must belong to the signed-in user if your RLS checks that)
+    const profileId = 'e33f0c91-26fd-436a-baa3-6ad1df3a8152';
+
+    final typeDb = (_selectedType ?? ''); // 'expense' or 'earning'
+    final amount = num.parse(_amountCtrl.text.trim());
+    final dateStr = _fmt(_selectedDate); // yyyy-mm-dd
+
+    final payload = <String, dynamic>{
+      'type': typeDb,
+      'amount': amount,
+      'date': dateStr,
+      'profile_id': profileId,
+    };
+
+    // Only attach category for expenses
+    if (typeDb == 'Expense') {
+      final catName = _selectedCategory!;
+      final catId = await _getCategoryIdByName(catName);
+      payload['category_id'] = catId;
+    }
+
+    await _sb.from('Transaction').insert(payload);
+  }
+
+  // ====== UI ======
 
   Future<void> _pickDate() async {
     final now = DateTime.now();
@@ -64,24 +171,33 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
     }
   }
 
-  void _submit() {
+  Future<void> _submit() async {
     if (_formKey.currentState?.validate() != true) return;
 
-    final preview =
-        '${_selectedType ?? ''} • ${_selectedCategory ?? ''} • ${_amountCtrl.text.trim()} • ${_fmt(_selectedDate)}';
+    try {
+      await _submitToDb();
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Saved: $preview'),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-    Navigator.pop(context);
+      final preview =
+          '${_selectedType ?? ''} • ${_selectedCategory ?? ''} • ${_amountCtrl.text.trim()} • ${_fmt(_selectedDate)}';
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Saved: $preview'), behavior: SnackBarBehavior.floating),
+      );
+      Navigator.pop(context);
+    } catch (e) {
+      if (!mounted) return;
+      // Show the actual DB error so we can debug RLS/policies if needed
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not save: $e')),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
+    final isEarning = _selectedType == 'Earning';
 
     return Scaffold(
       backgroundColor: const Color(0xFF1F1F33),
@@ -101,7 +217,7 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
             child: SafeArea(
               bottom: false,
               child: Column(
-              children: [
+                children: [
                   const SizedBox(height: 8),
                   // Make Back + Down Arrow clickable
                   GestureDetector(
@@ -186,27 +302,46 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
                           items: _types
                               .map((t) => DropdownMenuItem(value: t, child: Text(t)))
                               .toList(),
-                          onChanged: (v) => setState(() => _selectedType = v),
+                          onChanged: (v) {
+                            setState(() {
+                              _selectedType = v;
+                              if (v == 'Earning') {
+                                _selectedCategory = null; // clear category when earning
+                              }
+                            });
+                          },
                           validator: (v) => v == null ? 'Select a type' : null,
                         ),
                       ),
                       const SizedBox(height: 18),
 
-                      const _FieldLabel('Category'),
-                      const SizedBox(height: 8),
-                      _rounded(
-                        child: DropdownButtonFormField<String>(
-                          value: _selectedCategory,
-                          isExpanded: true,
-                          decoration: _inputDecoration(),
-                          items: _categories
-                              .map((c) => DropdownMenuItem(value: c, child: Text(c)))
-                              .toList(),
-                          onChanged: (v) => setState(() => _selectedCategory = v),
-                          validator: (v) => v == null ? 'Select a category' : null,
+                      // Category hidden for Earning; items come from DB
+                      if (!isEarning) ...[
+                        const _FieldLabel('Category'),
+                        const SizedBox(height: 8),
+                        _rounded(
+                          child: DropdownButtonFormField<String>(
+                            value: _selectedCategory,
+                            isExpanded: true,
+                            decoration: _inputDecoration(),
+                            items: _categories
+                                .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                                .toList(),
+                            onChanged: _loadingCats
+                                ? null
+                                : (v) => setState(() => _selectedCategory = v),
+                            validator: (v) =>
+                                v == null ? 'Select a category' : null,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 18),
+                        if (_loadingCats)
+                          const Padding(
+                            padding: EdgeInsets.only(top: 8),
+                            child: Text('Loading categories...',
+                                style: TextStyle(color: Colors.white70)),
+                          ),
+                        const SizedBox(height: 18),
+                      ],
 
                       const _FieldLabel('Amount'),
                       const SizedBox(height: 8),

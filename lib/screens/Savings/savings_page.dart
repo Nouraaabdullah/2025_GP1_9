@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/bottom_nav_bar.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
 
 /// ---------------- Domain ----------------
 enum GoalType { active, completed, uncompleted }
@@ -57,6 +59,10 @@ class SavingsPage extends StatefulWidget {
 }
 
 class _SavingsPageState extends State<SavingsPage> {
+
+  //Created a Supabase client to interact with the database
+  final supabase = Supabase.instance.client;
+
   GoalType _selected = GoalType.active;
 
   // Monthly savings (dummy data for now)
@@ -326,32 +332,67 @@ class _SavingsPageState extends State<SavingsPage> {
     );
   }
 
-  /// -------- Actions / Sheets --------
-  void _openAddGoalSheet() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => AddGoalSheet(
-        onSubmit: (title, amount, targetDate) {
+void _openAddGoalSheet() {
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (_) => AddGoalSheet(
+      onSubmit: (title, amount, targetDate) async {
+        // Close the sheet immediately and show feedback
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Creating goal...')),
+        );
+
+        try {
+          // Insert a new goal record into table "Goal"
+          final response = await supabase.from('Goal').insert({
+
+            'name': title.trim(),
+            'target_amount': amount,
+            'target_date': targetDate.toIso8601String(),
+            'status': 'Active', 
+            'created_at': DateTime.now().toIso8601String(),
+            // If you have authentication with user profiles:
+            'profile_id': "e33f0c91-26fd-436a-baa3-6ad1df3a8152",
+          }).select();
+
+          //  Ensure the insert succeeded
+          if (response.isEmpty) {
+            throw Exception('Insert failed — no data returned.');
+          }
+
+          // Extract inserted record and update local goals list
+          final data = response.first;
           setState(() {
             _goals.add(Goal(
-              title: title.trim(),
+              title: data['name'] ?? title,
               type: GoalType.active,
-              targetAmount: amount,
-              createdAt: DateTime.now(),
-              targetDate: targetDate, // USE the picked date
+              targetAmount: (data['target_amount'] ?? amount).toDouble(),
+              createdAt: DateTime.parse(data['created_at']),
+              targetDate: DateTime.parse(data['target_date']),
             ));
             _selected = GoalType.active;
           });
-          Navigator.of(context).pop();
+
+          // Notify the user of success
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Goal created')),
+            const SnackBar(content: Text('Goal created successfully!')),
           );
-        },
-      ),
-    );
-  }
+        } catch (e) {
+          
+          debugPrint(' Cannot create goal: $e');
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error creating goal: $e')),
+          );
+        }
+      },
+    ),
+  );
+}
+
+
 
   void _openAssignSheet() {
     showModalBottomSheet(
@@ -527,80 +568,84 @@ class _MonthCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 190,
-      margin: const EdgeInsets.only(right: 16),
-      padding: const EdgeInsets.all(22),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(24),
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: current
-              ? [AppColors.card.withOpacity(0.45), AppColors.card.withOpacity(0.25)]
-              : [AppColors.card.withOpacity(0.30), AppColors.card.withOpacity(0.16)],
-        ),
-        border: Border.all(
-          color: current ? AppColors.accent.withOpacity(0.22) : Colors.white.withOpacity(0.06),
-          width: 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.accent.withOpacity(current ? 0.20 : 0.10),
-            blurRadius: 24,
-            spreadRadius: 0,
-            offset: const Offset(0, 8),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(24),
+      child: Container(
+        width: 190,
+        margin: const EdgeInsets.only(right: 16),
+        padding: const EdgeInsets.all(22),
+        decoration: BoxDecoration(
+          color: AppColors.card, 
+          borderRadius: BorderRadius.circular(24),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: current
+                ? [AppColors.card.withOpacity(0.45), AppColors.card.withOpacity(0.25)]
+                : [AppColors.card.withOpacity(0.30), AppColors.card.withOpacity(0.16)],
           ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-            Text(
-              year,
-              style: TextStyle(
-                color: AppColors.textGrey.withOpacity(0.70),
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 0.5,
-              ),
+          border: Border.all(
+            color: current ? AppColors.accent.withOpacity(0.22) : Colors.white.withOpacity(0.06),
+            width: 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.accent.withOpacity(current ? 0.20 : 0.10),
+              blurRadius: 24,
+              spreadRadius: -2,
+              offset: const Offset(0, 8),
             ),
-            
-            if (current)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: AppColors.accent.withOpacity(0.20),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppColors.accent.withOpacity(0.40), width: 1),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+              Text(
+                year,
+                style: TextStyle(
+                  color: AppColors.textGrey.withOpacity(0.70),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.5,
                 ),
-                child: Text(
-                  'Current',
-                  style: TextStyle(
-                    color: AppColors.accent,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0.5,
+              ),
+              
+              if (current)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppColors.accent.withOpacity(0.20),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppColors.accent.withOpacity(0.40), width: 1),
+                  ),
+                  child: Text(
+                    'Current',
+                    style: TextStyle(
+                      color: AppColors.accent,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.5,
+                    ),
                   ),
                 ),
-              ),
-          ]),
-          const SizedBox(height: 10),
-          const SizedBox(),
-          Text(
-            month,
-            style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700, letterSpacing: 0.3),
-          ),
-          Text(
-            amount,
-            style: TextStyle(
-              color: Colors.white, fontSize: 26, fontWeight: FontWeight.w900, letterSpacing: -0.5,
-              shadows: current ? [Shadow(color: AppColors.accent.withOpacity(0.30), blurRadius: 8)] : const [],
+            ]),
+            const SizedBox(height: 10),
+            const SizedBox(),
+            Text(
+              month,
+              style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700, letterSpacing: 0.3),
             ),
-          ),
-        ],
+            Text(
+              amount,
+              style: TextStyle(
+                color: Colors.white, fontSize: 26, fontWeight: FontWeight.w900, letterSpacing: -0.5,
+                shadows: current ? [Shadow(color: AppColors.accent.withOpacity(0.30), blurRadius: 8)] : const [],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -1,17 +1,24 @@
 name: surra_application
 description: "A new Flutter project."
 publish_to: 'none'
+<<<<<<< HEAD
 
+=======
+>>>>>>> 1509e563cb9e74c27a33295ee02fe1181c0dccff
 version: 1.0.0+1
 
 environment:
-  sdk: ^3.9.2
+  sdk: ">=3.0.0 <4.0.0"
 
 dependencies:
   flutter:
     sdk: flutter
+<<<<<<< HEAD
 
   supabase_flutter: ^2.5.8
+=======
+  supabase_flutter: ^2.5.3
+>>>>>>> 1509e563cb9e74c27a33295ee02fe1181c0dccff
   cupertino_icons: ^1.0.8
   font_awesome_flutter: ^10.7.0
 
@@ -21,9 +28,13 @@ dev_dependencies:
   flutter_lints: ^5.0.0
 
 flutter:
+<<<<<<< HEAD
   uses-material-design: true
 
   # 👇 Add this section
   assets:
     - assets/images/
 
+=======
+  uses-material-design: true
+>>>>>>> 1509e563cb9e74c27a33295ee02fe1181c0dccff

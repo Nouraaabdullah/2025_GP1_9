@@ -9,6 +9,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 enum GoalType { active, completed, uncompleted }
 
 class Goal {
+  final String id;
   final String title;
   final GoalType type;
   final double targetAmount;
@@ -17,6 +18,7 @@ class Goal {
   final DateTime? targetDate; // persist a real target date
 
   const Goal({
+    required this.id,
     required this.title,
     required this.type,
     required this.targetAmount,
@@ -32,6 +34,7 @@ class Goal {
       targetAmount == 0 ? 0.0 : (savedAmount / targetAmount).clamp(0.0, 1.0);
 
   Goal copyWith({
+    String? id,  
     String? title,
     double? targetAmount,
     double? savedAmount,
@@ -40,6 +43,7 @@ class Goal {
     DateTime? targetDate,
   }) {
     return Goal(
+      id: id ?? this.id,
       title: title ?? this.title,
       targetAmount: targetAmount ?? this.targetAmount,
       savedAmount: savedAmount ?? this.savedAmount,
@@ -71,27 +75,385 @@ class _SavingsPageState extends State<SavingsPage> {
   // Derived balances for assigning
   double _unassignedBalance = 0;
 
+  double _totalSaving = 0.0;
+
+
   final List<Goal> _goals = [];
 
-  @override
-  void initState() {
-    super.initState();
-    _generateMonthlySavings();
+
+@override
+void initState() {
+  super.initState();
+
+  _generateMonthlySavings(); // initial load
+  _fetchGoals(); // keep your existing fetch
+
+  //  Realtime listener for Transaction table
+  supabase
+      .channel('public:Transaction')
+      .onPostgresChanges(
+        event: PostgresChangeEvent.all,
+        schema: 'public',
+        table: 'Transaction',
+        callback: (payload) async {
+          debugPrint(' Transaction updated: ${payload.eventType}');
+          await _generateMonthlySavings();
+        },
+      )
+      .subscribe();
+
+  //  Realtime listener for Fixed_Income table
+  supabase
+      .channel('public:Fixed_Income')
+      .onPostgresChanges(
+        event: PostgresChangeEvent.all,
+        schema: 'public',
+        table: 'Fixed_Income',
+        callback: (payload) async {
+          debugPrint(' Fixed_Income updated: ${payload.eventType}');
+          await _generateMonthlySavings();
+        },
+      )
+      .subscribe();
+
+  //  Realtime listener for Fixed_Expense table
+  supabase
+      .channel('public:Fixed_Expense')
+      .onPostgresChanges(
+        event: PostgresChangeEvent.all,
+        schema: 'public',
+        table: 'Fixed_Expense',
+        callback: (payload) async {
+          debugPrint(' Fixed_Expense updated: ${payload.eventType}');
+          await _generateMonthlySavings();
+        },
+      )
+      .subscribe();
+
+  //  also listen for changes in Monthly_Financial_Record
+  supabase
+      .channel('public:Monthly_Financial_Record')
+      .onPostgresChanges(
+        event: PostgresChangeEvent.all,
+        schema: 'public',
+        table: 'Monthly_Financial_Record',
+        callback: (payload) async {
+          debugPrint('MFR updated: ${payload.eventType}');
+          await _generateMonthlySavings();
+        },
+      )
+      .subscribe();
+
+
+      // Realtime listener for Goal_Transfer
+      supabase
+        .channel('public:Goal_Transfer')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'Goal_Transfer',
+          callback: (payload) async {
+            debugPrint('🔄 Goal_Transfer updated: ${payload.eventType}');
+            await _fetchGoals();
+            await _generateMonthlySavings();
+          },
+        )
+        .subscribe();
+
+}
+
+
+
+void _subscribeToMonthlyChanges() {
+  supabase
+      .channel('public:Monthly_Financial_Record')
+      .onPostgresChanges(
+        event: PostgresChangeEvent.all,
+        schema: 'public',
+        table: 'Monthly_Financial_Record',
+        callback: (payload) async {
+          debugPrint('Monthly record changed: ${payload.eventType}');
+          await _generateMonthlySavings();
+
+        },
+      )
+      .subscribe();
+}
+
+
+Future<void> _fetchGoals() async {
+  try {
+    const profileId = 'e33f0c91-26fd-436a-baa3-6ad1df3a8152';
+
+    // 1Fetch all goals
+    final response = await supabase
+        .from('Goal')
+        .select()
+        .eq('profile_id', profileId);
+
+    if (response == null || response.isEmpty) {
+      debugPrint('No goals found.');
+      setState(() => _goals.clear());
+      return;
+    }
+
+    final data = response as List;
+
+    // Fetch all transfer records for these goals
+    final transferResponse = await supabase
+        .from('Goal_Transfer')
+        .select('goal_id, amount, direction')
+        .inFilter('goal_id', data.map((g) => g['goal_id']).whereType<String>().toList());
+
+    final Map<String, double> goalSaved = {};
+
+    for (final t in transferResponse) {
+      final id = t['goal_id'];
+      final amt = (t['amount'] ?? 0).toDouble();
+      final dir = t['direction']?.toString().toLowerCase();
+
+      goalSaved[id] = (goalSaved[id] ?? 0) +
+          (dir == 'assign' ? amt : dir == 'unassign' ? -amt : 0);
+    }
+
+   
+    final fetchedGoals = data.map((g) {
+      final id = g['goal_id'] ?? '';
+      final saved = goalSaved[id] ?? 0.0;
+
+      return Goal(
+        id: id,
+        title: g['name'] ?? '',
+        targetAmount: (g['target_amount'] ?? 0).toDouble(),
+        savedAmount: saved, 
+        createdAt: DateTime.parse(g['created_at']),
+        targetDate: g['target_date'] != null
+            ? DateTime.parse(g['target_date'])
+            : null,
+        type: _statusToType(g['status']),
+      );
+    }).toList();
+
+    setState(() {
+      _goals
+        ..clear()
+        ..addAll(fetchedGoals);
+    });
+  _recalculateBalances();
+    debugPrint(' Goals fetched successfully: ${_goals.length}');
+  } catch (e) {
+    debugPrint('Error fetching goals: $e');
   }
 
-  void _generateMonthlySavings() {
+  
+}
+
+void _recalculateBalances() {
+  final assigned = _goals.fold(0.0, (sum, g) => sum + g.savedAmount);
+  setState(() {
+    _unassignedBalance = _totalSaving - assigned;
+  });
+}
+
+
+
+// Future<void> _generateMonthlySavings() async {
+//   try {
+//     const profileId = 'e33f0c91-26fd-436a-baa3-6ad1df3a8152';
+//     final now = DateTime.now();
+//     final currentYear = now.year;
+
+//     // Fetch all records for this user and this year
+//     final response = await supabase
+//         .from('Monthly_Financial_Record')
+//         .select('period_start, monthly_saving')
+//         .eq('profile_id', profileId)
+//         .order('period_start', ascending: true);
+
+//     if (response.isEmpty) {
+//       debugPrint('⚠️ No Monthly_Financial_Record found for this user.');
+//       setState(() => _monthlySavings.clear());
+//       return;
+//     }
+
+//     // Convert to month → saving map
+//     final Map<int, double> monthlyData = {};
+//     for (final record in response) {
+//       final date = DateTime.parse(record['period_start']);
+//       if (date.year == currentYear) {
+//         monthlyData[date.month] =
+//             (record['monthly_saving'] ?? 0).toDouble();
+//       }
+//     }
+
+//     // Fill missing months from January → current month with 0
+//     for (int m = 1; m <= now.month; m++) {
+//       monthlyData.putIfAbsent(m, () => 0.0);
+//     }
+
+//     // Sort months descending (current month first)
+//     final sortedEntries = monthlyData.entries.toList()
+//       ..sort((a, b) => b.key.compareTo(a.key));
+
+//     // Total saving = sum of all months before current
+//     double totalSaving = 0.0;
+//     for (final entry in monthlyData.entries) {
+//       if (entry.key < now.month) totalSaving += entry.value;
+//     }
+
+//     // Update state
+//     setState(() {
+//       _monthlySavings
+//         ..clear()
+//         ..addEntries(sortedEntries.map((e) => MapEntry(
+//               '${_monthName(e.key)} $currentYear',
+//               e.value,
+//             )));
+//       _totalSaving = totalSaving;
+//       _unassignedBalance = totalSaving; // initial until goals assigned
+//     });
+
+//     debugPrint('✅ Monthly savings updated: $_monthlySavings');
+//   } catch (e) {
+//     debugPrint('❌ Error in _generateMonthlySavings: $e');
+//   }
+// }
+
+Future<void> _generateMonthlySavings() async {
+  try {
+    const profileId = 'e33f0c91-26fd-436a-baa3-6ad1df3a8152';
     final now = DateTime.now();
     final currentYear = now.year;
     final currentMonth = now.month;
 
-    for (int m = currentMonth; m >= 1; m--) {
-      final monthName = _monthName(m);
-      _monthlySavings['$monthName $currentYear'] = (m * 500) + 1000;
+    // 1️⃣ Fetch all monthly records (for chart/history)
+    final mfr = await supabase
+        .from('Monthly_Financial_Record')
+        .select('period_start, monthly_saving')
+        .eq('profile_id', profileId)
+        .order('period_start', ascending: true);
+
+    final Map<int, double> monthlyData = {};
+    for (final r in (mfr as List? ?? const [])) {
+      final d = DateTime.parse(r['period_start']);
+      if (d.year == currentYear) {
+        monthlyData[d.month] = (r['monthly_saving'] ?? 0).toDouble();
+      }
     }
 
-    _unassignedBalance =
-        _monthlySavings.values.fold(0.0, (sum, v) => sum + v);
+    // 2️⃣ Fetch current month Transactions
+    final monthStart = DateTime(currentYear, currentMonth, 1);
+    final nextMonthStart = DateTime(
+      currentMonth == 12 ? currentYear + 1 : currentYear,
+      currentMonth == 12 ? 1 : currentMonth + 1,
+      1,
+    );
+
+    final tx = await supabase
+        .from('Transaction')
+        .select('type, amount, date')
+        .eq('profile_id', profileId)
+        .gte('date', monthStart.toIso8601String())
+        .lt('date', nextMonthStart.toIso8601String());
+
+    double transactionEarning = 0;
+    double transactionExpense = 0;
+
+    for (final t in (tx as List? ?? const [])) {
+      final amt = (t['amount'] ?? 0).toDouble();
+      final typ = (t['type'] ?? '').toString().toLowerCase();
+      if (typ == 'earning') transactionEarning += amt;
+      if (typ == 'expense') transactionExpense += amt;
+    }
+
+    // 3️⃣ Fetch Fixed Income (active this month)
+    final fixedIncome = await supabase
+        .from('Fixed_Income')
+        .select('monthly_income, start_time, end_time')
+        .eq('profile_id', profileId);
+
+    double activeIncome = 0;
+    for (final i in (fixedIncome as List? ?? const [])) {
+      final start = DateTime.parse(i['start_time']);
+      final end = DateTime.parse(i['end_time']);
+      if (now.isAfter(start) && now.isBefore(end.add(const Duration(days: 1)))) {
+        activeIncome += (i['monthly_income'] ?? 0).toDouble();
+      }
+    }
+
+    // 4️⃣ Fetch Fixed Expense (active this month)
+    final fixedExpense = await supabase
+        .from('Fixed_Expense')
+        .select('amount, start_time')
+        .eq('profile_id', profileId);
+
+    double activeExpense = 0;
+    for (final e in (fixedExpense as List? ?? const [])) {
+      final start = DateTime.parse(e['start_time']);
+      if (start.year == currentYear && start.month == currentMonth) {
+        activeExpense += (e['amount'] ?? 0).toDouble();
+      }
+    }
+
+    // 5️⃣ Calculate live current-month saving
+    final currentMonthLive = (transactionEarning + activeIncome) -
+        (transactionExpense + activeExpense);
+
+    // 6️⃣ Ensure all months up to current exist
+    for (int m = 1; m <= currentMonth; m++) {
+      monthlyData.putIfAbsent(m, () => 0.0);
+    }
+
+    // 7️⃣ Replace current month value
+    monthlyData[currentMonth] = currentMonthLive;
+
+    // 8️⃣ Sort (current month first)
+    final sorted = monthlyData.entries.toList()
+      ..sort((a, b) => b.key.compareTo(a.key));
+
+    // 9️⃣ Total saving = all previous months (before current)
+    double totalSaving = 0;
+    monthlyData.forEach((m, v) {
+      if (m < currentMonth) totalSaving += v;
+    });
+
+    // 🔟 Update UI
+    setState(() {
+      _monthlySavings
+        ..clear()
+        ..addEntries(sorted.map((e) => MapEntry(
+              '${_monthName(e.key)} $currentYear',
+              e.value,
+            )));
+      _totalSaving = totalSaving;
+      final assigned = _goals.fold(0.0, (sum, g) => sum + g.savedAmount);
+      _unassignedBalance = totalSaving - assigned;
+
+    });
+
+    debugPrint(
+        '✅ Monthly data: $_monthlySavings | Total before current: $totalSaving | Current live: $currentMonthLive | Earn=$transactionEarning+$activeIncome | Exp=$transactionExpense+$activeExpense');
+        _recalculateBalances();
+  } catch (e) {
+    debugPrint('❌ Error in _generateMonthlySavings: $e');
   }
+}
+
+
+
+
+
+
+GoalType _statusToType(dynamic status) {
+  if (status == null) return GoalType.active;
+  final s = status.toString().toLowerCase();
+  if (s == 'completed') return GoalType.completed;
+  if (s == 'uncompleted' || s == 'failed') return GoalType.uncompleted;
+  return GoalType.active;
+}
+
+
+
 
   String _monthName(int month) {
     const months = [
@@ -101,11 +463,33 @@ class _SavingsPageState extends State<SavingsPage> {
     return months[month - 1];
   }
 
-  // Computed
+  
   double get _assignedBalance =>
       _goals.fold(0.0, (sum, g) => sum + g.savedAmount);
-  double get totalSavings =>
-      _monthlySavings.values.fold(0.0, (sum, v) => sum + v);
+
+double get totalSavings {
+  final now = DateTime.now();
+  double total = 0.0;
+
+  _monthlySavings.forEach((label, value) {
+    final parts = label.split(' ');
+    final month = _monthIndex(parts[0]);
+    final year = int.tryParse(parts[1]) ?? 0;
+    if (year == now.year && month < now.month) {
+      total += value; // Only months before current
+    }
+  });
+  return total;
+}
+
+
+int _monthIndex(String name) {
+  const months = [
+    'January','February','March','April','May','June',
+    'July','August','September','October','November','December'
+  ];
+  return months.indexOf(name) + 1;
+}
 
   String _fmt(double value) {
     final s = value.round().toString();
@@ -339,34 +723,27 @@ void _openAddGoalSheet() {
     backgroundColor: Colors.transparent,
     builder: (_) => AddGoalSheet(
       onSubmit: (title, amount, targetDate) async {
-        // Close the sheet immediately and show feedback
         Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Creating goal...')),
         );
 
         try {
-          // Insert a new goal record into table "Goal"
           final response = await supabase.from('Goal').insert({
-
             'name': title.trim(),
             'target_amount': amount,
             'target_date': targetDate.toIso8601String(),
-            'status': 'Active', 
+            'status': 'Active',
             'created_at': DateTime.now().toIso8601String(),
-            // If you have authentication with user profiles:
             'profile_id': "e33f0c91-26fd-436a-baa3-6ad1df3a8152",
           }).select();
 
-          //  Ensure the insert succeeded
-          if (response.isEmpty) {
-            throw Exception('Insert failed — no data returned.');
-          }
-
-          // Extract inserted record and update local goals list
+          if (response.isEmpty) throw Exception('Insert failed — no data returned.');
           final data = response.first;
+
           setState(() {
             _goals.add(Goal(
+              id: data['goal_id'], 
               title: data['name'] ?? title,
               type: GoalType.active,
               targetAmount: (data['target_amount'] ?? amount).toDouble(),
@@ -376,13 +753,13 @@ void _openAddGoalSheet() {
             _selected = GoalType.active;
           });
 
-          // Notify the user of success
+          await _generateMonthlySavings(); 
+
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Goal created successfully!')),
           );
         } catch (e) {
-          
-          debugPrint(' Cannot create goal: $e');
+          debugPrint('Cannot create goal: $e');
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Error creating goal: $e')),
           );
@@ -394,51 +771,50 @@ void _openAddGoalSheet() {
 
 
 
-  void _openAssignSheet() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => AssignAmountSheet(
-        goals: _goals
-            .where((g) => g.type == GoalType.active && g.remaining > 0)
-            .toList(),
-        unassignedBalance: _unassignedBalance,
-        onAssign: (goal, amount) {
-          if (amount <= 0) return;
-          if (amount > _unassignedBalance) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Not enough unassigned balance')),
-            );
-            return;
-          }
-          if (amount > goal.remaining) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Amount exceeds goal remaining')),
-            );
-            return;
-          }
+void _openAssignSheet() {
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (_) => AssignAmountSheet(
+      goals: _goals
+          .where((g) => g.type == GoalType.active && g.remaining > 0)
+          .toList(),
+      unassignedBalance: _unassignedBalance,
+onAssign: (goal, amount) async {
+  try {
+    //  Insert assignment record into Goal_Transfer
+    await supabase.from('Goal_Transfer').insert({
+      'goal_id': goal.id,
+      'amount': amount,
+      'direction': 'Assign',
+      'created_at': DateTime.now().toIso8601String(),
+    });
 
-          setState(() {
-            final i = _goals.indexOf(goal);
-            _goals[i] = goal.copyWith(savedAmount: goal.savedAmount + amount);
-            _unassignedBalance -= amount;
+    await _fetchGoals();  
+    await _generateMonthlySavings();
 
-            if (_goals[i].remaining == 0) {
-              _goals[i] = _goals[i].copyWith(type: GoalType.completed);
-            }
-          });
-
-          Navigator.pop(context);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Assigned ${_fmt(amount)} SAR to ${goal.title}')),
-          );
-        },
-      ),
+    Navigator.pop(context);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Assigned ${_fmt(amount)} SAR to ${goal.title}')),
+    );
+  } catch (e) {
+    debugPrint('Error assigning: $e');
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Error assigning: $e')),
     );
   }
+},
 
-  void _openUnassignPicker() {
+    ),
+  );
+}
+
+
+
+
+ Future<void> _openUnassignPicker() async{
+    await _generateMonthlySavings();
     final canUnassign = _goals.where((g) => g.savedAmount > 0).toList();
     if (canUnassign.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -489,29 +865,36 @@ void _openAddGoalSheet() {
       backgroundColor: Colors.transparent,
       builder: (_) => UnassignAmountSheet(
         goal: goal,
-        onUnassign: (amount) {
-          if (amount <= 0 || amount > goal.savedAmount) return;
+    onUnassign: (amount) async {
+      try {
+        // Insert unassignment record
+        await supabase.from('Goal_Transfer').insert({
+          'goal_id': goal.id,
+          'amount': amount,
+          'direction': 'Unassign',
+          'created_at': DateTime.now().toIso8601String(),
+        });
 
-          setState(() {
-            final i = _goals.indexOf(goal);
-            _goals[i] = goal.copyWith(savedAmount: goal.savedAmount - amount);
-            _unassignedBalance += amount;
+            await _fetchGoals();  
+            await _generateMonthlySavings();
 
-            if (_goals[i].type == GoalType.completed && _goals[i].remaining > 0) {
-              _goals[i] = _goals[i].copyWith(type: GoalType.active);
-            }
-          });
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Unassigned ${_fmt(amount)} SAR from ${goal.title}')),
+        );
+      } catch (e) {
+        debugPrint('Error unassigning: $e');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error unassigning: $e')),
+        );
+      }
+    },
 
-          Navigator.pop(context);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Unassigned ${_fmt(amount)} SAR from ${goal.title}')),
-          );
-        },
       ),
     );
   }
 
-  /// -------- Delete Goal (NEW) --------
+  /// -------- Delete Goal  --------
   Future<void> _confirmDelete(Goal goal) async {
     final bool? ok = await showDialog<bool>(
       context: context,
@@ -538,20 +921,29 @@ void _openAddGoalSheet() {
     if (ok == true) _deleteGoal(goal);
   }
 
-  void _deleteGoal(Goal goal) {
+Future<void> _deleteGoal(Goal goal) async {
+  try {
+    await supabase.from('Goal').delete().eq('goal_id', goal.id);
+
+    // Remove from UI immediately
     setState(() {
-      _unassignedBalance += goal.savedAmount; // return assigned funds
-      _goals.remove(goal);                     // remove goal
+      _goals.removeWhere((g) => g.id == goal.id);
     });
 
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Deleted "${goal.title}". Returned ${_fmt(goal.savedAmount)} SAR to Unassigned.',
-        ),
-      ),
+      SnackBar(content: Text('Deleted "${goal.title}" successfully!')),
+    );
+  } catch (e) {
+    debugPrint('Error deleting goal: $e');
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Failed to delete goal: $e')),
     );
   }
+}
+
+
+
+
 }
 
 /// ---------------- Widgets ----------------

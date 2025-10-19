@@ -153,7 +153,7 @@ void initState() {
           schema: 'public',
           table: 'Goal_Transfer',
           callback: (payload) async {
-            debugPrint('🔄 Goal_Transfer updated: ${payload.eventType}');
+            debugPrint('Goal_Transfer updated: ${payload.eventType}');
             await _fetchGoals();
             await _generateMonthlySavings();
           },
@@ -248,6 +248,142 @@ Future<void> _fetchGoals() async {
   
 }
 
+// ------------------------------------------------------
+// CHECK & UPDATE GOAL STATUS (after assign/unassign)
+// ------------------------------------------------------
+// This function recalculates the total assigned amount for a given goal.
+// If assigned ≥ target, it marks the goal as 'Completed'.
+// If assigned < target, it ensures status is 'Active'.
+Future<void> _checkAndUpdateGoalStatus(String goalId) async {
+  try {
+    //  Sum all assigned and unassigned transfers for this goal
+    final transfers = await supabase
+        .from('Goal_Transfer')
+        .select('amount, direction')
+        .eq('goal_id', goalId);
+
+    double totalAssigned = 0.0;
+    for (final t in (transfers as List? ?? [])) {
+      final amt = (t['amount'] ?? 0).toDouble();
+      final dir = (t['direction'] ?? '').toString().toLowerCase();
+      if (dir == 'assign') totalAssigned += amt;
+      if (dir == 'unassign') totalAssigned -= amt;
+    }
+
+    //  Get the target amount of the goal
+    final goal = await supabase
+        .from('Goal')
+        .select('target_amount')
+        .eq('goal_id', goalId)
+        .single();
+
+    final target = (goal['target_amount'] ?? 0).toDouble();
+
+    //  Determine new status
+    final newStatus = totalAssigned >= target ? 'Completed' : 'Active';
+
+    //  Update the goal in database if needed
+    await supabase
+        .from('Goal')
+        .update({'status': newStatus})
+        .eq('goal_id', goalId);
+
+    debugPrint(' Goal $goalId status updated to $newStatus');
+    await _fetchGoals(); // refresh UI
+  } catch (e) {
+    debugPrint(' Error updating goal status: $e');
+  }
+}
+
+// ------------------------------------------------------
+// FETCH A SINGLE GOAL BY ID (for editing)
+// ------------------------------------------------------
+Future<Goal?> _fetchGoalById(String goalId) async {
+  try {
+    final res = await supabase
+        .from('Goal')
+        .select()
+        .eq('goal_id', goalId)
+        .single();
+
+    if (res == null) return null;
+
+    // Map DB fields into Goal object
+    return Goal(
+      id: res['goal_id'],
+      title: res['name'] ?? '',
+      targetAmount: (res['target_amount'] ?? 0).toDouble(),
+      savedAmount: (res['saved_amount'] ?? 0).toDouble(),
+      createdAt: DateTime.parse(res['created_at']),
+      targetDate: res['target_date'] != null
+          ? DateTime.parse(res['target_date'])
+          : null,
+      type: _statusToType(res['status']),
+    );
+  } catch (e) {
+    debugPrint('❌ Error fetching goal by ID: $e');
+    return null;
+  }
+}
+
+// ------------------------------------------------------
+// UPDATE GOAL INFO AFTER EDIT (handles status + balance)
+// ------------------------------------------------------
+Future<void> _updateGoal(Goal updated) async {
+  try {
+    //  Fetch total assigned amount from Goal_Transfer
+    final transfers = await supabase
+        .from('Goal_Transfer')
+        .select('amount, direction')
+        .eq('goal_id', updated.id);
+
+    double totalAssigned = 0.0;
+    for (final t in (transfers as List? ?? [])) {
+      final amt = (t['amount'] ?? 0).toDouble();
+      final dir = (t['direction'] ?? '').toString().toLowerCase();
+      if (dir == 'assign') totalAssigned += amt;
+      if (dir == 'unassign') totalAssigned -= amt;
+    }
+
+    // Determine new status based on savedAmount vs target
+    final newStatus =
+        totalAssigned >= updated.targetAmount ? 'Completed' : 'Active';
+
+    //  Update in database
+    await supabase.from('Goal').update({
+      'name': updated.title,
+      'target_amount': updated.targetAmount,
+      'target_date': updated.targetDate?.toIso8601String(),
+      'status': newStatus,
+     
+    }).eq('goal_id', updated.id);
+
+    //  Refresh local state — update this goal in the list
+    setState(() {
+      final i = _goals.indexWhere((g) => g.id == updated.id);
+      if (i != -1) {
+        _goals[i] = updated.copyWith(
+          savedAmount: totalAssigned,
+          type: _statusToType(newStatus),
+        );
+      }
+    });
+
+   
+    _recalculateBalances();
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Goal updated: ${updated.title} ($newStatus)')),
+    );
+  } catch (e) {
+    debugPrint(' Error updating goal: $e');
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Error updating goal: $e')),
+    );
+  }
+}
+
+
 void _recalculateBalances() {
   final assigned = _goals.fold(0.0, (sum, g) => sum + g.savedAmount);
   setState(() {
@@ -256,69 +392,6 @@ void _recalculateBalances() {
 }
 
 
-
-// Future<void> _generateMonthlySavings() async {
-//   try {
-//     const profileId = 'e33f0c91-26fd-436a-baa3-6ad1df3a8152';
-//     final now = DateTime.now();
-//     final currentYear = now.year;
-
-//     // Fetch all records for this user and this year
-//     final response = await supabase
-//         .from('Monthly_Financial_Record')
-//         .select('period_start, monthly_saving')
-//         .eq('profile_id', profileId)
-//         .order('period_start', ascending: true);
-
-//     if (response.isEmpty) {
-//       debugPrint('⚠️ No Monthly_Financial_Record found for this user.');
-//       setState(() => _monthlySavings.clear());
-//       return;
-//     }
-
-//     // Convert to month → saving map
-//     final Map<int, double> monthlyData = {};
-//     for (final record in response) {
-//       final date = DateTime.parse(record['period_start']);
-//       if (date.year == currentYear) {
-//         monthlyData[date.month] =
-//             (record['monthly_saving'] ?? 0).toDouble();
-//       }
-//     }
-
-//     // Fill missing months from January → current month with 0
-//     for (int m = 1; m <= now.month; m++) {
-//       monthlyData.putIfAbsent(m, () => 0.0);
-//     }
-
-//     // Sort months descending (current month first)
-//     final sortedEntries = monthlyData.entries.toList()
-//       ..sort((a, b) => b.key.compareTo(a.key));
-
-//     // Total saving = sum of all months before current
-//     double totalSaving = 0.0;
-//     for (final entry in monthlyData.entries) {
-//       if (entry.key < now.month) totalSaving += entry.value;
-//     }
-
-//     // Update state
-//     setState(() {
-//       _monthlySavings
-//         ..clear()
-//         ..addEntries(sortedEntries.map((e) => MapEntry(
-//               '${_monthName(e.key)} $currentYear',
-//               e.value,
-//             )));
-//       _totalSaving = totalSaving;
-//       _unassignedBalance = totalSaving; // initial until goals assigned
-//     });
-
-//     debugPrint('✅ Monthly savings updated: $_monthlySavings');
-//   } catch (e) {
-//     debugPrint('❌ Error in _generateMonthlySavings: $e');
-//   }
-// }
-
 Future<void> _generateMonthlySavings() async {
   try {
     const profileId = 'e33f0c91-26fd-436a-baa3-6ad1df3a8152';
@@ -326,7 +399,7 @@ Future<void> _generateMonthlySavings() async {
     final currentYear = now.year;
     final currentMonth = now.month;
 
-    // 1️⃣ Fetch all monthly records (for chart/history)
+    //  Fetch all monthly records
     final mfr = await supabase
         .from('Monthly_Financial_Record')
         .select('period_start, monthly_saving')
@@ -341,7 +414,7 @@ Future<void> _generateMonthlySavings() async {
       }
     }
 
-    // 2️⃣ Fetch current month Transactions
+    //  Fetch current month Transactions
     final monthStart = DateTime(currentYear, currentMonth, 1);
     final nextMonthStart = DateTime(
       currentMonth == 12 ? currentYear + 1 : currentYear,
@@ -366,7 +439,7 @@ Future<void> _generateMonthlySavings() async {
       if (typ == 'expense') transactionExpense += amt;
     }
 
-    // 3️⃣ Fetch Fixed Income (active this month)
+    //  Fetch Fixed Income (active this month)
     final fixedIncome = await supabase
         .from('Fixed_Income')
         .select('monthly_income, start_time, end_time')
@@ -522,7 +595,7 @@ int _monthIndex(String name) {
                       height: 40,
                       decoration: BoxDecoration(
                         gradient: RadialGradient(
-                          colors: [AppColors.accent.withOpacity(0.30), Colors.transparent],
+                          colors: [AppColors.accent.withValues(alpha:0.30), Colors.transparent],
                         ),
                       ),
                     ),
@@ -545,7 +618,7 @@ int _monthIndex(String name) {
                     width: 4, height: 24,
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
-                        colors: [AppColors.accent, AppColors.accent.withOpacity(0.30)],
+                        colors: [AppColors.accent, AppColors.accent.withValues(alpha:0.30)],
                         begin: Alignment.topCenter, end: Alignment.bottomCenter,
                       ),
                       borderRadius: BorderRadius.circular(2),
@@ -598,18 +671,18 @@ int _monthIndex(String name) {
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.topLeft, end: Alignment.bottomRight,
-                    colors: [AppColors.card.withOpacity(0.40), AppColors.card.withOpacity(0.20)],
+                    colors: [AppColors.card.withValues(alpha:0.40), AppColors.card.withValues(alpha:0.20)],
                   ),
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.white.withOpacity(0.12), width: 1.5),
-                  boxShadow: [BoxShadow(color: AppColors.accent.withOpacity(0.15), blurRadius: 24, offset: Offset(0, 8))],
+                  border: Border.all(color: Colors.white.withValues(alpha:0.12), width: 1.5),
+                  boxShadow: [BoxShadow(color: AppColors.accent.withValues(alpha:0.15), blurRadius: 24, offset: Offset(0, 8))],
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       Text('Total Savings',
-                          style: TextStyle(color: AppColors.textGrey.withOpacity(0.80), fontSize: 14, fontWeight: FontWeight.w600, letterSpacing: 0.5)),
+                          style: TextStyle(color: AppColors.textGrey.withValues(alpha:0.80), fontSize: 14, fontWeight: FontWeight.w600, letterSpacing: 0.5)),
                       const SizedBox(height: 4),
                       Text('${_fmt(totalSavings)} SAR',
                           style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.w900, letterSpacing: -0.5,
@@ -619,9 +692,9 @@ int _monthIndex(String name) {
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: AppColors.accent.withOpacity(0.20),
+                        color: AppColors.accent.withValues(alpha:0.20),
                         shape: BoxShape.circle,
-                        border: Border.all(color: AppColors.accent.withOpacity(0.40), width: 2),
+                        border: Border.all(color: AppColors.accent.withValues(alpha:0.40), width: 2),
                       ),
                       child: Icon(Icons.trending_up, color: AppColors.accent, size: 28),
                     ),
@@ -667,7 +740,7 @@ int _monthIndex(String name) {
                       width: 4, height: 24,
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
-                          colors: [AppColors.accent, AppColors.accent.withOpacity(0.30)],
+                          colors: [AppColors.accent, AppColors.accent.withValues(alpha:0.30)],
                           begin: Alignment.topCenter, end: Alignment.bottomCenter,
                         ),
                         borderRadius: BorderRadius.circular(2),
@@ -791,6 +864,7 @@ onAssign: (goal, amount) async {
       'created_at': DateTime.now().toIso8601String(),
     });
 
+    await _checkAndUpdateGoalStatus(goal.id);
     await _fetchGoals();  
     await _generateMonthlySavings();
 
@@ -875,6 +949,7 @@ onAssign: (goal, amount) async {
           'created_at': DateTime.now().toIso8601String(),
         });
 
+            await _checkAndUpdateGoalStatus(goal.id);
             await _fetchGoals();  
             await _generateMonthlySavings();
 
@@ -973,16 +1048,16 @@ class _MonthCard extends StatelessWidget {
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: current
-                ? [AppColors.card.withOpacity(0.45), AppColors.card.withOpacity(0.25)]
-                : [AppColors.card.withOpacity(0.30), AppColors.card.withOpacity(0.16)],
+                ? [AppColors.card.withValues(alpha:0.45), AppColors.card.withValues(alpha:0.25)]
+                : [AppColors.card.withValues(alpha:0.30), AppColors.card.withValues(alpha:0.16)],
           ),
           border: Border.all(
-            color: current ? AppColors.accent.withOpacity(0.22) : Colors.white.withOpacity(0.06),
+            color: current ? AppColors.accent.withValues(alpha:0.22) : Colors.white.withValues(alpha:0.06),
             width: 1,
           ),
           boxShadow: [
             BoxShadow(
-              color: AppColors.accent.withOpacity(current ? 0.20 : 0.10),
+              color: AppColors.accent.withValues(alpha:current ? 0.20 : 0.10),
               blurRadius: 24,
               spreadRadius: -2,
               offset: const Offset(0, 8),
@@ -997,7 +1072,7 @@ class _MonthCard extends StatelessWidget {
               Text(
                 year,
                 style: TextStyle(
-                  color: AppColors.textGrey.withOpacity(0.70),
+                  color: AppColors.textGrey.withValues(alpha:0.70),
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
                   letterSpacing: 0.5,
@@ -1008,9 +1083,9 @@ class _MonthCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: AppColors.accent.withOpacity(0.20),
+                    color: AppColors.accent.withValues(alpha:0.20),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: AppColors.accent.withOpacity(0.40), width: 1),
+                    border: Border.all(color: AppColors.accent.withValues(alpha:0.40), width: 1),
                   ),
                   child: Text(
                     'Current',
@@ -1033,7 +1108,7 @@ class _MonthCard extends StatelessWidget {
               amount,
               style: TextStyle(
                 color: Colors.white, fontSize: 26, fontWeight: FontWeight.w900, letterSpacing: -0.5,
-                shadows: current ? [Shadow(color: AppColors.accent.withOpacity(0.30), blurRadius: 8)] : const [],
+                shadows: current ? [Shadow(color: AppColors.accent.withValues(alpha:0.30), blurRadius: 8)] : const [],
               ),
             ),
           ],
@@ -1067,21 +1142,21 @@ class _SummaryCard extends StatelessWidget {
       decoration: BoxDecoration(
         gradient: gradient,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.white.withOpacity(0.10), width: 1),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.30), blurRadius: 20, offset: const Offset(0, 8))],
+        border: Border.all(color: Colors.white.withValues(alpha:0.10), width: 1),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha:0.30), blurRadius: 20, offset: const Offset(0, 8))],
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
           Expanded(
             child: Text(
               title,
-              style: TextStyle(color: AppColors.textGrey.withOpacity(0.90), fontSize: 13, fontWeight: FontWeight.w600, letterSpacing: 0.3),
+              style: TextStyle(color: AppColors.textGrey.withValues(alpha:0.90), fontSize: 13, fontWeight: FontWeight.w600, letterSpacing: 0.3),
             ),
           ),
           Container(
             padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(color: Colors.white.withOpacity(0.10), borderRadius: BorderRadius.circular(10)),
-            child: Icon(icon, color: AppColors.accent.withOpacity(0.80), size: 20),
+            decoration: BoxDecoration(color: Colors.white.withValues(alpha:0.10), borderRadius: BorderRadius.circular(10)),
+            child: Icon(icon, color: AppColors.accent.withValues(alpha:0.80), size: 20),
           ),
         ]),
         const SizedBox(height: 14),
@@ -1097,7 +1172,7 @@ class _SummaryCard extends StatelessWidget {
               foregroundColor: Colors.white,
               elevation: 8,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-              shadowColor: AppColors.accent.withOpacity(0.4),
+              shadowColor: AppColors.accent.withValues(alpha:0.4),
             ),
             child: Text(
               buttonText,
@@ -1132,7 +1207,7 @@ class _GoalTypeSelector extends StatelessWidget {
                 borderRadius: BorderRadius.circular(40),
                 gradient: isSelected
                     ? LinearGradient(
-                        colors: [color.withOpacity(0.70), color.withOpacity(0.40)],
+                        colors: [color.withValues(alpha:0.70), color.withValues(alpha:0.40)],
                         begin: Alignment.topLeft, end: Alignment.bottomRight,
                       )
                     : const LinearGradient(
@@ -1140,10 +1215,10 @@ class _GoalTypeSelector extends StatelessWidget {
                         begin: Alignment.topLeft, end: Alignment.bottomRight,
                       ),
                 boxShadow: isSelected
-                    ? [BoxShadow(color: color.withOpacity(0.35), blurRadius: 12, offset: Offset(0, 3))]
+                    ? [BoxShadow(color: color.withValues(alpha:0.35), blurRadius: 12, offset: Offset(0, 3))]
                     : [],
                 border: Border.all(
-                  color: isSelected ? color.withOpacity(0.45) : Colors.white.withOpacity(0.10),
+                  color: isSelected ? color.withValues(alpha:0.45) : Colors.white.withValues(alpha:0.10),
                   width: 1,
                 ),
               ),
@@ -1151,7 +1226,7 @@ class _GoalTypeSelector extends StatelessWidget {
                 child: Text(
                   label,
                   style: TextStyle(
-                    color: isSelected ? Colors.white : Colors.white.withOpacity(0.65),
+                    color: isSelected ? Colors.white : Colors.white.withValues(alpha:0.65),
                     fontWeight: FontWeight.w700,
                     fontSize: 14,
                     letterSpacing: 0.3,
@@ -1191,15 +1266,15 @@ class _GoalTile extends StatelessWidget {
         : isUncompleted
             ? const Color(0xFFEF5350)
             : const Color(0xFF4A37E1);
-    final Color borderColor = base.withOpacity(0.30);
+    final Color borderColor = base.withValues(alpha:0.30);
 
     final Widget statusChip = isActive
         ? Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
             decoration: BoxDecoration(
-              color: const Color(0xFF4A37E1).withOpacity(0.20),
+              color: const Color(0xFF4A37E1).withValues(alpha:0.20),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFF4A37E1).withOpacity(0.30), width: 1),
+              border: Border.all(color: const Color(0xFF4A37E1).withValues(alpha:0.30), width: 1),
             ),
             child: Text(
               '${(goal.progress * 100).toInt()}%',
@@ -1208,26 +1283,36 @@ class _GoalTile extends StatelessWidget {
           )
         : Icon(isCompleted ? Icons.check_circle : Icons.pause_circle_filled, color: base, size: 22);
 
-    void _openEdit() {
+      void _openEdit() async {
+      final parent = context.findAncestorStateOfType<_SavingsPageState>();
+      if (parent == null) return;
+
+      // Fetch the most recent goal data before editing
+      final freshGoal = await parent._fetchGoalById(goal.id) ?? goal;
+
       showModalBottomSheet(
         context: context,
         isScrollControlled: true,
         backgroundColor: Colors.transparent,
         builder: (_) => EditGoalSheet(
-          goal: goal,
-          onSave: (updated) {
-            final parent = context.findAncestorStateOfType<_SavingsPageState>();
-            if (parent == null) return;
-            final i = parent._goals.indexOf(goal);
-            if (i == -1) return;
-            parent.setState(() => parent._goals[i] = updated);
+          goal: freshGoal,
+          onSave: (updated) async {
+            //  Update the goal
+            await parent._updateGoal(updated);
+
+            //  Re-fetch to ensure balances, totals, and tiles refresh fully
+            await parent._fetchGoals();
+            await parent._generateMonthlySavings();
+
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Goal updated successfully')),
+              const SnackBar(content: Text('Goal updated successfully!')),
             );
           },
         ),
       );
     }
+
+
 
     void _askDelete() {
       final parent = context.findAncestorStateOfType<_SavingsPageState>();
@@ -1242,7 +1327,7 @@ class _GoalTile extends StatelessWidget {
         ),
         borderRadius: BorderRadius.circular(22),
         border: Border.all(color: borderColor, width: 1),
-        boxShadow: [BoxShadow(color: borderColor.withOpacity(0.20), blurRadius: 20, offset: const Offset(0, 8))],
+        boxShadow: [BoxShadow(color: borderColor.withValues(alpha:0.20), blurRadius: 20, offset: const Offset(0, 8))],
       ),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
@@ -1276,7 +1361,7 @@ class _GoalTile extends StatelessWidget {
               ClipRRect(
                 borderRadius: BorderRadius.circular(10),
                 child: Stack(children: [
-                  Container(height: 8, color: Colors.white.withOpacity(0.10)),
+                  Container(height: 8, color: Colors.white.withValues(alpha:0.10)),
                   FractionallySizedBox(
                     widthFactor: goal.progress.clamp(0.0, 1.0).toDouble(),
                     child: Container(
@@ -1317,12 +1402,12 @@ class _ProgressAmounts extends StatelessWidget {
       children: [
         Text(
           '${_fmt(remaining)} SAR left',
-          style: TextStyle(color: Colors.white.withOpacity(0.85), fontSize: 12.5, fontWeight: FontWeight.w700),
+          style: TextStyle(color: Colors.white.withValues(alpha:0.85), fontSize: 12.5, fontWeight: FontWeight.w700),
         ),
         const Spacer(),
         Text(
           '${_fmt(goal.targetAmount)} SAR total',
-          style: TextStyle(color: Colors.white.withOpacity(0.55), fontSize: 12, fontWeight: FontWeight.w600),
+          style: TextStyle(color: Colors.white.withValues(alpha:0.55), fontSize: 12, fontWeight: FontWeight.w600),
         ),
       ],
     );
@@ -1343,9 +1428,9 @@ class _GhostIconButton extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(6),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.06),
+          color: Colors.white.withValues(alpha:0.06),
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: Colors.white.withOpacity(0.14), width: 1),
+          border: Border.all(color: Colors.white.withValues(alpha:0.14), width: 1),
         ),
         child: Icon(icon, size: 16, color: Colors.white70),
       ),
@@ -1363,10 +1448,10 @@ class AddGoalFab extends StatelessWidget {
     return Container(
       width: 52, height: 52,
       decoration: BoxDecoration(
-        gradient: LinearGradient(colors: [AppColors.accent, AppColors.accent.withOpacity(0.80)],
+        gradient: LinearGradient(colors: [AppColors.accent, AppColors.accent.withValues(alpha:0.80)],
             begin: Alignment.topLeft, end: Alignment.bottomRight),
         shape: BoxShape.circle,
-        boxShadow: [BoxShadow(color: AppColors.accent.withOpacity(0.50), blurRadius: 20, offset: const Offset(0, 6))],
+        boxShadow: [BoxShadow(color: AppColors.accent.withValues(alpha:0.50), blurRadius: 20, offset: const Offset(0, 6))],
       ),
       child: Material(
         color: Colors.transparent,
@@ -1460,7 +1545,7 @@ class _AddGoalSheetState extends State<AddGoalSheet> {
           borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
           boxShadow: [
             BoxShadow(
-              color: AppColors.accent.withOpacity(0.35),
+              color: AppColors.accent.withValues(alpha:0.35),
               blurRadius: 24,
               offset: const Offset(0, -6),
             ),
@@ -1548,11 +1633,11 @@ class _AddGoalSheetState extends State<AddGoalSheet> {
                         backgroundColor: AppColors.accent,
                         foregroundColor: Colors.white,
                         disabledBackgroundColor:
-                            AppColors.accent.withOpacity(0.4),
+                            AppColors.accent.withValues(alpha:0.4),
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(14)),
                         elevation: 8,
-                        shadowColor: AppColors.accent.withOpacity(0.4),
+                        shadowColor: AppColors.accent.withValues(alpha:0.4),
                       ),
                       child: _submitting
                           ? const SizedBox(
@@ -1584,15 +1669,15 @@ class _AddGoalSheetState extends State<AddGoalSheet> {
       labelStyle: const TextStyle(color: Colors.white70),
       hintStyle: const TextStyle(color: Colors.white38),
       filled: true,
-      fillColor: Colors.white.withOpacity(0.06),
+      fillColor: Colors.white.withValues(alpha:0.06),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: Colors.white.withOpacity(0.10)),
+        borderSide: BorderSide(color: Colors.white.withValues(alpha:0.10)),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
         borderSide:
-            BorderSide(color: AppColors.accent.withOpacity(0.8), width: 1.5),
+            BorderSide(color: AppColors.accent.withValues(alpha:0.8), width: 1.5),
       ),
       errorBorder: const OutlineInputBorder(
         borderRadius: BorderRadius.all(Radius.circular(12)),
@@ -1740,14 +1825,14 @@ class _AssignAmountSheetState extends State<AssignAmountSheet> {
     labelStyle: const TextStyle(color: Colors.white70),
     hintStyle: const TextStyle(color: Colors.white38),
     filled: true,
-    fillColor: Colors.white.withOpacity(0.06),
+    fillColor: Colors.white.withValues(alpha:0.06),
     enabledBorder: OutlineInputBorder(
       borderRadius: BorderRadius.circular(12),
-      borderSide: BorderSide(color: Colors.white.withOpacity(0.10)),
+      borderSide: BorderSide(color: Colors.white.withValues(alpha:0.10)),
     ),
     focusedBorder: OutlineInputBorder(
       borderRadius: BorderRadius.circular(12),
-      borderSide: BorderSide(color: AppColors.accent.withOpacity(0.8), width: 1.5),
+      borderSide: BorderSide(color: AppColors.accent.withValues(alpha:0.8), width: 1.5),
     ),
     contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
   );
@@ -1756,15 +1841,15 @@ class _AssignAmountSheetState extends State<AssignAmountSheet> {
     labelText: label,
     labelStyle: const TextStyle(color: Colors.white70),
     filled: true,
-    fillColor: Colors.white.withOpacity(0.06),
+    fillColor: Colors.white.withValues(alpha:0.06),
     border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
     enabledBorder: OutlineInputBorder(
       borderRadius: BorderRadius.circular(12),
-      borderSide: BorderSide(color: Colors.white.withOpacity(0.10)),
+      borderSide: BorderSide(color: Colors.white.withValues(alpha:0.10)),
     ),
     focusedBorder: OutlineInputBorder(
       borderRadius: BorderRadius.circular(12),
-      borderSide: BorderSide(color: AppColors.accent.withOpacity(0.8), width: 1.5),
+      borderSide: BorderSide(color: AppColors.accent.withValues(alpha:0.8), width: 1.5),
     ),
     contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
   );
@@ -1869,14 +1954,14 @@ class _UnassignAmountSheetState extends State<UnassignAmountSheet> {
     labelStyle: const TextStyle(color: Colors.white70),
     hintStyle: const TextStyle(color: Colors.white38),
     filled: true,
-    fillColor: Colors.white.withOpacity(0.06),
+    fillColor: Colors.white.withValues(alpha:0.06),
     enabledBorder: OutlineInputBorder(
       borderRadius: BorderRadius.circular(12),
-      borderSide: BorderSide(color: Colors.white.withOpacity(0.10)),
+      borderSide: BorderSide(color: Colors.white.withValues(alpha:0.10)),
     ),
     focusedBorder: OutlineInputBorder(
       borderRadius: BorderRadius.circular(12),
-      borderSide: BorderSide(color: AppColors.accent.withOpacity(0.8), width: 1.5),
+      borderSide: BorderSide(color: AppColors.accent.withValues(alpha:0.8), width: 1.5),
     ),
     contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
   );
@@ -2049,16 +2134,16 @@ class _EditGoalSheetState extends State<EditGoalSheet> {
         labelText: label,
         labelStyle: const TextStyle(color: Colors.white70),
         filled: true,
-        fillColor: Colors.white.withOpacity(0.06),
+        fillColor: Colors.white.withValues(alpha:0.06),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.white.withOpacity(0.10)),
+          borderSide: BorderSide(color: Colors.white.withValues(alpha:0.10)),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide:
-              BorderSide(color: AppColors.accent.withOpacity(0.8), width: 1.5),
+              BorderSide(color: AppColors.accent.withValues(alpha:0.8), width: 1.5),
         ),
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 14, vertical: 12),

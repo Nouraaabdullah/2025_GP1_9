@@ -1,7 +1,59 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
-class LoginScreen extends StatelessWidget {
+class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
+
+  @override
+  State<LoginScreen> createState() => _LoginScreenState();
+}
+
+class _LoginScreenState extends State<LoginScreen> {
+  final emailController = TextEditingController();
+  final passwordController = TextEditingController();
+  final supabase = Supabase.instance.client;
+
+  bool loading = false;
+
+  Future<void> loginUser() async {
+    final email = emailController.text.trim();
+    final password = passwordController.text.trim();
+
+    if (email.isEmpty || password.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please enter email and password.")),
+      );
+      return;
+    }
+
+    setState(() => loading = true);
+
+    try {
+      // ✅ Attempt login
+      final response = await supabase.auth.signInWithPassword(
+        email: email,
+        password: password,
+      );
+
+      if (response.user != null) {
+        // ✅ Successful login
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Login successful!")),
+        );
+
+        // Navigate to Dashboard
+        Navigator.pushReplacementNamed(context, '/dashboard');
+      } else {
+        throw Exception("Invalid credentials.");
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Login failed: $e")),
+      );
+    } finally {
+      setState(() => loading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -9,7 +61,7 @@ class LoginScreen extends StatelessWidget {
       backgroundColor: const Color(0xFF181732),
       body: Stack(
         children: [
-          // ===== BACKGROUND CIRCLES (exact layout as screenshot) =====
+          // ===== BACKGROUND CIRCLES =====
           Positioned(
             top: -150,
             left: -120,
@@ -17,7 +69,7 @@ class LoginScreen extends StatelessWidget {
               width: 400,
               height: 400,
               decoration: const BoxDecoration(
-                color: Color(0xFF4E46B4), // Light purple
+                color: Color(0xFF4E46B4),
                 shape: BoxShape.circle,
               ),
             ),
@@ -29,7 +81,7 @@ class LoginScreen extends StatelessWidget {
               width: 600,
               height: 600,
               decoration: const BoxDecoration(
-                color: Color(0xFF322B78), // Darker purple layer
+                color: Color(0xFF322B78),
                 shape: BoxShape.circle,
               ),
             ),
@@ -43,8 +95,6 @@ class LoginScreen extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const SizedBox(height: 230),
-
-                  // ===== Title =====
                   const Text(
                     "Log in to your\nAccount",
                     style: TextStyle(
@@ -55,46 +105,39 @@ class LoginScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 12),
-
-                  // ===== Subtitle =====
                   const Text(
                     "Please enter your credentials to continue.",
-                    style: TextStyle(
-                      color: Colors.white70,
-                      fontSize: 16,
-                    ),
+                    style: TextStyle(color: Colors.white70, fontSize: 16),
                   ),
-
                   const SizedBox(height: 60),
 
-                  // ===== Email =====
+                  // ===== EMAIL =====
                   const Text(
                     "Email",
                     style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w500,
-                    ),
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w500),
                   ),
                   const SizedBox(height: 8),
                   _buildTextField(
-                    hintText: "abhixyzxyz@gmail.com",
+                    controller: emailController,
+                    hintText: "you@example.com",
                     isPassword: false,
                   ),
-
                   const SizedBox(height: 25),
 
-                  // ===== Password =====
+                  // ===== PASSWORD =====
                   const Text(
                     "Password",
                     style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w500,
-                    ),
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w500),
                   ),
                   const SizedBox(height: 8),
                   _buildTextField(
+                    controller: passwordController,
                     hintText: "********",
                     isPassword: true,
                   ),
@@ -106,9 +149,7 @@ class LoginScreen extends StatelessWidget {
                     width: double.infinity,
                     height: 55,
                     child: ElevatedButton(
-                      onPressed: () {
-                        Navigator.pushNamed(context, '/dashboard');
-                      },
+                      onPressed: loading ? null : loginUser,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF7C6FD6),
                         shape: RoundedRectangleBorder(
@@ -118,17 +159,20 @@ class LoginScreen extends StatelessWidget {
                         shadowColor:
                             const Color(0xFF7C6FD6).withOpacity(0.4),
                       ),
-                      child: const Text(
-                        "Log In",
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
+                      child: loading
+                          ? const CircularProgressIndicator(
+                              color: Colors.white,
+                            )
+                          : const Text(
+                              "Log In",
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 18,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
                     ),
                   ),
-
                   const SizedBox(height: 25),
 
                   // ===== SIGN UP LINK =====
@@ -171,10 +215,12 @@ class LoginScreen extends StatelessWidget {
 
   // ===== Custom TextField =====
   Widget _buildTextField({
+    required TextEditingController controller,
     required String hintText,
     required bool isPassword,
   }) {
     return TextField(
+      controller: controller,
       obscureText: isPassword,
       style: const TextStyle(color: Colors.white),
       decoration: InputDecoration(

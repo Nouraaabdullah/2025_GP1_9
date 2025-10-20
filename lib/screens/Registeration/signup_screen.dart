@@ -16,53 +16,60 @@ class _SignUpScreenState extends State<SignUpScreen> {
   bool loading = false;
 
   Future<void> signUpUser() async {
-  final email = emailController.text.trim();
-  final password = passwordController.text.trim();
+    final email = emailController.text.trim();
+    final password = passwordController.text.trim();
 
-  if (email.isEmpty || password.isEmpty) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Please enter email and password")),
-    );
-    return;
-  }
-
-  setState(() => loading = true);
-
-  try {
-    // ✅ 1. Create user
-    final response = await supabase.auth.signUp(
-      email: email,
-      password: password,
-    );
-
-    // ✅ 2. Wait for Supabase to save the auth session locally
-    await Future.delayed(const Duration(seconds: 2));
-
-    // ✅ 3. Verify the user exists in auth
-    final user = supabase.auth.currentUser;
-    debugPrint("🧩 Supabase user after signup: ${user?.id}");
-
-    if (user != null) {
+    if (email.isEmpty || password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("✅ Account created: ${user.email}")),
+        const SnackBar(content: Text("Please enter email and password")),
       );
-
-      // ✅ 4. Move to Setup flow — user_id will now be available
-      Navigator.pushReplacementNamed(context, '/setupName');
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Signup failed — no user found.")),
-      );
+      return;
     }
-  } catch (e) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text("Error signing up: $e")),
-    );
-  } finally {
-    setState(() => loading = false);
-  }
-}
 
+    setState(() => loading = true);
+
+    try {
+      // 1️⃣ Create user in Supabase Auth
+      final response = await supabase.auth.signUp(
+        email: email,
+        password: password,
+      );
+
+      final user = response.user;
+      if (user == null) {
+        throw Exception("User creation failed.");
+      }
+
+      debugPrint("✅ User created in Auth: ${user.id}");
+
+      // 2️⃣ Insert user profile in User_Profile table
+      // Since RLS is disabled, no need for policies.
+      final insertResponse = await supabase.from('User_Profile').insert({
+        'user_id': user.id,
+        'email': email,
+        'full_name': null, // user will fill this in setup flow
+        'current_balance': 0,
+        'hashed_password': null,
+      });
+
+      debugPrint("✅ Profile inserted: $insertResponse");
+
+      // 3️⃣ Show confirmation message
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Account created for ${user.email}")),
+      );
+
+      // 4️⃣ Navigate to next setup page
+      Navigator.pushReplacementNamed(context, '/setupName');
+    } catch (e) {
+      debugPrint("❌ Signup Error: $e");
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error signing up: $e")),
+      );
+    } finally {
+      setState(() => loading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -71,7 +78,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
       body: SafeArea(
         child: Stack(
           children: [
-            // === Background ===
+            // === Background Layers ===
             Positioned(
               left: -5,
               top: 0,
@@ -112,7 +119,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
               ),
             ),
 
-            // === Main content ===
+            // === Main Content ===
             ListView(
               padding: const EdgeInsets.symmetric(horizontal: 32),
               children: [
@@ -148,14 +155,18 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 const Text('Email',
                     style: TextStyle(color: Color(0xFFFCFFFF), fontSize: 15)),
                 const SizedBox(height: 8),
-                FocusedTextField(controller: emailController, hint: 'example@email.com'),
+                FocusedTextField(
+                    controller: emailController, hint: 'example@email.com'),
                 const SizedBox(height: 24),
 
                 // === Password Field ===
                 const Text('Password',
                     style: TextStyle(color: Color(0xFFFCFFFF), fontSize: 15)),
                 const SizedBox(height: 8),
-                FocusedTextField(controller: passwordController, hint: '••••••••', obscure: true),
+                FocusedTextField(
+                    controller: passwordController,
+                    hint: '••••••••',
+                    obscure: true),
                 const SizedBox(height: 40),
 
                 // === Sign Up Button ===
@@ -184,7 +195,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 ),
                 const SizedBox(height: 20),
 
-                // === Google Sign-In (Future) ===
+                // === Google Sign-In Placeholder ===
                 SizedBox(
                   width: double.infinity,
                   height: 50,
@@ -206,9 +217,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 ),
                 const SizedBox(height: 24),
 
-                // === Login Redirect ===
+                // === Redirect to Login ===
                 GestureDetector(
-                  onTap: () => Navigator.pushReplacementNamed(context, '/login'),
+                  onTap: () =>
+                      Navigator.pushReplacementNamed(context, '/login'),
                   child: const Text.rich(
                     TextSpan(
                       children: [
@@ -239,7 +251,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }
 }
 
-// === Reusable Field ===
+// === Reusable Focused TextField Widget ===
 class FocusedTextField extends StatefulWidget {
   final String hint;
   final bool obscure;

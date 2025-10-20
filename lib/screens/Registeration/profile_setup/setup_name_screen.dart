@@ -1,13 +1,62 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'shared_profile_data.dart';
 
-class SetupNameScreen extends StatelessWidget {
+class SetupNameScreen extends StatefulWidget {
   const SetupNameScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final controller = TextEditingController();
+  State<SetupNameScreen> createState() => _SetupNameScreenState();
+}
 
+class _SetupNameScreenState extends State<SetupNameScreen> {
+  final controller = TextEditingController();
+  final supabase = Supabase.instance.client;
+  bool loading = false;
+
+  Future<void> saveName() async {
+    final name = controller.text.trim();
+
+    if (name.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter your name')),
+      );
+      return;
+    }
+
+    setState(() => loading = true);
+
+    try {
+      final user = supabase.auth.currentUser;
+      if (user == null) {
+        throw Exception("No logged-in user found.");
+      }
+
+      // ✅ Update the User_Profile table
+      final updateResponse = await supabase
+          .from('User_Profile')
+          .update({'full_name': name})
+          .eq('user_id', user.id);
+
+      debugPrint("✅ Name updated in User_Profile: $updateResponse");
+
+      // ✅ Store locally for later setup pages
+      ProfileData.userName = name;
+
+      // ✅ Navigate to the next setup screen
+      Navigator.pushNamed(context, '/setupIncome');
+    } catch (e) {
+      debugPrint("❌ Error updating name: $e");
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error saving name: $e')),
+      );
+    } finally {
+      setState(() => loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF1D1B32),
       body: Column(
@@ -166,27 +215,19 @@ class SetupNameScreen extends StatelessWidget {
                             shadowColor:
                                 const Color(0xFF7959F5).withOpacity(0.4),
                           ),
-                          onPressed: () {
-                            if (controller.text.isNotEmpty) {
-                              // ✅ Save name to shared data
-                              ProfileData.userName = controller.text.trim();
-
-                              Navigator.pushNamed(context, '/setupIncome');
-                            } else {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                    content: Text('Please enter your name')),
-                              );
-                            }
-                          },
-                          child: const Text(
-                            "Continue",
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.white,
-                            ),
-                          ),
+                          onPressed: loading ? null : saveName,
+                          child: loading
+                              ? const CircularProgressIndicator(
+                                  color: Colors.white,
+                                )
+                              : const Text(
+                                  "Continue",
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.white,
+                                  ),
+                                ),
                         ),
                       ),
                     ],

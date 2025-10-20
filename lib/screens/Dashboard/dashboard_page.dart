@@ -32,12 +32,20 @@ class _DashboardPageState extends State<DashboardPage> {
   // ===== Data =====
   num _balance = 0;
 
+  // Filtered (for charts 2–4)
   List<String> _bucketLabels = [];
   List<num> _seriesExpenses = [];
   List<num> _seriesEarnings = [];
   List<num> _seriesIncome = [];
   List<CategorySlice> _categorySlices = [];
   List<num> _savingsSeries = [];
+  List<String> _savingsLabels = [];
+  // NEW: Raw series & buckets for Income Overview (no “drop empty”)
+  List<_Bucket> _allBuckets = [];
+  List<num> _rawExpenses = [];
+  List<num> _rawEarnings = [];
+  List<num> _rawIncome   = [];
+  List<String> _rawLabels = [];
 
   bool _loading = true;
   String? _error;
@@ -53,12 +61,30 @@ class _DashboardPageState extends State<DashboardPage> {
   Future<void> _loadAll() async {
     setState(() { _loading = true; _error = null; });
 
-    try {
-      // final profileId = await _getProfileId();
-      // TEMP hardcoded profile_id
-      const profileId = 'e33f0c91-26fd-436a-baa3-6ad1df3a8152';
+    // ---- helpers ----
+    String _iso(DateTime d) => '${d.year.toString().padLeft(4,'0')}-${d.month.toString().padLeft(2,'0')}-${d.day.toString().padLeft(2,'0')}';
+    DateTime? _parseOrNull(dynamic s) => (s == null) ? null : DateTime.tryParse(s as String);
+    int _lastDayOfMonth(int y, int m) => DateTime(y, m + 1, 0).day;
+    int _weekIndexFromDay(int day) => (day <= 7) ? 0 : (day <= 14) ? 1 : (day <= 22) ? 2 : 3;
 
-      // 1) Balance
+    // months whose PAYDAY is in [st, en]
+    int _monthsActiveByPayday(DateTime? st, DateTime? en, int year, int payday) {
+      int cnt = 0;
+      for (int m = 1; m <= 12; m++) {
+        final pd = math.min(payday, _lastDayOfMonth(year, m));
+        final payDate = DateTime(year, m, pd);
+        final afterStart = (st == null) || !payDate.isBefore(st);
+        final beforeEnd  = (en == null) || !payDate.isAfter(en);
+        if (afterStart && beforeEnd) cnt++;
+      }
+      return cnt;
+    }
+
+    try {
+      //final profileId = await _getProfileId();
+      const profileId = '135dee2a-e3ec-47c3-abf5-8f4ed707c3db';
+
+      // 1) balance
       final prof = await _sb
           .from('User_Profile')
           .select('current_balance')
@@ -66,44 +92,37 @@ class _DashboardPageState extends State<DashboardPage> {
           .single();
       _balance = (prof['current_balance'] as num?) ?? 0;
 
-      // 2) Period window
+      // 2) range
       final now = DateTime.now();
-      DateTime start;
-      DateTime end;
+      late DateTime rangeStart, rangeEnd;
       if (_periodIndex == 0) {
-        start = DateTime(now.year, now.month, 1);
-        end   = DateTime(now.year, now.month + 1, 0);
-        _bucketLabels = const ['W1','W2','W3','W4'];
+        rangeStart = DateTime(now.year, now.month, 1);
+        rangeEnd   = DateTime(now.year, now.month + 1, 0);
       } else if (_periodIndex == 1) {
-        start = DateTime(now.year, 1, 1);
-        end   = DateTime(now.year, 12, 31);
-        _bucketLabels = const ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        rangeStart = DateTime(now.year, 1, 1);
+        rangeEnd   = DateTime(now.year, 12, 31);
       } else {
-        start = DateTime(now.year - 4, 1, 1);
-        end   = DateTime(now.year, 12, 31);
+        rangeStart = DateTime(now.year - 4, 1, 1);
+        rangeEnd   = DateTime(now.year, 12, 31);
       }
 
-      // 3) Query rows
+      // 3) queries
       final trxRows = await _sb
           .from('Transaction')
           .select('type, amount, date, category_id')
           .eq('profile_id', profileId)
-          .gte('date', _iso(start))
-          .lte('date', _iso(end));
+          .gte('date', _iso(rangeStart))
+          .lte('date', _iso(rangeEnd));
 
       final fixedIncomeRows = await _sb
           .from('Fixed_Income')
-          .select('monthly_income, start_time, end_time')
+          .select('monthly_income, start_time, end_time, payday')
           .eq('profile_id', profileId);
 
       final fixedExpenseRows = await _sb
           .from('Fixed_Expense')
-          .select('amount')
+          .select('amount, category_id, due_date, start_time, end_time')
           .eq('profile_id', profileId);
-
-      final catSummaryRows = await _sb
-          .from('Category_Summary')
-          .select('total_expense, category_id, record_id');
 
       final catRows = await _sb
           .from('Category')
@@ -118,14 +137,20 @@ class _DashboardPageState extends State<DashboardPage> {
           .gte('period_start', _iso(DateTime(now.year, 1, 1)))
           .lte('period_start', _iso(DateTime(now.year, 12, 31)));
 
-      // 4) Build buckets
-      final buckets = (_periodIndex == 0)
-          ? _buildWeeklyBuckets(start, end)
-          : (_periodIndex == 1)
-              ? _buildMonthlyBuckets(start.year)
-              : _buildYearlyBuckets(start.year, end.year);
+      // active category ids for filtering summaries and old rows
+      final activeCategoryIds = <String>{
+        for (final r in catRows) r['category_id'] as String,
+      };
 
-      // Map category id to name and color (icon_color or seeded)
+      // 4) buckets
+      final buckets = (_periodIndex == 0)
+          ? _buildWeeklyBuckets(DateTime(now.year, now.month, 1), DateTime(now.year, now.month + 1, 0))
+          : (_periodIndex == 1)
+              ? _buildMonthlyBuckets(rangeStart.year)
+              : _buildYearlyBuckets(rangeStart.year, rangeEnd.year);
+      _allBuckets = buckets; // save raw buckets
+
+      // maps
       final catNameById = <String, String>{
         for (final r in catRows) r['category_id'] as String : (r['name'] as String),
       };
@@ -137,122 +162,434 @@ class _DashboardPageState extends State<DashboardPage> {
           ),
       };
 
-      // Helper to place a date into a bucket index
       int bucketIndex(DateTime d) {
         if (_periodIndex == 0) {
+          // Weekly: W1=1–7, W2=8–14, W3=15–22, W4=23–end
           final dom = d.day;
-          if (dom <= 7) return 0;
+          if (dom <= 7)  return 0;
           if (dom <= 14) return 1;
-          if (dom <= 21) return 2;
+          if (dom <= 22) return 2; // <-- was 21
           return 3;
         } else if (_periodIndex == 1) {
           return d.month - 1;
         } else {
-          return d.year - buckets.first.year!;
+          return d.year - (buckets.first.year ?? d.year);
         }
       }
 
-      // Reset series sized to bucket count
+      // 5) reset series (RAW + filtered)
       final n = buckets.length;
+      // raw (no filtering)
+      _rawExpenses = List.filled(n, 0);
+      _rawEarnings = List.filled(n, 0);
+      _rawIncome   = List.filled(n, 0);
+      // to-be-filtered (start same as raw; will be filtered later)
       _seriesExpenses = List.filled(n, 0);
       _seriesEarnings = List.filled(n, 0);
       _seriesIncome   = List.filled(n, 0);
 
-      // Transactions
+      // 6) variable transactions by their actual date
       for (final r in trxRows) {
         final type = (r['type'] as String?) ?? '';
         final amt  = (r['amount'] as num?) ?? 0;
         final date = DateTime.parse(r['date'] as String);
-        if (date.isBefore(start) || date.isAfter(end)) continue;
+        if (date.isBefore(rangeStart) || date.isAfter(rangeEnd)) continue;
         final i = bucketIndex(date);
         if (i < 0 || i >= n) continue;
         if (type == 'Expense') {
-          _seriesExpenses[i] += amt;
+          _rawExpenses[i]   += amt;  // <- included in first chart
+          _seriesExpenses[i] += amt; // <- included in trends/category
         } else if (type == 'Earning') {
+          _rawEarnings[i]   += amt;
           _seriesEarnings[i] += amt;
         }
       }
 
-      // Fixed Income spread by period
+      // 7) fixed income (monthly fix + weekly spread)
       for (final r in fixedIncomeRows) {
         final monthly = (r['monthly_income'] as num?) ?? 0;
         final st = _parseOrNull(r['start_time']);
         final en = _parseOrNull(r['end_time']);
+        final payday = (r['payday'] as int?) ?? 1;
+
         for (var i = 0; i < n; i++) {
-          final mid = buckets[i].middleDate;
-          if (mid == null) continue;
-          final active = (st == null || !mid.isBefore(st)) && (en == null || !mid.isAfter(en));
-          if (!active) continue;
-          if (_periodIndex == 0) {
-            _seriesIncome[i] += monthly / 4;
+          if (_periodIndex == 2) {
+            final y = buckets[i].year!;
+            final monthsActive = _monthsActiveByPayday(st, en, y, payday);
+            if (monthsActive > 0) {
+              _rawIncome[i]   += monthly * monthsActive;
+              _seriesIncome[i] += monthly * monthsActive;
+            }
           } else if (_periodIndex == 1) {
-            _seriesIncome[i] += monthly;
+            // Month counts if the month overlaps [st, en]
+            final y = buckets[i].year!, m = buckets[i].month!;
+            final firstDay = DateTime(y, m, 1);
+            final lastDay  = DateTime(y, m + 1, 0);
+            final overlaps =
+                (st == null || !lastDay.isBefore(st)) &&
+                (en == null || !firstDay.isAfter(en));
+            if (overlaps) {
+              _rawIncome[i]   += monthly;
+              _seriesIncome[i] += monthly;
+            }
           } else {
-            _seriesIncome[i] += monthly * 12;
+            // WEEKLY → distribute monthly/4 if month is active
+            final ref = buckets[i].middleDate!;
+            final pd = math.min(payday, _lastDayOfMonth(ref.year, ref.month));
+            final payDate = DateTime(ref.year, ref.month, pd);
+            final activeMonth = (st == null || !payDate.isBefore(st)) && (en == null || !payDate.isAfter(en));
+            if (activeMonth) {
+              _rawIncome[i]   += monthly / 4;
+              _seriesIncome[i] += monthly / 4;
+            }
           }
         }
       }
 
-      // Fixed Expenses
+      // 8) fixed expenses (due_date aware): monthly to the due-month, weekly to the due-week, yearly sums
       for (final r in fixedExpenseRows) {
         final monthly = (r['amount'] as num?) ?? 0;
+        final dueDay  = (r['due_date'] as int?) ?? 1;
+        final st = _parseOrNull(r['start_time']);
+        final en = _parseOrNull(r['end_time']);
+
         for (var i = 0; i < n; i++) {
-          if (_periodIndex == 0) {
-            _seriesExpenses[i] += monthly / 4;
+          if (_periodIndex == 2) {
+            final y = buckets[i].year!;
+            final monthsActive = _monthsActiveByPayday(st, en, y, dueDay);
+            if (monthsActive > 0) {
+              _rawExpenses[i]   += monthly * monthsActive;
+              _seriesExpenses[i] += monthly * monthsActive;
+            }
           } else if (_periodIndex == 1) {
-            _seriesExpenses[i] += monthly;
+            final ref = DateTime(buckets[i].year!, buckets[i].month!, 15);
+            final dd  = math.min(dueDay, _lastDayOfMonth(ref.year, ref.month));
+            final dueDate = DateTime(ref.year, ref.month, dd);
+            final active = (st == null || !dueDate.isBefore(st)) && (en == null || !dueDate.isAfter(en));
+            if (active) {
+              _rawExpenses[i]   += monthly;
+              _seriesExpenses[i] += monthly;
+            }
           } else {
-            _seriesExpenses[i] += monthly * 12;
+            // weekly → place the full amount in the week that contains the due-day (for the current month)
+            final ref = buckets[i].middleDate!;
+            final dd  = math.min(dueDay, _lastDayOfMonth(ref.year, ref.month));
+            final dueDate = DateTime(ref.year, ref.month, dd);
+            final active = (st == null || !dueDate.isBefore(st)) && (en == null || !dueDate.isAfter(en));
+            if (active) {
+              final idx = _weekIndexFromDay(dd);
+              if (idx == i) {
+                _rawExpenses[i]   += monthly;
+                _seriesExpenses[i] += monthly;
+              }
+            }
           }
         }
       }
 
-      // Labels
+      // 9) labels (raw & filtered)
       if (_periodIndex == 2) {
-        _bucketLabels = [for (final b in buckets) '${b.year}'];
+        _rawLabels = [for (final b in buckets) '${b.year}'];
       } else if (_periodIndex == 0) {
-        _bucketLabels = const ['W1','W2','W3','W4'];
+        _rawLabels = const ['W1','W2','W3','W4'];
       } else {
-        _bucketLabels = const ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        _rawLabels = const ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
       }
 
-      // Category totals
+      // >>> ONLY CHANGE: for Monthly mode, hide future months from Financial Trends
+      if (_periodIndex == 1) {
+        final currentMonthIdx = DateTime.now().month - 1; // 0-based
+        for (int i = currentMonthIdx + 1; i < _seriesExpenses.length; i++) {
+          _seriesExpenses[i] = 0;
+          _seriesEarnings[i] = 0;
+          _seriesIncome[i]   = 0;
+        }
+      }
+      // <<< ONLY CHANGE END
+
+      // 10) filter out empty buckets for charts (2–4), but KEEP raw for Income Overview
+      final filtered = _filterEmpty(_rawLabels, _seriesExpenses, _seriesEarnings, _seriesIncome);
+      _bucketLabels   = filtered.labels;
+      _seriesExpenses = filtered.expenses;
+      _seriesEarnings = filtered.earnings;
+      _seriesIncome   = filtered.income;
+
+      // 11) Category totals based on period mode
       final catTotals = <String, num>{};
-      if (_periodIndex == 2) {
-        for (final r in catSummaryRows) {
-          final cat = r['category_id'] as String?;
+
+      Future<void> _loadCategorySlicesMonthly() async {
+        // Current calendar month
+        final nowM = DateTime.now();
+        final y = nowM.year, m = nowM.month;
+        final mStart = DateTime(y, m, 1);
+        final mEnd   = DateTime(y, m + 1, 0);
+
+        // Get records for this month
+        final mfrForMonth = await _sb
+            .from('Monthly_Financial_Record')
+            .select('record_id, period_start, period_end')
+            .eq('profile_id', profileId)
+            .gte('period_start', _iso(mStart))
+            .lte('period_start', _iso(mEnd));
+
+        final recordIds = <String>[
+          for (final r in mfrForMonth)
+            if (r['record_id'] != null) r['record_id'] as String
+        ];
+        if (recordIds.isEmpty) return;
+
+        // Pull category summaries for those records
+        final catSumRows = await _sb
+            .from('Category_Summary')
+            .select('category_id, total_expense, record_id')
+            .inFilter('record_id', recordIds);
+
+        for (final r in catSumRows) {
+          final cid = r['category_id'] as String?;
+          if (cid == null) continue;
+          if (!activeCategoryIds.contains(cid)) continue;
           final amt = (r['total_expense'] as num?) ?? 0;
-          if (cat == null) continue;
-          catTotals[cat] = (catTotals[cat] ?? 0) + amt;
-        }
-      } else {
-        for (final r in catSummaryRows) {
-          final cat = r['category_id'] as String?;
-          final amt = (r['total_expense'] as num?) ?? 0;
-          if (cat == null) continue;
-          catTotals[cat] = (catTotals[cat] ?? 0) + amt;
+          if (amt <= 0) continue;
+          catTotals[cid] = (catTotals[cid] ?? 0) + amt;
         }
       }
 
-      // Build slices with category colors
+      Future<void> _loadCategorySlicesYearly() async {
+        // Current calendar year
+        final nowY = DateTime.now();
+        final y = nowY.year;
+        final yStart = DateTime(y, 1, 1);
+        final yEnd   = DateTime(y, 12, 31);
+
+        // Get records for this year
+        final mfrForYear = await _sb
+            .from('Monthly_Financial_Record')
+            .select('record_id, period_start, period_end')
+            .eq('profile_id', profileId)
+            .gte('period_start', _iso(yStart))
+            .lte('period_start', _iso(yEnd));
+
+        final recordIds = <String>[
+          for (final r in mfrForYear)
+            if (r['record_id'] != null) r['record_id'] as String
+        ];
+        if (recordIds.isEmpty) return;
+
+        // Fetch all Category_Summary rows for those records and aggregate
+        final catSumRows = await _sb
+            .from('Category_Summary')
+            .select('category_id, total_expense, record_id')
+            .inFilter('record_id', recordIds);
+
+        for (final r in catSumRows) {
+          final cid = r['category_id'] as String?;
+          if (cid == null) continue;
+          if (!activeCategoryIds.contains(cid)) continue;
+          final amt = (r['total_expense'] as num?) ?? 0;
+          if (amt <= 0) continue;
+          catTotals[cid] = (catTotals[cid] ?? 0) + amt;
+        }
+      }
+
+      void _loadCategorySlicesWeekly() {
+        // Current week of the month
+        final nowW = DateTime.now();
+        final y = nowW.year, m = nowW.month;
+        final lastDay = DateTime(y, m + 1, 0).day;
+
+        late int wStartDay, wEndDay;
+        final d = nowW.day;
+        if (d <= 7) {
+          wStartDay = 1;
+          wEndDay = 7;
+        } else if (d <= 14) {
+          wStartDay = 8;
+          wEndDay = 14;
+        } else if (d <= 22) {
+          wStartDay = 15;
+          wEndDay = 22;
+        } else {
+          wStartDay = 23;
+          wEndDay = lastDay;
+        }
+
+        final weekStart = DateTime(y, m, wStartDay);
+        final weekEnd   = DateTime(y, m, wEndDay);
+
+        // Variable expenses this week
+        for (final r in trxRows) {
+          if ((r['type'] as String?) != 'Expense') continue;
+          final cid = r['category_id'] as String?;
+          if (cid == null) continue;
+          if (!activeCategoryIds.contains(cid)) continue;
+          final amt = (r['amount'] as num?) ?? 0;
+          if (amt <= 0) continue;
+          final dt = DateTime.parse(r['date'] as String);
+          if (dt.isBefore(weekStart) || dt.isAfter(weekEnd)) continue;
+          catTotals[cid] = (catTotals[cid] ?? 0) + amt;
+        }
+
+        // Fixed expenses for due dates in this week
+        for (final r in fixedExpenseRows) {
+          final monthly = (r['amount'] as num?) ?? 0;
+          if (monthly <= 0) continue;
+          final cid = r['category_id'] as String?;
+          if (cid == null) continue;
+          if (!activeCategoryIds.contains(cid)) continue;
+
+          final dueDay = (r['due_date'] as int?) ?? 1;
+          final dd = dueDay.clamp(1, lastDay);
+          final dueDate = DateTime(y, m, dd);
+
+          final st = _parseOrNull(r['start_time']);
+          final en = _parseOrNull(r['end_time']);
+          final active = (st == null || !dueDate.isBefore(st)) && (en == null || !dueDate.isAfter(en));
+          if (!active) continue;
+
+          if (!dueDate.isBefore(weekStart) && !dueDate.isAfter(weekEnd)) {
+            catTotals[cid] = (catTotals[cid] ?? 0) + monthly;
+          }
+        }
+      }
+
+      // Choose the correct loader
+      if (_periodIndex == 0) {
+        _loadCategorySlicesWeekly();
+      } else if (_periodIndex == 1) {
+        await _loadCategorySlicesMonthly();
+      } else {
+        await _loadCategorySlicesYearly();
+      }
+
+      // Convert totals to slices
       _categorySlices = [
         for (final e in catTotals.entries)
-          if (e.value > 0)
+          if (e.value > 0 && activeCategoryIds.contains(e.key))
             CategorySlice(
               id: e.key,
               name: catNameById[e.key] ?? 'Unknown',
               value: e.value,
               color: catColorById[e.key] ?? colorFromIconOrSeed(categoryId: e.key),
             ),
-      ]..sort((a,b) => b.value.compareTo(a.value));
+      ]..sort((a, b) => b.value.compareTo(a.value));
 
-      // Savings sparkline
-      final months = <int, num>{};
-      for (final r in mfrRows) {
-        final p = DateTime.parse(r['period_start'] as String);
-        months[p.month] = (r['monthly_saving'] as num?) ?? 0;
+      // 12) Savings — ONLY modifies _savingsSeries (+ _savingsLabels if present)
+      _savingsSeries = [];
+      List<String> _tmpSavingsLabels = [];
+
+      if (_periodIndex == 0) {
+        // ===== WEEKLY (current month) =====
+        final now = DateTime.now();
+        final weeklyVals = List<num>.filled(4, 0);
+
+        // A) Fixed Income → monthly/4 to each week if this month's payday is active
+        for (final r in fixedIncomeRows) {
+          final monthly = (r['monthly_income'] as num?) ?? 0;
+          final st = _parseOrNull(r['start_time']);
+          final en = _parseOrNull(r['end_time']);
+          final payday = (r['payday'] as int?) ?? 1;
+
+          final lastDay = DateTime(now.year, now.month + 1, 0).day;
+          final payDate = DateTime(now.year, now.month, payday.clamp(1, lastDay));
+          final active = (st == null || !payDate.isBefore(st)) && (en == null || !payDate.isAfter(en));
+          if (!active) continue;
+
+          final perWeek = monthly / 4;
+          for (int i = 0; i < 4; i++) weeklyVals[i] += perWeek;
+        }
+
+        // B) Variable transactions → bucket by actual day
+        for (final r in trxRows) {
+          final d = DateTime.parse(r['date'] as String);
+          if (d.year != now.year || d.month != now.month) continue;
+          final idx = (d.day <= 7) ? 0 : (d.day <= 14) ? 1 : (d.day <= 22) ? 2 : 3;
+          final amt = (r['amount'] as num?) ?? 0;
+          final type = (r['type'] as String?) ?? '';
+          if (type == 'Earning') {
+            weeklyVals[idx] += amt;
+          } else if (type == 'Expense') {
+            weeklyVals[idx] -= amt;
+          }
+        }
+
+        // C) Fixed expenses → charge in the week that contains the due day
+        for (final r in fixedExpenseRows) {
+          final monthly = (r['amount'] as num?) ?? 0;
+          final dueDay  = (r['due_date'] as int?) ?? 1;
+          final st = _parseOrNull(r['start_time']);
+          final en = _parseOrNull(r['end_time']);
+
+          final lastDay = DateTime(now.year, now.month + 1, 0).day;
+          final dd = dueDay.clamp(1, lastDay);
+          final dueDate = DateTime(now.year, now.month, dd);
+          final active = (st == null || !dueDate.isBefore(st)) && (en == null || !dueDate.isAfter(en));
+          if (!active) continue;
+
+          final idx = (dd <= 7) ? 0 : (dd <= 14) ? 1 : (dd <= 22) ? 2 : 3;
+          weeklyVals[idx] -= monthly;
+        }
+
+        // D) Carry any negative forward: clamp week to 0, subtract deficit from next week
+        for (int i = 0; i < 4; i++) {
+          if (weeklyVals[i] < 0) {
+            final deficit = -weeklyVals[i];
+            weeklyVals[i] = 0;
+            if (i + 1 < 4) weeklyVals[i + 1] -= deficit;
+          }
+        }
+
+        // E) Only show available (non-zero) weeks, with labels
+        const wLabels = ['W1','W2','W3','W4'];
+        for (int i = 0; i < 4; i++) {
+          if (weeklyVals[i] != 0) {
+            _savingsSeries.add(weeklyVals[i]);
+            _tmpSavingsLabels.add(wLabels[i]);
+          }
+        }
+
+      } else if (_periodIndex == 1) {
+        // ===== MONTHLY (current year) =====
+        final byMonth = List<num>.filled(12, 0);
+        for (final r in mfrRows) {
+          final d = DateTime.parse(r['period_start'] as String);
+          final s = (r['monthly_saving'] as num?) ?? 0;
+          if (d.isBefore(rangeStart) || d.isAfter(rangeEnd)) continue;
+          byMonth[d.month - 1] += s;
+        }
+        const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        for (var i = 0; i < 12; i++) {
+          if (byMonth[i] != 0) {
+            _savingsSeries.add(byMonth[i]);
+            _tmpSavingsLabels.add(monthNames[i]);
+          }
+        }
+
+      } else {
+        // ===== YEARLY (ALL years) =====
+        final allMfr = await _sb
+            .from('Monthly_Financial_Record')
+            .select('period_start, monthly_saving')
+            .eq('profile_id', profileId);
+
+        final byYear = <int, num>{};
+        for (final r in allMfr) {
+          final d = DateTime.parse(r['period_start'] as String);
+          final s = (r['monthly_saving'] as num?) ?? 0;
+          byYear[d.year] = (byYear[d.year] ?? 0) + s;
+        }
+
+        final years = byYear.keys.toList()..sort();
+        for (final y in years) {
+          final total = byYear[y] ?? 0;
+          if (total != 0) {
+            _savingsSeries.add(total);
+            _tmpSavingsLabels.add('$y');
+          }
+        }
       }
-      _savingsSeries = [for (var m=1; m<=12; m++) (months[m] ?? 0)];
+
+      // If your state has _savingsLabels, keep them in sync. If not, this is harmless.
+      try { _savingsLabels = _tmpSavingsLabels; } catch (_) {}
 
       if (!mounted) return;
       setState(() { _loading = false; });
@@ -274,10 +611,10 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   List<_Bucket> _buildWeeklyBuckets(DateTime mStart, DateTime mEnd) => [
-        _Bucket(null, null, DateTime(mStart.year, mStart.month, 7)),
-        _Bucket(null, null, DateTime(mStart.year, mStart.month, 14)),
-        _Bucket(null, null, DateTime(mStart.year, mStart.month, 21)),
-        _Bucket(null, null, DateTime(mStart.year, mStart.month, 28)),
+        _Bucket(null, null, DateTime(mStart.year, mStart.month, 4)),
+        _Bucket(null, null, DateTime(mStart.year, mStart.month, 11)),
+        _Bucket(null, null, DateTime(mStart.year, mStart.month, 18)),
+        _Bucket(null, null, DateTime(mStart.year, mStart.month, 26)),
       ];
 
   List<_Bucket> _buildMonthlyBuckets(int year) =>
@@ -285,6 +622,39 @@ class _DashboardPageState extends State<DashboardPage> {
 
   List<_Bucket> _buildYearlyBuckets(int y1, int y2) =>
       [for (var y=y1; y<=y2; y++) _Bucket(y, null, DateTime(y, 6, 15))];
+
+  // remove buckets whose three series are all zero
+  _Filtered _filterEmpty(List<String> labels, List<num> a, List<num> b, List<num> c) {
+    final keep = <int>[];
+    for (var i = 0; i < labels.length; i++) {
+      final sum = (a[i] as num).toDouble() + (b[i] as num).toDouble() + (c[i] as num).toDouble();
+      if (sum != 0) keep.add(i);
+    }
+    return _Filtered(
+      labels: [for (final i in keep) labels[i]],
+      expenses: [for (final i in keep) a[i]],
+      earnings: [for (final i in keep) b[i]],
+      income:   [for (final i in keep) c[i]],
+    );
+  }
+
+  // NEW: index of the current calendar bucket in RAW arrays
+  int _currentRawBucketIndex() {
+    if (_allBuckets.isEmpty) return -1;
+    final now = DateTime.now();
+    if (_periodIndex == 0) {
+      // weeks are fixed W1..W4 for current month buckets
+      return (now.day <= 7) ? 0 : (now.day <= 14) ? 1 : (now.day <= 21) ? 2 : 3;
+    } else if (_periodIndex == 1) {
+      return now.month - 1;
+    } else {
+      // find the year position (range is [now.year-4 .. now.year])
+      for (int i = 0; i < _allBuckets.length; i++) {
+        if (_allBuckets[i].year == now.year) return i;
+      }
+      return -1;
+    }
+  }
 
   // ================== UI ==================
   @override
@@ -312,24 +682,38 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   Widget _buildBody(BuildContext context) {
-    final totalExpenses = _seriesExpenses.fold<num>(0, (a,b) => a+b);
-    final totalEarnings = _seriesEarnings.fold<num>(0, (a,b) => a+b);
-    final totalIncome   = _seriesIncome.fold<num>(0, (a,b) => a+b);
+    // ===== Income Overview should reflect the CURRENT calendar bucket
+    final idx = _currentRawBucketIndex();
+    num totalExpenses = 0, totalEarnings = 0, totalIncome = 0;
+    if (idx >= 0 && idx < _rawExpenses.length) {
+      totalExpenses = _rawExpenses[idx];
+      totalEarnings = _rawEarnings[idx];
+      totalIncome   = _rawIncome[idx];
+    }
 
+    // Base for gauge = earnings + income
     final denom = (totalIncome + totalEarnings);
     final left  = math.max(0, denom - totalExpenses);
     final percentLeft = denom <= 0 ? 0.0 : (left / denom).clamp(0, 1).toDouble();
 
+    // Legends for Income Overview — show exactly the current bucket values
     final incomeLegends = [
       _LegendItem('Expenses', '${totalExpenses.toStringAsFixed(0)} SAR', _violet),
       _LegendItem('Earnings', '${totalEarnings.toStringAsFixed(0)} SAR', _cyan),
       _LegendItem('Income',   '${totalIncome.toStringAsFixed(0)} SAR', _muted),
     ];
 
+    // Legends for the bar chart — keep existing filtered series, but legends below chart
+    // can still display current bucket values to stay consistent with the top panel.
+    // Legends for the bar chart: sum across the visible bars (all shown buckets)
+    final trendsTotalExpenses = _seriesExpenses.fold<num>(0, (a, b) => a + b);
+    final trendsTotalEarnings = _seriesEarnings.fold<num>(0, (a, b) => a + b);
+    final trendsTotalIncome   = _seriesIncome.fold<num>(0, (a, b) => a + b);
+
     final monthlyLegends = [
-      _LegendItem('Expenses', '${totalExpenses.toStringAsFixed(0)} SAR', _violet),
-      _LegendItem('Earnings', '${totalEarnings.toStringAsFixed(0)} SAR', _cyan),
-      _LegendItem('Income',   '${totalIncome.toStringAsFixed(0)} SAR', _muted),
+      _LegendItem('Expenses', '${trendsTotalExpenses.toStringAsFixed(0)} SAR', _violet),
+      _LegendItem('Earnings', '${trendsTotalEarnings.toStringAsFixed(0)} SAR', _cyan),
+      _LegendItem('Income',   '${trendsTotalIncome.toStringAsFixed(0)} SAR', _muted),
     ];
 
     final catItems = [
@@ -337,13 +721,18 @@ class _DashboardPageState extends State<DashboardPage> {
         _LegendItem(s.name, '${s.value.toStringAsFixed(0)} SAR', s.color),
     ];
 
+    // Force gauge rebuild when period changes or the selected bucket changes
+    final gaugeKey = ValueKey<String>(
+      'gauge_${_periodIndex}_${idx}_${totalExpenses}_${totalEarnings}_${totalIncome}',
+    );
+
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(20, 16, 20, kBottomNavigationBarHeight + 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Title + Balance glow
+          // Title and balance
           Stack(
             children: [
               Positioned(
@@ -376,6 +765,7 @@ class _DashboardPageState extends State<DashboardPage> {
               style: TextStyle(color: AppColors.textGrey, fontSize: 15, fontWeight: FontWeight.w700)),
           const SizedBox(height: 18),
 
+          // Period control
           _HeaderPanel(
             periodIndex: _periodIndex,
             onPeriodChanged: (i) => setState(() { _periodIndex = i; _loadAll(); }),
@@ -386,11 +776,18 @@ class _DashboardPageState extends State<DashboardPage> {
           const _BlockTitle('Income Overview'),
           const SizedBox(height: _betweenTitleAndCard),
           _SectionCard(
-            onInfo: () => _showInfo(context, 'Shows remaining income and recent distribution.'),
+            onInfo: () => _showInfo(context, 'Shows this ${_periodIndex==0?'week':_periodIndex==1?'month':'year'}: spending vs what you have (earnings + income).'),
             child: Column(
               children: [
                 const SizedBox(height: 8),
-                IncomeSemicircleGauge(percent: percentLeft, label: '${(percentLeft*100).round()}% of\nincome left'),
+                IncomeSemicircleGauge(
+                  key: gaugeKey,
+                  percent: percentLeft,
+                  label: '${(percentLeft*100).round()}% of\nincome left',
+                  expenses: totalExpenses.toDouble(),
+                  earnings: totalEarnings.toDouble(),
+                  income:   totalIncome.toDouble(),
+                ),
                 const SizedBox(height: 12),
                 _LegendRow(items: incomeLegends),
               ],
@@ -398,11 +795,11 @@ class _DashboardPageState extends State<DashboardPage> {
           ),
           const SizedBox(height: 16),
 
-          // Monthly Trends
+          // Financial Trends
           const _BlockTitle('Financial Trends'),
           const SizedBox(height: _betweenTitleAndCard),
           _SectionCard(
-            onInfo: () => _showInfo(context, 'Comparison bars for expenses, earnings, and income.'),
+            onInfo: () => _showInfo(context, 'Bars compare expenses against earnings and income. Only available periods are shown.'),
             child: Column(
               children: [
                 const SizedBox(height: 8),
@@ -426,10 +823,15 @@ class _DashboardPageState extends State<DashboardPage> {
           const _BlockTitle('Savings Over Time'),
           const SizedBox(height: _betweenTitleAndCard),
           _SectionCard(
-            onInfo: () => _showInfo(context, 'Line of savings balance across months.'),
+            onInfo: () => _showInfo(context, 'Y axis is monthly savings. X axis reflects the selected period. Points are drawn clearly.'),
             child: Padding(
-              padding: const EdgeInsets.only(top: 8, bottom: 10),
-              child: SavingsSparkline(values: _savingsSeries.map((e) => e.toDouble()).toList()),
+              padding: const EdgeInsets.only(top: 30, bottom: 10),
+              child: SavingsSparkline(
+                values: _savingsSeries.map((e) => e.toDouble()).toList(),
+                labels: _savingsLabels,      // same length as values, from DB rows you kept
+                yAxisTitle: 'Monthly savings',
+                showPoints: true,
+              ),
             ),
           ),
           const SizedBox(height: 16),
@@ -445,14 +847,20 @@ class _DashboardPageState extends State<DashboardPage> {
                 const SizedBox(height: 8),
                 CategoryDonut(
                   slices: _categorySlices,
-                  centerLabel: 'Total Expenses\n﷼ ${(_seriesExpenses.fold<num>(0,(a,b)=>a+b)).toStringAsFixed(0)}',
+                  centerLabel: () {
+                    final t = _categorySlices.fold<num>(0, (a, s) => a + s.value);
+                    return 'Total Expenses\n﷼ ${t.toStringAsFixed(0)}';
+                  }(),
                 ),
                 const SizedBox(height: 12),
                 if (_categorySlices.isEmpty)
                   Center(child: Text('No category data', style: TextStyle(color: AppColors.textGrey)))
                 else
                   _CategoryGrid(
-                    items: catItems,
+                    items: [
+                      for (final s in _categorySlices.take(_showAllCategories ? _categorySlices.length : 5))
+                        _LegendItem(s.name, '${s.value.toStringAsFixed(0)} SAR', s.color),
+                    ],
                     showAll: _showAllCategories,
                     initialCount: 3,
                   ),
@@ -478,6 +886,25 @@ class _DashboardPageState extends State<DashboardPage> {
         ],
       ),
     );
+  }
+
+  int _monthsActiveInYear(DateTime? st, DateTime? en, int year) {
+    // Clamp the active interval to the given year's bounds, then count months inclusive.
+    final yearStart = DateTime(year, 1, 1);
+    final yearEnd   = DateTime(year, 12, 31);
+
+    // Normalize to month starts
+    DateTime start = st == null ? yearStart : DateTime(st.year, st.month, 1);
+    DateTime end   = en == null ? yearEnd   : DateTime(en.year, en.month, 1);
+
+    if (start.isBefore(yearStart)) start = yearStart;
+    if (end.isAfter(yearEnd)) end = DateTime(year, 12, 1);
+
+    if (end.isBefore(start)) return 0;
+
+    final startKey = start.year * 12 + start.month;
+    final endKey   = end.year * 12 + end.month;
+    return endKey - startKey + 1; // inclusive month count
   }
 
   void _showInfo(BuildContext context, String text) {
@@ -516,6 +943,15 @@ class _Bucket {
   final int? month;
   final DateTime? middleDate;
   _Bucket(this.year, this.month, this.middleDate);
+}
+
+/* container for filtered series */
+class _Filtered {
+  final List<String> labels;
+  final List<num> expenses;
+  final List<num> earnings;
+  final List<num> income;
+  _Filtered({required this.labels, required this.expenses, required this.earnings, required this.income});
 }
 
 /* ================= Shared UI bits ================= */

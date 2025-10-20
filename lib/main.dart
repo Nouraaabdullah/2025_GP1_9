@@ -12,9 +12,11 @@ import 'screens/Dashboard/dashboard_page.dart';
 import 'screens/Registeration/profile_setup/setup_name_screen.dart';
 import 'screens/Registeration/profile_setup/setup_income_screen.dart';
 import 'screens/Registeration/profile_setup/setup_expenses_screen.dart';
-import 'screens/Registeration/profile_setup/setup_categories_screen.dart';
 import 'screens/Registeration/profile_setup/setup_balance_screen.dart';
 import 'screens/Registeration/profile_setup/setup_complete_screen.dart';
+import 'screens/Registeration/profile_setup/fixed_categories.dart';
+import 'screens/Registeration/profile_setup/custom_categories.dart';
+
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -55,9 +57,10 @@ class SurraApp extends StatelessWidget {
         '/setupName': (context) => const SetupNameScreen(),
         '/setupIncome': (context) => const SetupIncomeScreen(),
         '/setupExpenses': (context) => const SetupExpensesScreen(),
-        '/setupCategories': (context) =>  SetupCategoriesScreen(),
         '/setupBalance': (context) => const SetupBalanceScreen(),
         '/setupComplete': (context) => const SetupCompleteScreen(),
+        '/setupFixedCategory': (context) => const SetupFixedCategoryScreen(),
+        '/setupCustomCategory': (context) => const SetupCustomCategoryScreen(),
       },
     );
   }

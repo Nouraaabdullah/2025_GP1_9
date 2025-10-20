@@ -1,28 +1,45 @@
 class ProfileData {
-  // 🧍‍♀️ Basic info
+  // 🧍‍♀️ Basic Info
   static String? userName;
   static double? currentBalance;
 
-  // 💰 Income
-  static double? monthlyIncome;
-  static int? payday;
+  // 💰 Incomes (each: source, amount, payday)
+  static List<Map<String, dynamic>> incomes = [];
 
-  // 🧾 Fixed Expenses (each: name, amount, dueDate)
+  // 🧾 Fixed Expenses (each: name, amount, dueDate, category)
   static List<Map<String, dynamic>> fixedExpenses = [];
 
-  // 🏷️ Categories (each: name, limit, color, icon)
+  // 🏷️ Categories (both fixed + custom)
   static List<Map<String, dynamic>> categories = [
     {
       'name': 'Groceries',
       'limit': 0.0,
       'color': 0xFFFFA726,
-      'icon': 'shopping_cart', // store as text for Supabase
+      'icon': 'shopping_cart',
     },
     {
-      'name': 'Transport',
+      'name': 'Transportation',
       'limit': 0.0,
       'color': 0xFF42A5F5,
       'icon': 'directions_car',
+    },
+    {
+      'name': 'Utility',
+      'limit': 0.0,
+      'color': 0xFF26C6DA,
+      'icon': 'bolt',
+    },
+    {
+      'name': 'Entertainment',
+      'limit': 0.0,
+      'color': 0xFFEC407A,
+      'icon': 'movie',
+    },
+    {
+      'name': 'Health',
+      'limit': 0.0,
+      'color': 0xFF66BB6A,
+      'icon': 'local_hospital',
     },
     {
       'name': 'Education',
@@ -32,28 +49,47 @@ class ProfileData {
     },
   ];
 
-  // 🧩 Add a fixed expense safely from your setup_expenses_screen
-  static void addFixedExpense(String name, double amount, DateTime? dueDate) {
-    fixedExpenses.add({
-      'name': name,
+  // 🧩 Add a new income
+  static void addIncome(String source, double amount, int payday) {
+    incomes.add({
+      'source': source,
       'amount': amount,
-      'dueDate': dueDate?.toIso8601String() ?? '',
+      'payday': payday,
     });
   }
 
-  // 🧩 Add a custom category from your setup_categories_screen
+  // 🧾 Add a fixed expense safely from your setup_expenses_screen
+  static void addFixedExpense({
+    required String name,
+    required double amount,
+    required int dueDate,
+    required String category,
+  }) {
+    fixedExpenses.add({
+      'name': name,
+      'amount': amount,
+      'dueDate': dueDate,
+      'category': category,
+    });
+  }
+
+  // 🏷️ Add a custom category from your setup_categories_screen
   static void addCategory({
     required String name,
     required double limit,
     required int color,
     required String icon,
   }) {
-    categories.add({
-      'name': name,
-      'limit': limit,
-      'color': color,
-      'icon': icon,
-    });
+    // Ensure unique color
+    final exists = categories.any((cat) => cat['color'] == color);
+    if (!exists) {
+      categories.add({
+        'name': name,
+        'limit': limit,
+        'color': color,
+        'icon': icon,
+      });
+    }
   }
 
   // 📦 Convert to JSON format for Supabase
@@ -61,8 +97,7 @@ class ProfileData {
     return {
       'user_name': userName,
       'current_balance': currentBalance,
-      'monthly_income': monthlyIncome,
-      'payday': payday,
+      'incomes': incomes,
       'fixed_expenses': fixedExpenses,
       'categories': categories,
       'created_at': DateTime.now().toIso8601String(),
@@ -73,9 +108,10 @@ class ProfileData {
   static void reset() {
     userName = null;
     currentBalance = null;
-    monthlyIncome = null;
-    payday = null;
+    incomes.clear();
     fixedExpenses.clear();
+
+    // Refill the fixed categories
     categories = [
       {
         'name': 'Groceries',
@@ -84,10 +120,28 @@ class ProfileData {
         'icon': 'shopping_cart',
       },
       {
-        'name': 'Transport',
+        'name': 'Transportation',
         'limit': 0.0,
         'color': 0xFF42A5F5,
         'icon': 'directions_car',
+      },
+      {
+        'name': 'Utility',
+        'limit': 0.0,
+        'color': 0xFF26C6DA,
+        'icon': 'bolt',
+      },
+      {
+        'name': 'Entertainment',
+        'limit': 0.0,
+        'color': 0xFFEC407A,
+        'icon': 'movie',
+      },
+      {
+        'name': 'Health',
+        'limit': 0.0,
+        'color': 0xFF66BB6A,
+        'icon': 'local_hospital',
       },
       {
         'name': 'Education',

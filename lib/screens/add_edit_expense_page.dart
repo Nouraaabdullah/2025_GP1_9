@@ -39,15 +39,35 @@ class _AddEditExpensePageState extends State<AddEditExpensePage> {
     // Load existing expenses for duplicate name validation
     _loadExistingExpenses();
 
-    // Pre-fill data if editing
+    // Pre-fill data if editing - COMPLETELY SAFE APPROACH
     if (widget.expense != null) {
-      _nameController.text = widget.expense!['name'] ?? '';
-      _amountController.text = (widget.expense!['amount'] ?? 0.0).toString();
-      _selectedDueDay = widget.expense!['due_date'] ?? 27;
-      _selectedCategoryId = widget.expense!['category_id'];
-    }
+      // Safely get name
+      final name = widget.expense!['name'];
+      if (name != null) {
+        _nameController.text = name.toString();
+      }
 
-    // Don't set default category - user must choose one
+      // Safely get amount
+      final amount = widget.expense!['amount'];
+      if (amount != null) {
+        _amountController.text = amount.toString();
+      } else {
+        _amountController.text = '0.0';
+      }
+
+      // Safely get due date
+      final dueDate = widget.expense!['due_date'];
+      if (dueDate != null) {
+        _selectedDueDay = dueDate is int ? dueDate : 27;
+      }
+
+      // Safely get category ID - THIS IS THE MAIN FIX
+      final categoryId = widget.expense!['category_id'];
+      if (categoryId != null) {
+        _selectedCategoryId = categoryId.toString();
+      }
+      // If categoryId is null, _selectedCategoryId remains null
+    }
   }
 
   Future<void> _loadExistingExpenses() async {
@@ -77,9 +97,11 @@ class _AddEditExpensePageState extends State<AddEditExpensePage> {
       final existingId = expense['expense_id'] as String?;
 
       // If editing, exclude the current expense from duplicate check
-      if (widget.expense != null &&
-          existingId == widget.expense!['expense_id']) {
-        continue;
+      if (widget.expense != null) {
+        final currentExpenseId = widget.expense!['expense_id'];
+        if (existingId == currentExpenseId?.toString()) {
+          continue;
+        }
       }
 
       if (existingName == trimmedName) {
@@ -93,37 +115,49 @@ class _AddEditExpensePageState extends State<AddEditExpensePage> {
   bool _isAmountExceedingLimit(double amount) {
     if (_selectedCategoryId == null) return false;
 
-    final category = _uniqueCategories.firstWhere(
-      (cat) => cat['category_id'] == _selectedCategoryId,
-      orElse: () => <String, dynamic>{},
-    );
+    try {
+      final category = _uniqueCategories.firstWhere((cat) {
+        final catId = cat['category_id']?.toString();
+        return catId == _selectedCategoryId;
+      }, orElse: () => <String, dynamic>{});
 
-    if (category.isEmpty) return false;
+      if (category.isEmpty) return false;
 
-    final monthlyLimit = (category['monthly_limit'] as num?)?.toDouble();
-    return monthlyLimit != null && monthlyLimit > 0 && amount > monthlyLimit;
+      final monthlyLimit = (category['monthly_limit'] as num?)?.toDouble();
+      return monthlyLimit != null && monthlyLimit > 0 && amount > monthlyLimit;
+    } catch (e) {
+      return false;
+    }
   }
 
   // Get category name by ID
   String _getCategoryName(String? categoryId) {
     if (categoryId == null) return '';
-    final category = _uniqueCategories.firstWhere(
-      (cat) => cat['category_id'] == categoryId,
-      orElse: () => <String, dynamic>{},
-    );
-    return category.isNotEmpty ? (category['name'] as String? ?? '') : '';
+    try {
+      final category = _uniqueCategories.firstWhere(
+        (cat) => cat['category_id']?.toString() == categoryId,
+        orElse: () => <String, dynamic>{},
+      );
+      return category.isNotEmpty ? (category['name'] as String? ?? '') : '';
+    } catch (e) {
+      return '';
+    }
   }
 
   // Get category limit by ID
   double? _getCategoryLimit(String? categoryId) {
     if (categoryId == null) return null;
-    final category = _uniqueCategories.firstWhere(
-      (cat) => cat['category_id'] == categoryId,
-      orElse: () => <String, dynamic>{},
-    );
-    return category.isNotEmpty
-        ? (category['monthly_limit'] as num?)?.toDouble()
-        : null;
+    try {
+      final category = _uniqueCategories.firstWhere(
+        (cat) => cat['category_id']?.toString() == categoryId,
+        orElse: () => <String, dynamic>{},
+      );
+      return category.isNotEmpty
+          ? (category['monthly_limit'] as num?)?.toDouble()
+          : null;
+    } catch (e) {
+      return null;
+    }
   }
 
   void _showLimitExceededDialog(double amount, Function onConfirm) {
@@ -232,9 +266,12 @@ class _AddEditExpensePageState extends State<AddEditExpensePage> {
     final uniqueCategories = <String, Map<String, dynamic>>{};
 
     for (final category in categories) {
-      final categoryId = category['category_id'] as String?;
-      if (categoryId != null && !uniqueCategories.containsKey(categoryId)) {
-        uniqueCategories[categoryId] = category;
+      final categoryId = category['category_id'];
+      if (categoryId != null) {
+        final categoryIdString = categoryId.toString();
+        if (!uniqueCategories.containsKey(categoryIdString)) {
+          uniqueCategories[categoryIdString] = category;
+        }
       }
     }
 
@@ -294,8 +331,7 @@ class _AddEditExpensePageState extends State<AddEditExpensePage> {
       } else {
         // Update existing expense
         final expenseId = widget.expense!['expense_id'];
-        final originalAmount =
-            (widget.expense!['amount'] as num?)?.toDouble() ?? 0.0;
+        final originalAmount = _getSafeDouble(widget.expense!['amount']);
 
         if (amount != originalAmount) {
           // Archive old and create new if amount changed
@@ -343,6 +379,15 @@ class _AddEditExpensePageState extends State<AddEditExpensePage> {
         setState(() => _loading = false);
       }
     }
+  }
+
+  // Helper method to safely get double values
+  double _getSafeDouble(dynamic value) {
+    if (value == null) return 0.0;
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
+    if (value is String) return double.tryParse(value) ?? 0.0;
+    return 0.0;
   }
 
   String _iso(DateTime d) =>
@@ -450,18 +495,25 @@ class _AddEditExpensePageState extends State<AddEditExpensePage> {
                     ),
                   ),
                   // Category options
-                  ..._uniqueCategories.map<DropdownMenuItem<String>>(
-                    (c) => DropdownMenuItem(
-                      value: c['category_id'] as String,
+                  ..._uniqueCategories.map<DropdownMenuItem<String>>((
+                    category,
+                  ) {
+                    final categoryId = category['category_id']?.toString();
+                    final categoryName =
+                        category['name'] as String? ?? 'Unnamed Category';
+
+                    return DropdownMenuItem<String>(
+                      value: categoryId,
                       child: Text(
-                        c['name'] as String,
+                        categoryName,
                         overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: Color(0xFF1E1E1E)),
                       ),
-                    ),
-                  ),
+                    );
+                  }),
                 ],
-                onChanged: (v) {
-                  setState(() => _selectedCategoryId = v);
+                onChanged: (value) {
+                  setState(() => _selectedCategoryId = value);
                 },
                 validator: (value) {
                   if (value == null || value.isEmpty) {
@@ -563,18 +615,6 @@ class _AddEditExpensePageState extends State<AddEditExpensePage> {
     required ValueChanged<T?> onChanged,
     String? Function(T?)? validator,
   }) {
-    // ADD VALIDATION TO ENSURE NO DUPLICATE VALUES
-    final uniqueItems = <T, DropdownMenuItem<T>>{};
-    for (final item in items) {
-      if (item.value != null && !uniqueItems.containsKey(item.value)) {
-        uniqueItems[item.value as T] = item;
-      } else if (item.value == null) {
-        // Always include the null item (Choose a category)
-        uniqueItems[item.value as T] = item;
-      }
-    }
-    final finalItems = uniqueItems.values.toList();
-
     return Container(
       height: 50,
       decoration: BoxDecoration(
@@ -600,7 +640,7 @@ class _AddEditExpensePageState extends State<AddEditExpensePage> {
             border: InputBorder.none,
             isCollapsed: true,
           ),
-          items: finalItems,
+          items: items,
           onChanged: onChanged,
           validator: validator as String? Function(T?)?,
         ),

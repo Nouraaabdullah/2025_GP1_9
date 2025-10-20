@@ -78,6 +78,78 @@ class _AddEditIncomePageState extends State<AddEditIncomePage> {
     super.dispose();
   }
 
+  // Get current monthly record ID
+  Future<String?> _getCurrentMonthlyRecordId() async {
+    final now = DateTime.now();
+    final monthlyRecords = await _sb
+        .from('Monthly_Financial_Record')
+        .select('record_id, period_start, period_end')
+        .eq('profile_id', widget.profileId)
+        .order('period_start', ascending: false);
+
+    for (final record in monthlyRecords) {
+      final periodStart = DateTime.parse(record['period_start'] as String);
+      final periodEnd = DateTime.parse(record['period_end'] as String);
+
+      if (now.isAfter(periodStart) && now.isBefore(periodEnd)) {
+        return record['record_id'] as String;
+      }
+    }
+    return null;
+  }
+
+  // Update monthly record with income change
+  Future<void> _updateMonthlyRecordIncome(
+    double amountChange,
+    bool isAdding,
+  ) async {
+    try {
+      final recordId = await _getCurrentMonthlyRecordId();
+      if (recordId == null) {
+        print('No current monthly record found');
+        return;
+      }
+
+      // Get current monthly record
+      final monthlyRecord = await _sb
+          .from('Monthly_Financial_Record')
+          .select('total_income, total_balance')
+          .eq('record_id', recordId)
+          .single();
+
+      final currentIncome = _toDouble(monthlyRecord['total_income']) ?? 0.0;
+      final currentBalance = _toDouble(monthlyRecord['total_balance']) ?? 0.0;
+
+      double newIncome;
+      double newBalance;
+
+      if (isAdding) {
+        newIncome = currentIncome + amountChange;
+        newBalance = currentBalance + amountChange;
+      } else {
+        newIncome = currentIncome - amountChange;
+        newBalance = currentBalance - amountChange;
+      }
+
+      // Update monthly record
+      await _sb
+          .from('Monthly_Financial_Record')
+          .update({
+            'total_income': newIncome,
+            'total_balance': newBalance,
+            'monthly_saving':
+                newIncome - (_toDouble(monthlyRecord['total_expense']) ?? 0.0),
+          })
+          .eq('record_id', recordId);
+
+      print(
+        'Monthly record updated: Income ${isAdding ? 'increased' : 'decreased'} by $amountChange',
+      );
+    } catch (e) {
+      print('Error updating monthly record: $e');
+    }
+  }
+
   Future<void> _saveIncome() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -98,6 +170,9 @@ class _AddEditIncomePageState extends State<AddEditIncomePage> {
           'start_time': _iso(now),
           'end_time': null,
         });
+
+        // Update monthly record with new income
+        await _updateMonthlyRecordIncome(amount, true);
       } else {
         // Update existing income
         final incomeId = widget.income!['income_id'];
@@ -119,6 +194,15 @@ class _AddEditIncomePageState extends State<AddEditIncomePage> {
             'start_time': _iso(now),
             'end_time': null,
           });
+
+          // Update monthly record with amount difference
+          final amountDifference = amount - originalAmount;
+          if (amountDifference != 0) {
+            await _updateMonthlyRecordIncome(
+              amountDifference.abs(),
+              amountDifference > 0,
+            );
+          }
         } else {
           // Just update name and payday if amount unchanged
           await _sb
@@ -149,6 +233,16 @@ class _AddEditIncomePageState extends State<AddEditIncomePage> {
 
   String _iso(DateTime d) =>
       '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  double? _toDouble(dynamic v) {
+    if (v == null) return null;
+    if (v is num) return v.toDouble();
+    if (v is String) {
+      if (v.isEmpty) return null;
+      return double.tryParse(v);
+    }
+    return null;
+  }
 
   @override
   Widget build(BuildContext context) {

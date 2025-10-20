@@ -1,3 +1,4 @@
+// lib/pages/Dashboard/category_chart.dart
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
@@ -16,6 +17,7 @@ class CategorySlice {
   });
 }
 
+/* === utilities kept for DashboardPage === */
 Color colorFromIconOrSeed({required String categoryId, String? iconHex}) {
   final parsed = _parseHexColorLoose(iconHex);
   return parsed ?? _seededCategoryColor(categoryId);
@@ -39,14 +41,13 @@ Color _seededCategoryColor(String categoryId) {
   return HSVColor.fromAHSV(1.0, hue, sat, val).toColor();
 }
 
-/// Donut chart. Tap a slice to get a tooltip anchored near the slice arc.
-/// Tooltip auto-fades after ~2.5s.
+/* === Donut === */
 class CategoryDonut extends StatefulWidget {
   final List<CategorySlice> slices;
   final String centerLabel;
 
-  final double size;         // overall square size
-  final Alignment alignment; // where to anchor inside parent
+  final double size;         // square size
+  final Alignment alignment; // anchor
   final double thickness;    // ring thickness
 
   const CategoryDonut({
@@ -84,9 +85,29 @@ class _CategoryDonutState extends State<CategoryDonut> {
     });
   }
 
+  // --- helpers for geometric hit test ---
+  double _normAngle(double a) {
+    while (a < 0) a += 2 * math.pi;
+    while (a >= 2 * math.pi) a -= 2 * math.pi;
+    return a;
+  }
+
+  bool _angleWithin(double angle, double start, double sweep) {
+    final end = _normAngle(start + sweep);
+    angle = _normAngle(angle);
+    if (sweep <= 0) return false;
+    if (start <= end) {
+      return angle >= start && angle <= end;
+    } else {
+      return angle >= start || angle <= end;
+    }
+  }
+  // --------------------------------------
+
   @override
   Widget build(BuildContext context) {
     final slices = widget.slices;
+
     if (slices.isEmpty) {
       return SizedBox(
         height: widget.size,
@@ -98,41 +119,54 @@ class _CategoryDonutState extends State<CategoryDonut> {
       alignment: widget.alignment,
       child: GestureDetector(
         onTapDown: (d) {
+          // Mirror painter geometry
+          const deflate = 8.0;
+          const gap = 0.012;
+          final stroke = widget.thickness;
+          const hitSlop = 16.0;
+
+          final rect = Rect.fromLTWH(0, 0, widget.size, widget.size).deflate(deflate);
+          final center = rect.center;
+          final R = rect.width / 2; // radius to center of stroke
+          final inner = R - stroke / 2 - hitSlop;
+          final outer = R + stroke / 2 + hitSlop;
+
           final box = context.findRenderObject() as RenderBox?;
           if (box == null) return;
           final local = box.globalToLocal(d.globalPosition);
 
-          // compute angle, find slice
-          final center = Offset(widget.size / 2, widget.size / 2);
           final dx = local.dx - center.dx;
           final dy = local.dy - center.dy;
           final r = math.sqrt(dx * dx + dy * dy);
+          if (r < inner || r > outer) return;
 
-          // accept any tap inside the donut circle (top ease) – much easier to hit
-          // (optional) if you still want to ignore taps far inside the hole, use:
-// if (r < widget.size / 2 - widget.thickness - 28) return;
-
-
-          // angle starting from top (-pi/2), clockwise
-          var theta = math.atan2(dy, dx); // from +x
-          var angle = theta + math.pi / 2;
-          if (angle < 0) angle += 2 * math.pi;
+          // angle basis: painter starts at -π/2 (top), clockwise
+          var theta = math.atan2(dy, dx);                // -π..π from +X
+          var angle = _normAngle(theta - (-math.pi / 2)); // 0 at top, clockwise
 
           final total = slices.fold<double>(0, (a, s) => a + s.value.toDouble());
-          double acc = 0;
+          if (total <= 0) return;
+
+          double acc = 0.0;
           for (int i = 0; i < slices.length; i++) {
-            final sweep = (slices[i].value.toDouble() / total) * 2 * math.pi;
-            if (angle >= acc && angle < acc + sweep) {
-              // tooltip near the middle of this slice arc
-              final mid = acc + sweep / 2;
-              final rr = widget.size / 2 - widget.thickness / 2;
+            final s = slices[i];
+            final sweep = (s.value.toDouble() / total) * 2 * math.pi;
+            final segStart = acc + gap;
+            final segSweep = math.max(0.0, sweep - 2 * gap);
+
+            if (segSweep > 0 && _angleWithin(angle, segStart, segSweep)) {
+              // mid point on the band for tooltip
+              final mid = segStart + segSweep / 2;
               final tip = Offset(
-                center.dx + rr * math.sin(mid),
-                center.dy - rr * math.cos(mid),
+                center.dx + R * math.cos(mid - math.pi / 2),
+                center.dy + R * math.sin(mid - math.pi / 2),
               );
               _showTip(
-                tip.translate(0, -10),
-                '${slices[i].name}\nAmount: ${slices[i].value.toStringAsFixed(0)} SAR',
+                Offset(
+                  (tip.dx - 90).clamp(0, widget.size - 180),
+                  (tip.dy - 44).clamp(0, widget.size - 44),
+                ),
+                '${s.name}\nAmount: ${s.value.toStringAsFixed(0)} SAR',
               );
               return;
             }
@@ -152,12 +186,16 @@ class _CategoryDonutState extends State<CategoryDonut> {
               Text(
                 widget.centerLabel,
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: Color.fromARGB(255, 149, 149, 149), fontSize: 16, fontWeight: FontWeight.w700),
+                style: const TextStyle(
+                  color: Color.fromARGB(255, 149, 149, 149),
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
               if (_tipPos != null)
                 Positioned(
-                  left: (_tipPos!.dx - 90).clamp(0, widget.size - 180),
-                  top: (_tipPos!.dy - 44).clamp(0, widget.size - 44),
+                  left: _tipPos!.dx,
+                  top: _tipPos!.dy,
                   child: _Bubble(text: _tipText),
                 ),
             ],
@@ -171,7 +209,7 @@ class _CategoryDonutState extends State<CategoryDonut> {
 class _DonutPainter extends CustomPainter {
   final List<CategorySlice> slices;
   final double thickness;
-  _DonutPainter({required this.slices, required this.thickness});
+  const _DonutPainter({required this.slices, required this.thickness});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -207,14 +245,8 @@ class _DonutPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _DonutPainter old) {
-    if (old.slices.length != slices.length) return true;
-    if (old.thickness != thickness) return true;
-    for (var i = 0; i < slices.length; i++) {
-      if (old.slices[i].value != slices[i].value || old.slices[i].color != slices[i].color) return true;
-    }
-    return false;
-  }
+  bool shouldRepaint(covariant _DonutPainter old) =>
+      old.slices.length != slices.length || old.thickness != thickness;
 }
 
 class _Bubble extends StatelessWidget {

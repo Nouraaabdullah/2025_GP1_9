@@ -81,8 +81,8 @@ class _DashboardPageState extends State<DashboardPage> {
     }
 
     try {
-      // final profileId = await _getProfileId();
-      const profileId = '135dee2a-e3ec-47c3-abf5-8f4ed707c3db';
+      final profileId = await _getProfileId();
+      //const profileId = '135dee2a-e3ec-47c3-abf5-8f4ed707c3db';
 
       // 1) balance
       final prof = await _sb
@@ -295,6 +295,17 @@ class _DashboardPageState extends State<DashboardPage> {
       } else {
         _rawLabels = const ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
       }
+
+      // >>> ONLY CHANGE: for Monthly mode, hide future months from Financial Trends
+      if (_periodIndex == 1) {
+        final currentMonthIdx = DateTime.now().month - 1; // 0-based
+        for (int i = currentMonthIdx + 1; i < _seriesExpenses.length; i++) {
+          _seriesExpenses[i] = 0;
+          _seriesEarnings[i] = 0;
+          _seriesIncome[i]   = 0;
+        }
+      }
+      // <<< ONLY CHANGE END
 
       // 10) filter out empty buckets for charts (2–4), but KEEP raw for Income Overview
       final filtered = _filterEmpty(_rawLabels, _seriesExpenses, _seriesEarnings, _seriesIncome);

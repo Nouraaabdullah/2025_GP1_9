@@ -13,28 +13,24 @@ class LogTransactionManuallyPage extends StatefulWidget {
 class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage> {
   final _formKey = GlobalKey<FormState>();
 
-  final List<String> _types = ['Expense', 'Earning'];
-
-  // Categories come from DB (names only)
+  String _type = 'Expense';
   final List<String> _categories = [];
   bool _loadingCats = false;
 
-  String? _selectedType;
-  String? _selectedCategory; // stores category *name*
+  String? _selectedCategory;
   final TextEditingController _amountCtrl = TextEditingController();
 
   DateTime _selectedDate = DateTime.now();
   bool _datePicked = false;
 
-  // cache profile_id if you switch to real auth fetch
-  String? _profileId;
+  String? _profileId; // resolved from auth
 
   SupabaseClient get _sb => Supabase.instance.client;
 
   @override
   void initState() {
     super.initState();
-    _loadCategories();
+    _bootstrap();
   }
 
   @override
@@ -43,42 +39,59 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
     super.dispose();
   }
 
-  // ====== DATA LAYER ======
+  Future<void> _bootstrap() async {
+    try {
+      await _getProfileId();
+      await _loadCategories();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Auth or data error: $e')),
+      );
+      Navigator.pop(context);
+    }
+  }
 
-  // Real version (use when registration/auth is ready)
+  // ===== data layer =====
+
   Future<String> _getProfileId() async {
     if (_profileId != null) return _profileId!;
     final uid = _sb.auth.currentUser?.id;
     if (uid == null) {
-      throw Exception('You must be signed in');
+      throw Exception('Sign in required');
     }
-    final row = await _sb
+
+    final dynamic res = await _sb
         .from('User_Profile')
         .select('profile_id')
         .eq('user_id', uid)
         .single();
-    _profileId = row['profile_id'] as String;
+
+    final map = res as Map<String, dynamic>;
+    _profileId = map['profile_id'] as String;
+
+    // For quick local testing you can hardcode this id:
+    // 135dee2a-e3ec-47c3-abf5-8f4ed707c3db
+
     return _profileId!;
   }
 
   Future<void> _loadCategories() async {
     setState(() => _loadingCats = true);
     try {
-      // When auth is wired, use this:
-      // final profileId = await _getProfileId();
+      final profileId = await _getProfileId();
 
-      // TEMP hardcoded profile_id (remove once auth is ready)
-      const profileId = 'e33f0c91-26fd-436a-baa3-6ad1df3a8152';
-
-      final rows = await _sb
+      final dynamic res = await _sb
           .from('Category')
           .select('name')
           .eq('profile_id', profileId)
-          .eq('is_archived', false) // only active categories
-          // DO NOT filter by type here (you said your type is Fixed/Custom and you want both)
+          .eq('is_archived', false)
           .order('name');
 
-      final names = rows.map<String>((r) => (r['name'] as String)).toList();
+      final rows = (res as List);
+      final names = rows
+          .map<String>((r) => ((r as Map<String, dynamic>)['name'] as String))
+          .toList();
 
       if (!mounted) return;
       setState(() {
@@ -89,49 +102,59 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
           _selectedCategory = null;
         }
       });
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not load categories: $e')),
-      );
     } finally {
       if (mounted) setState(() => _loadingCats = false);
     }
   }
 
   Future<String> _getCategoryIdByName(String name) async {
-    // Optional: also filter by profile_id to avoid cross-user name collisions
-    // final profileId = await _getProfileId();
-    const profileId = 'e33f0c91-26fd-436a-baa3-6ad1df3a8152';
-
-    final row = await _sb
+    final profileId = await _getProfileId();
+    final dynamic res = await _sb
         .from('Category')
         .select('category_id')
         .eq('profile_id', profileId)
         .eq('name', name)
         .single();
-    return row['category_id'] as String;
+    final map = res as Map<String, dynamic>;
+    return map['category_id'] as String;
+    }
+
+  Future<void> _updateBalance({required num amount, required bool isEarning}) async {
+    final profileId = await _getProfileId();
+
+    final dynamic getRes = await _sb
+        .from('User_Profile')
+        .select('current_balance')
+        .eq('profile_id', profileId)
+        .single();
+
+    final getMap = getRes as Map<String, dynamic>;
+    final num current = (getMap['current_balance'] is num)
+        ? getMap['current_balance'] as num
+        : num.tryParse('${getMap['current_balance']}') ?? 0;
+
+    final num next = isEarning ? current + amount : current - amount;
+
+    await _sb
+        .from('User_Profile')
+        .update({'current_balance': next})
+        .eq('profile_id', profileId);
   }
 
   Future<void> _submitToDb() async {
-    // When auth is wired, use the real fetch:
-    // final profileId = await _getProfileId();
+    final profileId = await _getProfileId();
 
-    // TEMP hardcoded profile_id (must belong to the signed-in user if your RLS checks that)
-    const profileId = 'e33f0c91-26fd-436a-baa3-6ad1df3a8152';
+    final String typeDb = _type;
+    final num amount = num.parse(_amountCtrl.text.trim());
+    final String dateStr = _fmt(_selectedDate);
 
-    final typeDb = (_selectedType ?? ''); // 'expense' or 'earning'
-    final amount = num.parse(_amountCtrl.text.trim());
-    final dateStr = _fmt(_selectedDate); // yyyy-mm-dd
-
-    final payload = <String, dynamic>{
+    final Map<String, dynamic> payload = {
       'type': typeDb,
       'amount': amount,
       'date': dateStr,
       'profile_id': profileId,
     };
 
-    // Only attach category for expenses
     if (typeDb == 'Expense') {
       final catName = _selectedCategory!;
       final catId = await _getCategoryIdByName(catName);
@@ -139,9 +162,10 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
     }
 
     await _sb.from('Transaction').insert(payload);
+    await _updateBalance(amount: amount, isEarning: typeDb == 'Earning');
   }
 
-  // ====== UI ======
+  // ===== ui layer =====
 
   Future<void> _pickDate() async {
     final now = DateTime.now();
@@ -153,8 +177,8 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
-            colorScheme: ColorScheme.light(
-              primary: AppColors.accent,
+            colorScheme: const ColorScheme.light(
+              primary: Color(0xFF704EF4),
               onPrimary: Colors.white,
               onSurface: Colors.black,
             ),
@@ -173,13 +197,10 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
 
   Future<void> _submit() async {
     if (_formKey.currentState?.validate() != true) return;
-
     try {
       await _submitToDb();
-
       final preview =
-          '${_selectedType ?? ''} • ${_selectedCategory ?? ''} • ${_amountCtrl.text.trim()} • ${_fmt(_selectedDate)}';
-
+          '$_type • ${_selectedCategory ?? ''} • ${_amountCtrl.text.trim()} • ${_fmt(_selectedDate)}';
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Saved: $preview'), behavior: SnackBarBehavior.floating),
@@ -187,7 +208,6 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
       Navigator.pop(context);
     } catch (e) {
       if (!mounted) return;
-      // Show the actual DB error so we can debug RLS/policies if needed
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Could not save: $e')),
       );
@@ -197,13 +217,12 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
-    final isEarning = _selectedType == 'Earning';
+    final isEarning = _type == 'Earning';
 
     return Scaffold(
       backgroundColor: const Color(0xFF1F1F33),
       body: Stack(
         children: [
-          // purple header
           Container(
             height: 230,
             width: double.infinity,
@@ -219,7 +238,6 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
               child: Column(
                 children: [
                   const SizedBox(height: 8),
-                  // Make Back + Down Arrow clickable
                   GestureDetector(
                     onTap: () => Navigator.pop(context),
                     child: Column(
@@ -242,7 +260,6 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
             ),
           ),
 
-          // back button
           SafeArea(
             child: Align(
               alignment: Alignment.topLeft,
@@ -254,7 +271,6 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
             ),
           ),
 
-          // hero target for smooth grow from plus
           const Positioned(
             top: 40,
             left: 0,
@@ -262,7 +278,6 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
             child: Hero(tag: 'surra-add-fab', child: SizedBox(width: 0, height: 0)),
           ),
 
-          // form card
           Positioned(
             top: 150,
             left: 0,
@@ -293,29 +308,18 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
                       const SizedBox(height: 20),
 
                       const _FieldLabel('Type'),
-                      const SizedBox(height: 8),
-                      _rounded(
-                        child: DropdownButtonFormField<String>(
-                          value: _selectedType,
-                          isExpanded: true,
-                          decoration: _inputDecoration(),
-                          items: _types
-                              .map((t) => DropdownMenuItem(value: t, child: Text(t)))
-                              .toList(),
-                          onChanged: (v) {
-                            setState(() {
-                              _selectedType = v;
-                              if (v == 'Earning') {
-                                _selectedCategory = null; // clear category when earning
-                              }
-                            });
-                          },
-                          validator: (v) => v == null ? 'Select a type' : null,
-                        ),
+                      const SizedBox(height: 10),
+                      _TypeTabs(
+                        value: _type,
+                        onChanged: (v) {
+                          setState(() {
+                            _type = v;
+                            if (v == 'Earning') _selectedCategory = null;
+                          });
+                        },
                       ),
                       const SizedBox(height: 18),
 
-                      // Category hidden for Earning; items come from DB
                       if (!isEarning) ...[
                         const _FieldLabel('Category'),
                         const SizedBox(height: 8),
@@ -331,7 +335,7 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
                                 ? null
                                 : (v) => setState(() => _selectedCategory = v),
                             validator: (v) =>
-                                v == null ? 'Select a category' : null,
+                                _type == 'Expense' && v == null ? 'Select a category' : null,
                           ),
                         ),
                         if (_loadingCats)
@@ -445,12 +449,12 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
   }
 
   InputDecoration _inputDecoration() {
-    return InputDecoration(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+    return const InputDecoration(
+      contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       filled: true,
       fillColor: Colors.white,
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.all(Radius.circular(18)),
         borderSide: BorderSide.none,
       ),
     );
@@ -479,6 +483,67 @@ class _FieldLabel extends StatelessWidget {
         color: Colors.white,
         fontSize: 15,
         fontWeight: FontWeight.w400,
+      ),
+    );
+  }
+}
+
+class _TypeTabs extends StatelessWidget {
+  final String value;
+  final ValueChanged<String> onChanged;
+  const _TypeTabs({required this.value, required this.onChanged, super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final isExpense = value == 'Expense';
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF2B2B48),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      padding: const EdgeInsets.all(4),
+      child: Row(
+        children: [
+          _tab(
+            label: 'Expense',
+            selected: isExpense,
+            onTap: () => onChanged('Expense'),
+          ),
+          _tab(
+            label: 'Earning',
+            selected: !isExpense,
+            onTap: () => onChanged('Earning'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _tab({
+    required String label,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    return Expanded(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          height: 40,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: selected ? Colors.white : Colors.transparent,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              color: selected ? const Color(0xFF1F1F33) : Colors.white70,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
       ),
     );
   }

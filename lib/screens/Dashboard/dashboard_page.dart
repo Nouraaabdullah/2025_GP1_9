@@ -81,8 +81,8 @@ class _DashboardPageState extends State<DashboardPage> {
     }
 
     try {
-      final profileId = await _getProfileId();
-      //const profileId = '135dee2a-e3ec-47c3-abf5-8f4ed707c3db';
+      //final profileId = await _getProfileId();
+      const profileId = '135dee2a-e3ec-47c3-abf5-8f4ed707c3db';
 
       // 1) balance
       final prof = await _sb

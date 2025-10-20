@@ -71,9 +71,9 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
     _profileId = map['profile_id'] as String;
 
     // For quick local testing you can hardcode this id:
-    // 135dee2a-e3ec-47c3-abf5-8f4ed707c3db
-
-    return _profileId!;
+    final nhid = '135dee2a-e3ec-47c3-abf5-8f4ed707c3db';
+    return nhid;
+    //return _profileId!;
   }
 
   Future<void> _loadCategories() async {

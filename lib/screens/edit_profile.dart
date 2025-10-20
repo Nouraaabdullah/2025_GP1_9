@@ -1,25 +1,28 @@
-// lib/screens/edit_profile.dart
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme/app_colors.dart';
 import '../widgets/top_gradient.dart';
 import '../widgets/bottom_nav_bar.dart';
+import 'add_edit_income_page.dart';
+import 'add_edit_expense_page.dart';
+import 'add_edit_category_page.dart';
+import 'edit_balance_page.dart';
 
 class EditProfilePage extends StatefulWidget {
   const EditProfilePage({super.key});
+
   @override
   State<EditProfilePage> createState() => _EditProfilePageState();
 }
 
 class _EditProfilePageState extends State<EditProfilePage> {
-  // TEMP: hardcode until auth/signup is ready
   static const String kProfileId = 'e33f0c91-26fd-436a-baa3-6ad1df3a8152';
   final _sb = Supabase.instance.client;
 
-  // In-memory state (loaded from DB)
   List<Map<String, dynamic>> _incomes = [];
   List<Map<String, dynamic>> _fixedExpenses = [];
   List<Map<String, dynamic>> _categories = [];
+  double _currentBalance = 0.0;
 
   bool _loading = true;
   String? _error;
@@ -38,34 +41,49 @@ class _EditProfilePageState extends State<EditProfilePage> {
       _error = null;
     });
     try {
-      final results = await Future.wait([
-        _sb
-            .from('Fixed_Income')
-            .select('income_id,name,monthly_income,payday,start_time,end_time')
-            .eq('profile_id', kProfileId)
-            .order('name'),
-        _sb
-            .from('Fixed_Expense')
-            .select('expense_id,name,amount,due_date,category_id')
-            .eq('profile_id', kProfileId)
-            .order('name'),
-        _sb
-            .from('Category')
-            .select(
-              'category_id,name,type,monthly_limit,is_archived,icon,icon_color',
-            )
-            .eq('profile_id', kProfileId)
-            .order('name'),
-      ]);
+      // Load user profile to get current balance
+      final profileData = await _sb
+          .from('User_Profile')
+          .select('current_balance')
+          .eq('profile_id', kProfileId)
+          .single();
+
+      // Load active incomes (where end_time is null)
+      final incomesData = await _sb
+          .from('Fixed_Income')
+          .select('income_id,name,monthly_income,payday,start_time,end_time')
+          .eq('profile_id', kProfileId)
+          .isFilter('end_time', null)
+          .order('name');
+
+      // Load active expenses (where end_time is null)
+      final expensesData = await _sb
+          .from('Fixed_Expense')
+          .select(
+            'expense_id,name,amount,due_date,category_id,start_time,end_time',
+          )
+          .eq('profile_id', kProfileId)
+          .isFilter('end_time', null)
+          .order('name');
+
+      // Load non-archived categories
+      final categoriesData = await _sb
+          .from('Category')
+          .select(
+            'category_id,name,type,monthly_limit,is_archived,icon,icon_color',
+          )
+          .eq('profile_id', kProfileId)
+          .eq('is_archived', false)
+          .order('name');
 
       if (!mounted) return;
 
       setState(() {
-        _incomes = (results[0] as List).cast<Map<String, dynamic>>();
-        _fixedExpenses = (results[1] as List).cast<Map<String, dynamic>>();
-        _categories = ((results[2] as List).cast<Map<String, dynamic>>())
-            .where((c) => c['is_archived'] != true)
-            .toList();
+        _currentBalance =
+            (profileData['current_balance'] as num?)?.toDouble() ?? 0.0;
+        _incomes = (incomesData as List).cast<Map<String, dynamic>>();
+        _fixedExpenses = (expensesData as List).cast<Map<String, dynamic>>();
+        _categories = (categoriesData as List).cast<Map<String, dynamic>>();
         _loading = false;
       });
     } catch (e) {
@@ -74,6 +92,77 @@ class _EditProfilePageState extends State<EditProfilePage> {
         _error = e.toString();
         _loading = false;
       });
+    }
+  }
+
+  // ---------------- Navigation Methods ----------------
+  void _navigateToEditBalance() async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => EditBalancePage(
+          currentBalance: _currentBalance,
+          profileId: kProfileId,
+        ),
+      ),
+    );
+
+    // Reload data if balance was updated
+    if (result == true) {
+      _loadAll();
+    }
+  }
+
+  void _navigateToAddEditIncome({Map<String, dynamic>? income}) async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) =>
+            AddEditIncomePage(income: income, profileId: kProfileId),
+      ),
+    );
+
+    // Reload data if something was saved
+    if (result == true) {
+      _loadAll();
+    }
+  }
+
+  void _navigateToAddEditExpense({Map<String, dynamic>? expense}) async {
+    if (_categories.isEmpty) {
+      _showError('Please create at least one category first');
+      return;
+    }
+
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => AddEditExpensePage(
+          expense: expense,
+          profileId: kProfileId,
+          categories: _categories,
+        ),
+      ),
+    );
+
+    // Reload data if something was saved
+    if (result == true) {
+      _loadAll();
+    }
+  }
+
+  void _navigateToAddEditCategory({Map<String, dynamic>? category}) async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) =>
+            AddEditCategoryPage(category: category, profileId: kProfileId),
+      ),
+    );
+
+    // Reload data if something was saved
+    if (result == true) {
+      _loadAll();
     }
   }
 
@@ -148,6 +237,49 @@ class _EditProfilePageState extends State<EditProfilePage> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
+                              // ===== Current Balance =====
+                              const Text(
+                                'Current Balance',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              Container(
+                                height: 56,
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF2A2840),
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                ),
+                                child: Row(
+                                  children: [
+                                    _roundIcon(
+                                      const Color(0xFF4CAF50),
+                                      Icons.account_balance_wallet,
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Text(
+                                        '${_fmtMoney(_currentBalance)} SAR',
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                    _editBtn(() => _navigateToEditBalance()),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 20),
+
                               // ===== Incomes =====
                               Row(
                                 children: [
@@ -162,7 +294,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
                                     ),
                                   ),
                                   _purpleCircleButton(
-                                    onTap: () => _openAddIncomeSheet(),
+                                    onTap: () => _navigateToAddEditIncome(),
                                   ),
                                 ],
                               ),
@@ -177,13 +309,12 @@ class _EditProfilePageState extends State<EditProfilePage> {
                                     ),
                                     payDay: (inc['payday'] ?? 1) as int,
                                     onEdit: () =>
-                                        _openAddIncomeSheet(income: inc),
+                                        _navigateToAddEditIncome(income: inc),
                                     onDelete: () =>
                                         _confirmDeleteIncome(inc['income_id']),
                                   ),
                                 ),
                               ),
-
                               const SizedBox(height: 20),
 
                               // ===== Fixed expenses =====
@@ -200,7 +331,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
                                     ),
                                   ),
                                   _purpleCircleButton(
-                                    onTap: () => _openAddFixedExpenseSheet(),
+                                    onTap: () => _navigateToAddEditExpense(),
                                   ),
                                 ],
                               ),
@@ -214,14 +345,13 @@ class _EditProfilePageState extends State<EditProfilePage> {
                                     dueDate: (exp['due_date'] ?? 1) as int,
                                     categoryName: _catName(exp['category_id']),
                                     onEdit: () =>
-                                        _openAddFixedExpenseSheet(expense: exp),
+                                        _navigateToAddEditExpense(expense: exp),
                                     onDelete: () => _confirmDeleteExpense(
                                       exp['expense_id'],
                                     ),
                                   ),
                                 ),
                               ),
-
                               const SizedBox(height: 20),
 
                               // ===== Categories =====
@@ -238,7 +368,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
                                     ),
                                   ),
                                   _purpleCircleButton(
-                                    onTap: () => _openCategorySheet(),
+                                    onTap: () => _navigateToAddEditCategory(),
                                   ),
                                 ],
                               ),
@@ -253,23 +383,16 @@ class _EditProfilePageState extends State<EditProfilePage> {
                                     ),
                                     icon: cat['icon'] ?? 'category',
                                     iconColor: cat['icon_color'] ?? '#7D5EF6',
-                                    onEdit: () =>
-                                        _openCategorySheet(category: cat),
+                                    onEdit: () => _navigateToAddEditCategory(
+                                      category: cat,
+                                    ),
                                     onDelete: () => _confirmDeleteCategory(
                                       cat['category_id'],
                                     ),
                                   ),
                                 ),
                               ),
-
                               const SizedBox(height: 22),
-                              Center(
-                                child: _glowPrimaryButton(
-                                  text: 'Refresh',
-                                  onPressed: _loadAll,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
                             ],
                           ),
                         ),
@@ -287,7 +410,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
   }
 
   // ----------------- Item rows -----------------
-
   Widget _incomeItem({
     required String name,
     required String amount,
@@ -405,7 +527,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
   }
 
   // ----------------- Small UI helpers -----------------
-
   Widget _roundIcon(Color c, IconData i) => Container(
     height: 32,
     width: 32,
@@ -450,55 +571,26 @@ class _EditProfilePageState extends State<EditProfilePage> {
     );
   }
 
-  Widget _glowPrimaryButton({
-    required String text,
-    required VoidCallback onPressed,
-  }) {
-    return Column(
-      children: [
-        Container(
-          height: 16,
-          decoration: const BoxDecoration(
-            gradient: RadialGradient(
-              radius: 0.7,
-              colors: [Color(0x665E52E6), Colors.transparent],
-            ),
-          ),
-        ),
-        SizedBox(
-          width: 160,
-          child: ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF5E52E6),
-              shape: const StadiumBorder(),
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              elevation: 0,
-            ),
-            onPressed: onPressed,
-            child: Text(
-              text,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  // ----------------- Confirm deletes (wires to DB) -----------------
-
+  // ----------------- Confirm deletes -----------------
   void _confirmDeleteIncome(String incomeId) {
     _confirmDelete('Income', () async {
       try {
+        // Set end_time to archive the income
         await _sb
             .from('Fixed_Income')
             .update({'end_time': _iso(DateTime.now())})
             .eq('income_id', incomeId);
+
         await _loadAll();
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Income deleted successfully'),
+              backgroundColor: Color(0xFF4CAF50),
+            ),
+          );
+        }
       } catch (e) {
         _showError('Error deleting income: $e');
       }
@@ -506,17 +598,63 @@ class _EditProfilePageState extends State<EditProfilePage> {
   }
 
   void _confirmDeleteExpense(String expenseId) {
-    _confirmDelete('Expense', () async {
-      try {
-        await _sb
-            .from('Fixed_Expense')
-            .update({'end_time': _iso(DateTime.now())})
-            .eq('expense_id', expenseId);
-        await _loadAll();
-      } catch (e) {
-        _showError('Error deleting expense: $e');
-      }
-    });
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1F1D33),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text(
+          'Delete Expense',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: const Text(
+          'Are you sure you want to permanently delete this expense?',
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(color: Colors.white70),
+            ),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            onPressed: () async {
+              Navigator.pop(ctx);
+
+              try {
+                // Permanently delete the expense from database
+                await _sb
+                    .from('Fixed_Expense')
+                    .delete()
+                    .eq('expense_id', expenseId);
+
+                await _loadAll();
+
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Expense deleted successfully'),
+                      backgroundColor: Color(0xFF4CAF50),
+                    ),
+                  );
+                }
+              } catch (e) {
+                _showError('Error deleting expense: $e');
+              }
+            },
+            child: const Text('Delete', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
   }
 
   void _confirmDeleteCategory(String categoryId) {
@@ -573,335 +711,14 @@ class _EditProfilePageState extends State<EditProfilePage> {
     );
   }
 
-  // ----------------- Bottom sheets -----------------
-
-  void _openAddIncomeSheet({Map<String, dynamic>? income}) {
-    final nameCtrl = TextEditingController(text: income?['name'] ?? '');
-    final amountCtrl = TextEditingController(
-      text: income?['monthly_income']?.toString() ?? '',
-    );
-    int payDay = (income?['payday'] as int?) ?? 27;
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: const Color(0xFF1F1D33),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
-      ),
-      builder: (ctx) {
-        return _IncomeForm(
-          income: income,
-          nameCtrl: nameCtrl,
-          amountCtrl: amountCtrl,
-          payDay: payDay,
-          onSave: (name, amount, payDay) async {
-            final now = DateTime.now();
-            final payload = {
-              'name': name,
-              'monthly_income': amount,
-              'payday': payDay,
-              'profile_id': kProfileId,
-            };
-
-            try {
-              if (income == null) {
-                payload['start_time'] = _iso(now);
-                await _sb.from('Fixed_Income').insert(payload);
-              } else {
-                await _sb
-                    .from('Fixed_Income')
-                    .update(payload)
-                    .eq('income_id', income['income_id']);
-              }
-
-              if (!mounted) return;
-              Navigator.pop(context);
-              await _loadAll();
-            } catch (e) {
-              _showError('Error saving income: $e');
-            }
-          },
-        );
-      },
-    ).then((_) {
-      nameCtrl.dispose();
-      amountCtrl.dispose();
-    });
-  }
-
-  void _openAddFixedExpenseSheet({Map<String, dynamic>? expense}) {
-    final nameCtrl = TextEditingController(text: expense?['name'] ?? '');
-    final amountCtrl = TextEditingController(
-      text: expense?['amount']?.toString() ?? '',
-    );
-    int dueDate = (expense?['due_date'] as int?) ?? 27;
-
-    String? selectedCategoryId =
-        expense?['category_id'] as String? ??
-        (_categories.isNotEmpty
-            ? _categories.first['category_id'] as String
-            : null);
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: const Color(0xFF1F1D33),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
-      ),
-      builder: (ctx) {
-        return _ExpenseForm(
-          expense: expense,
-          nameCtrl: nameCtrl,
-          amountCtrl: amountCtrl,
-          dueDate: dueDate,
-          categories: _categories,
-          selectedCategoryId: selectedCategoryId,
-          onSave: (name, amount, dueDate, categoryId) async {
-            final now = DateTime.now();
-            final payload = {
-              'name': name,
-              'amount': amount,
-              'due_date': dueDate,
-              'profile_id': kProfileId,
-              'category_id': categoryId,
-            };
-
-            try {
-              if (expense == null) {
-                payload['start_time'] = _iso(now);
-                await _sb.from('Fixed_Expense').insert(payload);
-              } else {
-                await _sb
-                    .from('Fixed_Expense')
-                    .update(payload)
-                    .eq('expense_id', expense['expense_id']);
-              }
-
-              if (!mounted) return;
-              Navigator.pop(context);
-              await _loadAll();
-            } catch (e) {
-              _showError('Error saving expense: $e');
-            }
-          },
-        );
-      },
-    ).then((_) {
-      nameCtrl.dispose();
-      amountCtrl.dispose();
-    });
-  }
-
-  void _openCategorySheet({Map<String, dynamic>? category}) {
-    final nameCtrl = TextEditingController(text: category?['name'] ?? '');
-    final limitCtrl = TextEditingController(
-      text: category?['monthly_limit']?.toString() ?? '',
-    );
-
-    String selectedIcon = category?['icon'] as String? ?? 'category';
-    String selectedColor = category?['icon_color'] as String? ?? '#7D5EF6';
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: const Color(0xFF1F1D33),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
-      ),
-      builder: (ctx) {
-        return _CategoryForm(
-          category: category,
-          nameCtrl: nameCtrl,
-          limitCtrl: limitCtrl,
-          selectedIcon: selectedIcon,
-          selectedColor: selectedColor,
-          onSave: (name, limit, icon, color) async {
-            final payload = {
-              'name': name,
-              'type': 'Custom',
-              'monthly_limit': limit,
-              'icon': icon,
-              'icon_color': color,
-              'is_archived': false,
-              'profile_id': kProfileId,
-            };
-
-            try {
-              if (category == null) {
-                await _sb.from('Category').insert(payload);
-              } else {
-                await _sb
-                    .from('Category')
-                    .update(payload)
-                    .eq('category_id', category['category_id']);
-              }
-              if (!mounted) return;
-              Navigator.pop(context);
-              await _loadAll();
-            } catch (e) {
-              _showError('Error saving category: $e');
-            }
-          },
-        );
-      },
-    ).then((_) {
-      nameCtrl.dispose();
-      limitCtrl.dispose();
-    });
-  }
-
-  // ----------------- Sheet UI bits -----------------
-
-  Widget _sheetLabel(String text) => Text(
-    text,
-    style: const TextStyle(
-      color: Colors.white,
-      fontSize: 14,
-      fontWeight: FontWeight.w500,
-    ),
-  );
-
-  Widget _sheetWhiteField({
-    required TextEditingController controller,
-    TextInputType? keyboard,
-    String? suffix,
-  }) {
-    return Container(
-      height: 44,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      child: Row(
-        children: [
-          Expanded(
-            child: TextField(
-              controller: controller,
-              keyboardType: keyboard ?? TextInputType.text,
-              decoration: const InputDecoration(
-                border: InputBorder.none,
-                isCollapsed: true,
-              ),
-              style: const TextStyle(
-                color: Color(0xFF1E1E1E),
-                fontSize: 14.5,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          if (suffix != null)
-            Text(
-              suffix,
-              style: const TextStyle(
-                color: Color(0xFF1E1E1E),
-                fontSize: 14.5,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _whiteDropdown<T>({
-    required T? value,
-    required List<DropdownMenuItem<T>> items,
-    required ValueChanged<T?> onChanged,
-    String? hint,
-  }) {
-    return Container(
-      height: 44,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<T>(
-          value: value,
-          isExpanded: true,
-          icon: const Icon(
-            Icons.keyboard_arrow_down_rounded,
-            color: AppColors.bg,
-          ),
-          dropdownColor: Colors.white,
-          style: const TextStyle(
-            color: Color(0xFF1E1E1E),
-            fontSize: 14.5,
-            fontWeight: FontWeight.w600,
-          ),
-          hint: hint == null
-              ? null
-              : Text(
-                  hint,
-                  style: const TextStyle(
-                    color: Color(0xFF7A7A7A),
-                    fontSize: 14.5,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-          items: items,
-          onChanged: onChanged,
-        ),
-      ),
-    );
-  }
-
-  Widget _sheetGlowButton({
-    required String text,
-    required VoidCallback onPressed,
-  }) {
-    return Column(
-      children: [
-        Container(
-          height: 14,
-          decoration: const BoxDecoration(
-            gradient: RadialGradient(
-              radius: 0.7,
-              colors: [Color(0x665E52E6), Colors.transparent],
-            ),
-          ),
-        ),
-        SizedBox(
-          width: 140,
-          child: ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF5E52E6),
-              shape: const StadiumBorder(),
-              padding: const EdgeInsets.symmetric(vertical: 10),
-              elevation: 0,
-            ),
-            onPressed: onPressed,
-            child: Text(
-              text,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
   // ----------------- Utils -----------------
-
   String _fmtMoney(dynamic v) {
     final d = (v is num) ? v.toDouble() : double.tryParse(v.toString()) ?? 0.0;
     return d.toStringAsFixed(2);
   }
 
   String _iso(DateTime d) =>
-      '${d.year.toString().padLeft(4, '0')}-'
-      '${d.month.toString().padLeft(2, '0')}-'
-      '${d.day.toString().padLeft(2, '0')}';
-
-  String _txt(dynamic v) => (v == null) ? '' : v.toString();
+      '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
   String _catName(String? id) {
     if (id == null) return 'Uncategorized';
@@ -951,831 +768,5 @@ class _EditProfilePageState extends State<EditProfilePage> {
         SnackBar(content: Text(message), backgroundColor: Colors.red),
       );
     }
-  }
-}
-
-// Separate widget classes to avoid StatefulBuilder issues
-
-class _IncomeForm extends StatefulWidget {
-  final Map<String, dynamic>? income;
-  final TextEditingController nameCtrl;
-  final TextEditingController amountCtrl;
-  final int payDay;
-  final Function(String, double, int) onSave;
-
-  const _IncomeForm({
-    required this.income,
-    required this.nameCtrl,
-    required this.amountCtrl,
-    required this.payDay,
-    required this.onSave,
-  });
-
-  @override
-  State<_IncomeForm> createState() => _IncomeFormState();
-}
-
-class _IncomeFormState extends State<_IncomeForm> {
-  late int _payDay;
-
-  @override
-  void initState() {
-    super.initState();
-    _payDay = widget.payDay;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(18, 20, 18, 20),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            widget.income == null
-                ? 'Add Monthly Income'
-                : 'Edit Monthly Income',
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 16),
-          _buildSheetLabel('Income Name'),
-          const SizedBox(height: 8),
-          _buildSheetWhiteField(controller: widget.nameCtrl),
-          const SizedBox(height: 16),
-
-          _buildSheetLabel('Monthly Amount'),
-          const SizedBox(height: 8),
-          _buildSheetWhiteField(
-            controller: widget.amountCtrl,
-            suffix: 'SAR',
-            keyboard: TextInputType.numberWithOptions(decimal: true),
-          ),
-          const SizedBox(height: 16),
-
-          _buildSheetLabel('Pay Day (1-31)'),
-          const SizedBox(height: 8),
-          _buildWhiteDropdown<int>(
-            value: _payDay,
-            items: List.generate(
-              31,
-              (i) => DropdownMenuItem(value: i + 1, child: Text('${i + 1}')),
-            ),
-            onChanged: (v) {
-              if (v != null) {
-                setState(() {
-                  _payDay = v;
-                });
-              }
-            },
-          ),
-          const SizedBox(height: 18),
-
-          Center(
-            child: _buildSheetGlowButton(
-              text: widget.income == null ? 'Add' : 'Save',
-              onPressed: () {
-                final name = widget.nameCtrl.text.trim();
-                final amt = double.tryParse(widget.amountCtrl.text.trim());
-                if (name.isEmpty || amt == null) {
-                  _showError('Please fill all required fields');
-                  return;
-                }
-                widget.onSave(name, amt, _payDay);
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSheetLabel(String text) => Text(
-    text,
-    style: const TextStyle(
-      color: Colors.white,
-      fontSize: 14,
-      fontWeight: FontWeight.w500,
-    ),
-  );
-
-  Widget _buildSheetWhiteField({
-    required TextEditingController controller,
-    TextInputType? keyboard,
-    String? suffix,
-  }) {
-    return Container(
-      height: 44,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      child: Row(
-        children: [
-          Expanded(
-            child: TextField(
-              controller: controller,
-              keyboardType: keyboard ?? TextInputType.text,
-              decoration: const InputDecoration(
-                border: InputBorder.none,
-                isCollapsed: true,
-              ),
-              style: const TextStyle(
-                color: Color(0xFF1E1E1E),
-                fontSize: 14.5,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          if (suffix != null)
-            Text(
-              suffix,
-              style: const TextStyle(
-                color: Color(0xFF1E1E1E),
-                fontSize: 14.5,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildWhiteDropdown<T>({
-    required T? value,
-    required List<DropdownMenuItem<T>> items,
-    required ValueChanged<T?> onChanged,
-    String? hint,
-  }) {
-    return Container(
-      height: 44,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<T>(
-          value: value,
-          isExpanded: true,
-          icon: const Icon(
-            Icons.keyboard_arrow_down_rounded,
-            color: AppColors.bg,
-          ),
-          dropdownColor: Colors.white,
-          style: const TextStyle(
-            color: Color(0xFF1E1E1E),
-            fontSize: 14.5,
-            fontWeight: FontWeight.w600,
-          ),
-          hint: hint == null
-              ? null
-              : Text(
-                  hint,
-                  style: const TextStyle(
-                    color: Color(0xFF7A7A7A),
-                    fontSize: 14.5,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-          items: items,
-          onChanged: onChanged,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSheetGlowButton({
-    required String text,
-    required VoidCallback onPressed,
-  }) {
-    return Column(
-      children: [
-        Container(
-          height: 14,
-          decoration: const BoxDecoration(
-            gradient: RadialGradient(
-              radius: 0.7,
-              colors: [Color(0x665E52E6), Colors.transparent],
-            ),
-          ),
-        ),
-        SizedBox(
-          width: 140,
-          child: ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF5E52E6),
-              shape: const StadiumBorder(),
-              padding: const EdgeInsets.symmetric(vertical: 10),
-              elevation: 0,
-            ),
-            onPressed: onPressed,
-            child: Text(
-              text,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: Colors.red),
-    );
-  }
-}
-
-class _ExpenseForm extends StatefulWidget {
-  final Map<String, dynamic>? expense;
-  final TextEditingController nameCtrl;
-  final TextEditingController amountCtrl;
-  final int dueDate;
-  final List<Map<String, dynamic>> categories;
-  final String? selectedCategoryId;
-  final Function(String, double, int, String) onSave;
-
-  const _ExpenseForm({
-    required this.expense,
-    required this.nameCtrl,
-    required this.amountCtrl,
-    required this.dueDate,
-    required this.categories,
-    required this.selectedCategoryId,
-    required this.onSave,
-  });
-
-  @override
-  State<_ExpenseForm> createState() => _ExpenseFormState();
-}
-
-class _ExpenseFormState extends State<_ExpenseForm> {
-  late int _dueDate;
-  late String? _selectedCategoryId;
-
-  @override
-  void initState() {
-    super.initState();
-    _dueDate = widget.dueDate;
-    _selectedCategoryId = widget.selectedCategoryId;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(18, 20, 18, 20),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            widget.expense == null ? 'Add Fixed Expense' : 'Edit Fixed Expense',
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 16),
-          _buildSheetLabel('Expense Name   ·   Category'),
-          const SizedBox(height: 8),
-
-          Row(
-            children: [
-              Expanded(
-                child: _buildSheetWhiteField(controller: widget.nameCtrl),
-              ),
-              const SizedBox(width: 10),
-              SizedBox(
-                width: 170,
-                child: _buildWhiteDropdown<String>(
-                  value: _selectedCategoryId,
-                  items: widget.categories
-                      .map<DropdownMenuItem<String>>(
-                        (c) => DropdownMenuItem(
-                          value: c['category_id'] as String,
-                          child: Text(
-                            c['name'] as String,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      )
-                      .toList(),
-                  hint: 'Category',
-                  onChanged: (v) {
-                    setState(() {
-                      _selectedCategoryId = v;
-                    });
-                  },
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 16),
-          _buildSheetLabel('Due Day (1-31)'),
-          const SizedBox(height: 8),
-          _buildWhiteDropdown<int>(
-            value: _dueDate,
-            items: List.generate(
-              31,
-              (i) => DropdownMenuItem(value: i + 1, child: Text('${i + 1}')),
-            ),
-            onChanged: (v) {
-              if (v != null) {
-                setState(() {
-                  _dueDate = v;
-                });
-              }
-            },
-          ),
-          const SizedBox(height: 16),
-
-          _buildSheetLabel('Amount'),
-          const SizedBox(height: 8),
-          _buildSheetWhiteField(
-            controller: widget.amountCtrl,
-            keyboard: TextInputType.numberWithOptions(decimal: true),
-            suffix: 'SAR',
-          ),
-          const SizedBox(height: 18),
-
-          Center(
-            child: _buildSheetGlowButton(
-              text: widget.expense == null ? 'Add' : 'Save',
-              onPressed: () {
-                final name = widget.nameCtrl.text.trim();
-                final amt = double.tryParse(widget.amountCtrl.text.trim());
-                if (name.isEmpty ||
-                    amt == null ||
-                    _selectedCategoryId == null) {
-                  _showError('Please fill all required fields');
-                  return;
-                }
-                widget.onSave(name, amt, _dueDate, _selectedCategoryId!);
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ... (copy the same helper methods from _IncomeForm)
-  Widget _buildSheetLabel(String text) => Text(
-    text,
-    style: const TextStyle(
-      color: Colors.white,
-      fontSize: 14,
-      fontWeight: FontWeight.w500,
-    ),
-  );
-
-  Widget _buildSheetWhiteField({
-    required TextEditingController controller,
-    TextInputType? keyboard,
-    String? suffix,
-  }) {
-    return Container(
-      height: 44,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      child: Row(
-        children: [
-          Expanded(
-            child: TextField(
-              controller: controller,
-              keyboardType: keyboard ?? TextInputType.text,
-              decoration: const InputDecoration(
-                border: InputBorder.none,
-                isCollapsed: true,
-              ),
-              style: const TextStyle(
-                color: Color(0xFF1E1E1E),
-                fontSize: 14.5,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          if (suffix != null)
-            Text(
-              suffix,
-              style: const TextStyle(
-                color: Color(0xFF1E1E1E),
-                fontSize: 14.5,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildWhiteDropdown<T>({
-    required T? value,
-    required List<DropdownMenuItem<T>> items,
-    required ValueChanged<T?> onChanged,
-    String? hint,
-  }) {
-    return Container(
-      height: 44,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<T>(
-          value: value,
-          isExpanded: true,
-          icon: const Icon(
-            Icons.keyboard_arrow_down_rounded,
-            color: AppColors.bg,
-          ),
-          dropdownColor: Colors.white,
-          style: const TextStyle(
-            color: Color(0xFF1E1E1E),
-            fontSize: 14.5,
-            fontWeight: FontWeight.w600,
-          ),
-          hint: hint == null
-              ? null
-              : Text(
-                  hint,
-                  style: const TextStyle(
-                    color: Color(0xFF7A7A7A),
-                    fontSize: 14.5,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-          items: items,
-          onChanged: onChanged,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSheetGlowButton({
-    required String text,
-    required VoidCallback onPressed,
-  }) {
-    return Column(
-      children: [
-        Container(
-          height: 14,
-          decoration: const BoxDecoration(
-            gradient: RadialGradient(
-              radius: 0.7,
-              colors: [Color(0x665E52E6), Colors.transparent],
-            ),
-          ),
-        ),
-        SizedBox(
-          width: 140,
-          child: ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF5E52E6),
-              shape: const StadiumBorder(),
-              padding: const EdgeInsets.symmetric(vertical: 10),
-              elevation: 0,
-            ),
-            onPressed: onPressed,
-            child: Text(
-              text,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: Colors.red),
-    );
-  }
-}
-
-class _CategoryForm extends StatefulWidget {
-  final Map<String, dynamic>? category;
-  final TextEditingController nameCtrl;
-  final TextEditingController limitCtrl;
-  final String selectedIcon;
-  final String selectedColor;
-  final Function(String, double?, String, String) onSave;
-
-  const _CategoryForm({
-    required this.category,
-    required this.nameCtrl,
-    required this.limitCtrl,
-    required this.selectedIcon,
-    required this.selectedColor,
-    required this.onSave,
-  });
-
-  @override
-  State<_CategoryForm> createState() => _CategoryFormState();
-}
-
-class _CategoryFormState extends State<_CategoryForm> {
-  late String _selectedIcon;
-  late String _selectedColor;
-
-  final List<Map<String, dynamic>> _availableIcons = [
-    {'icon': 'category', 'name': 'Category', 'data': Icons.category},
-    {'icon': 'shopping_cart', 'name': 'Shopping', 'data': Icons.shopping_cart},
-    {'icon': 'restaurant', 'name': 'Food', 'data': Icons.restaurant},
-    {
-      'icon': 'directions_car',
-      'name': 'Transport',
-      'data': Icons.directions_car,
-    },
-    {'icon': 'home', 'name': 'Home', 'data': Icons.home},
-    {'icon': 'local_hospital', 'name': 'Health', 'data': Icons.local_hospital},
-    {'icon': 'school', 'name': 'Education', 'data': Icons.school},
-    {
-      'icon': 'sports_esports',
-      'name': 'Entertainment',
-      'data': Icons.sports_esports,
-    },
-    {'icon': 'attach_money', 'name': 'Income', 'data': Icons.attach_money},
-    {'icon': 'savings', 'name': 'Savings', 'data': Icons.savings},
-  ];
-
-  final List<String> _availableColors = [
-    '#FF6B6B',
-    '#4ECDC4',
-    '#45B7D1',
-    '#96CEB4',
-    '#FFEAA7',
-    '#DDA0DD',
-    '#98D8C8',
-    '#F7DC6F',
-    '#BB8FCE',
-    '#85C1E9',
-    '#7D5EF6',
-    '#5E52E6',
-    '#B388FF',
-    '#82E0AA',
-    '#F8C471',
-  ];
-
-  @override
-  void initState() {
-    super.initState();
-    _selectedIcon = widget.selectedIcon;
-    _selectedColor = widget.selectedColor;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(18, 20, 18, 20),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            widget.category == null ? 'Add Category' : 'Edit Category',
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 16),
-          _buildSheetLabel('Category Name'),
-          const SizedBox(height: 8),
-          _buildSheetWhiteField(controller: widget.nameCtrl),
-          const SizedBox(height: 16),
-
-          _buildSheetLabel('Monthly Limit (optional)'),
-          const SizedBox(height: 8),
-          _buildSheetWhiteField(
-            controller: widget.limitCtrl,
-            keyboard: TextInputType.numberWithOptions(decimal: true),
-            suffix: 'SAR',
-          ),
-          const SizedBox(height: 16),
-
-          _buildSheetLabel('Icon'),
-          const SizedBox(height: 8),
-          SizedBox(
-            height: 80,
-            child: GridView.builder(
-              physics: const NeverScrollableScrollPhysics(),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 5,
-                crossAxisSpacing: 8,
-                mainAxisSpacing: 8,
-              ),
-              itemCount: _availableIcons.length,
-              itemBuilder: (context, index) {
-                final iconInfo = _availableIcons[index];
-                final isSelected = _selectedIcon == iconInfo['icon'];
-                return GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _selectedIcon = iconInfo['icon'];
-                    });
-                  },
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: isSelected
-                          ? const Color(0xFF5E52E6)
-                          : Colors.white.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Icon(
-                      iconInfo['data'] as IconData,
-                      color: isSelected ? Colors.white : Colors.white70,
-                      size: 20,
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          _buildSheetLabel('Color'),
-          const SizedBox(height: 8),
-          SizedBox(
-            height: 60,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              itemCount: _availableColors.length,
-              itemBuilder: (context, index) {
-                final color = _availableColors[index];
-                final isSelected = _selectedColor == color;
-                return GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _selectedColor = color;
-                    });
-                  },
-                  child: Container(
-                    width: 40,
-                    height: 40,
-                    margin: const EdgeInsets.only(right: 8),
-                    decoration: BoxDecoration(
-                      color: _hexToColor(color),
-                      shape: BoxShape.circle,
-                      border: isSelected
-                          ? Border.all(color: Colors.white, width: 3)
-                          : null,
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-          const SizedBox(height: 18),
-
-          Center(
-            child: _buildSheetGlowButton(
-              text: widget.category == null ? 'Add' : 'Save',
-              onPressed: () {
-                final name = widget.nameCtrl.text.trim();
-                if (name.isEmpty) {
-                  _showError('Category name is required');
-                  return;
-                }
-
-                final lim = widget.limitCtrl.text.trim().isEmpty
-                    ? null
-                    : double.tryParse(widget.limitCtrl.text.trim());
-
-                widget.onSave(name, lim, _selectedIcon, _selectedColor);
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ... (copy the same helper methods from _IncomeForm)
-  Widget _buildSheetLabel(String text) => Text(
-    text,
-    style: const TextStyle(
-      color: Colors.white,
-      fontSize: 14,
-      fontWeight: FontWeight.w500,
-    ),
-  );
-
-  Widget _buildSheetWhiteField({
-    required TextEditingController controller,
-    TextInputType? keyboard,
-    String? suffix,
-  }) {
-    return Container(
-      height: 44,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      child: Row(
-        children: [
-          Expanded(
-            child: TextField(
-              controller: controller,
-              keyboardType: keyboard ?? TextInputType.text,
-              decoration: const InputDecoration(
-                border: InputBorder.none,
-                isCollapsed: true,
-              ),
-              style: const TextStyle(
-                color: Color(0xFF1E1E1E),
-                fontSize: 14.5,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          if (suffix != null)
-            Text(
-              suffix,
-              style: const TextStyle(
-                color: Color(0xFF1E1E1E),
-                fontSize: 14.5,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSheetGlowButton({
-    required String text,
-    required VoidCallback onPressed,
-  }) {
-    return Column(
-      children: [
-        Container(
-          height: 14,
-          decoration: const BoxDecoration(
-            gradient: RadialGradient(
-              radius: 0.7,
-              colors: [Color(0x665E52E6), Colors.transparent],
-            ),
-          ),
-        ),
-        SizedBox(
-          width: 140,
-          child: ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF5E52E6),
-              shape: const StadiumBorder(),
-              padding: const EdgeInsets.symmetric(vertical: 10),
-              elevation: 0,
-            ),
-            onPressed: onPressed,
-            child: Text(
-              text,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: Colors.red),
-    );
-  }
-
-  Color _hexToColor(String hex) {
-    hex = hex.replaceAll('#', '');
-    if (hex.length == 6) {
-      hex = 'FF$hex';
-    }
-    return Color(int.parse(hex, radix: 16));
   }
 }

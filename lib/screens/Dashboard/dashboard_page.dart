@@ -81,8 +81,8 @@ class _DashboardPageState extends State<DashboardPage> {
     }
 
     try {
-      //final profileId = await _getProfileId();
-      const profileId = '135dee2a-e3ec-47c3-abf5-8f4ed707c3db';
+      final profileId = await _getProfileId();
+      //const profileId = '135dee2a-e3ec-47c3-abf5-8f4ed707c3db';
 
       // 1) balance
       final prof = await _sb
@@ -197,15 +197,15 @@ class _DashboardPageState extends State<DashboardPage> {
         final i = bucketIndex(date);
         if (i < 0 || i >= n) continue;
         if (type == 'Expense') {
-          _rawExpenses[i]   += amt;  // <- included in first chart
-          _seriesExpenses[i] += amt; // <- included in trends/category
+          _rawExpenses[i]   += amt;  // included in first chart
+          _seriesExpenses[i] += amt; // included in trends and category
         } else if (type == 'Earning') {
           _rawEarnings[i]   += amt;
           _seriesEarnings[i] += amt;
         }
       }
 
-      // 7) fixed income (monthly fix + weekly spread)
+      // 7) fixed income monthly fix plus weekly spread
       for (final r in fixedIncomeRows) {
         final monthly = (r['monthly_income'] as num?) ?? 0;
         final st = _parseOrNull(r['start_time']);
@@ -221,7 +221,6 @@ class _DashboardPageState extends State<DashboardPage> {
               _seriesIncome[i] += monthly * monthsActive;
             }
           } else if (_periodIndex == 1) {
-            // Month counts if the month overlaps [st, en]
             final y = buckets[i].year!, m = buckets[i].month!;
             final firstDay = DateTime(y, m, 1);
             final lastDay  = DateTime(y, m + 1, 0);
@@ -233,7 +232,6 @@ class _DashboardPageState extends State<DashboardPage> {
               _seriesIncome[i] += monthly;
             }
           } else {
-            // WEEKLY → distribute monthly/4 if month is active
             final ref = buckets[i].middleDate!;
             final pd = math.min(payday, _lastDayOfMonth(ref.year, ref.month));
             final payDate = DateTime(ref.year, ref.month, pd);
@@ -246,7 +244,7 @@ class _DashboardPageState extends State<DashboardPage> {
         }
       }
 
-      // 8) fixed expenses (due_date aware): monthly to the due-month, weekly to the due-week, yearly sums
+      // 8) fixed expenses due date aware
       for (final r in fixedExpenseRows) {
         final monthly = (r['amount'] as num?) ?? 0;
         final dueDay  = (r['due_date'] as int?) ?? 1;
@@ -271,7 +269,6 @@ class _DashboardPageState extends State<DashboardPage> {
               _seriesExpenses[i] += monthly;
             }
           } else {
-            // weekly → place the full amount in the week that contains the due-day (for the current month)
             final ref = buckets[i].middleDate!;
             final dd  = math.min(dueDay, _lastDayOfMonth(ref.year, ref.month));
             final dueDate = DateTime(ref.year, ref.month, dd);
@@ -287,7 +284,7 @@ class _DashboardPageState extends State<DashboardPage> {
         }
       }
 
-      // 9) labels (raw & filtered)
+      // 9) labels raw and filtered
       if (_periodIndex == 2) {
         _rawLabels = [for (final b in buckets) '${b.year}'];
       } else if (_periodIndex == 0) {
@@ -296,35 +293,32 @@ class _DashboardPageState extends State<DashboardPage> {
         _rawLabels = const ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
       }
 
-      // >>> ONLY CHANGE: for Monthly mode, hide future months from Financial Trends
+      // only change for monthly mode hide future months in trends
       if (_periodIndex == 1) {
-        final currentMonthIdx = DateTime.now().month - 1; // 0-based
+        final currentMonthIdx = DateTime.now().month - 1;
         for (int i = currentMonthIdx + 1; i < _seriesExpenses.length; i++) {
           _seriesExpenses[i] = 0;
           _seriesEarnings[i] = 0;
           _seriesIncome[i]   = 0;
         }
       }
-      // <<< ONLY CHANGE END
 
-      // 10) filter out empty buckets for charts (2–4), but KEEP raw for Income Overview
+      // 10) filter out empty buckets for charts 2–4 keep raw for income overview
       final filtered = _filterEmpty(_rawLabels, _seriesExpenses, _seriesEarnings, _seriesIncome);
       _bucketLabels   = filtered.labels;
       _seriesExpenses = filtered.expenses;
       _seriesEarnings = filtered.earnings;
       _seriesIncome   = filtered.income;
 
-      // 11) Category totals based on period mode
+      // 11) Category totals by period
       final catTotals = <String, num>{};
 
       Future<void> _loadCategorySlicesMonthly() async {
-        // Current calendar month
         final nowM = DateTime.now();
         final y = nowM.year, m = nowM.month;
         final mStart = DateTime(y, m, 1);
         final mEnd   = DateTime(y, m + 1, 0);
 
-        // Get records for this month
         final mfrForMonth = await _sb
             .from('Monthly_Financial_Record')
             .select('record_id, period_start, period_end')
@@ -338,7 +332,6 @@ class _DashboardPageState extends State<DashboardPage> {
         ];
         if (recordIds.isEmpty) return;
 
-        // Pull category summaries for those records
         final catSumRows = await _sb
             .from('Category_Summary')
             .select('category_id, total_expense, record_id')
@@ -355,13 +348,11 @@ class _DashboardPageState extends State<DashboardPage> {
       }
 
       Future<void> _loadCategorySlicesYearly() async {
-        // Current calendar year
         final nowY = DateTime.now();
         final y = nowY.year;
         final yStart = DateTime(y, 1, 1);
         final yEnd   = DateTime(y, 12, 31);
 
-        // Get records for this year
         final mfrForYear = await _sb
             .from('Monthly_Financial_Record')
             .select('record_id, period_start, period_end')
@@ -375,7 +366,6 @@ class _DashboardPageState extends State<DashboardPage> {
         ];
         if (recordIds.isEmpty) return;
 
-        // Fetch all Category_Summary rows for those records and aggregate
         final catSumRows = await _sb
             .from('Category_Summary')
             .select('category_id, total_expense, record_id')
@@ -392,7 +382,6 @@ class _DashboardPageState extends State<DashboardPage> {
       }
 
       void _loadCategorySlicesWeekly() {
-        // Current week of the month
         final nowW = DateTime.now();
         final y = nowW.year, m = nowW.month;
         final lastDay = DateTime(y, m + 1, 0).day;
@@ -416,7 +405,6 @@ class _DashboardPageState extends State<DashboardPage> {
         final weekStart = DateTime(y, m, wStartDay);
         final weekEnd   = DateTime(y, m, wEndDay);
 
-        // Variable expenses this week
         for (final r in trxRows) {
           if ((r['type'] as String?) != 'Expense') continue;
           final cid = r['category_id'] as String?;
@@ -429,7 +417,6 @@ class _DashboardPageState extends State<DashboardPage> {
           catTotals[cid] = (catTotals[cid] ?? 0) + amt;
         }
 
-        // Fixed expenses for due dates in this week
         for (final r in fixedExpenseRows) {
           final monthly = (r['amount'] as num?) ?? 0;
           if (monthly <= 0) continue;
@@ -452,7 +439,6 @@ class _DashboardPageState extends State<DashboardPage> {
         }
       }
 
-      // Choose the correct loader
       if (_periodIndex == 0) {
         _loadCategorySlicesWeekly();
       } else if (_periodIndex == 1) {
@@ -461,7 +447,6 @@ class _DashboardPageState extends State<DashboardPage> {
         await _loadCategorySlicesYearly();
       }
 
-      // Convert totals to slices
       _categorySlices = [
         for (final e in catTotals.entries)
           if (e.value > 0 && activeCategoryIds.contains(e.key))
@@ -473,16 +458,16 @@ class _DashboardPageState extends State<DashboardPage> {
             ),
       ]..sort((a, b) => b.value.compareTo(a.value));
 
-      // 12) Savings — ONLY modifies _savingsSeries (+ _savingsLabels if present)
+      // 12) Savings only modifies _savingsSeries and _savingsLabels
       _savingsSeries = [];
       List<String> _tmpSavingsLabels = [];
 
       if (_periodIndex == 0) {
-        // ===== WEEKLY (current month) =====
+        // ===== WEEKLY current month =====
         final now = DateTime.now();
         final weeklyVals = List<num>.filled(4, 0);
 
-        // A) Fixed Income → monthly/4 to each week if this month's payday is active
+        // A) Fixed Income
         for (final r in fixedIncomeRows) {
           final monthly = (r['monthly_income'] as num?) ?? 0;
           final st = _parseOrNull(r['start_time']);
@@ -498,7 +483,7 @@ class _DashboardPageState extends State<DashboardPage> {
           for (int i = 0; i < 4; i++) weeklyVals[i] += perWeek;
         }
 
-        // B) Variable transactions → bucket by actual day
+        // B) Variable transactions
         for (final r in trxRows) {
           final d = DateTime.parse(r['date'] as String);
           if (d.year != now.year || d.month != now.month) continue;
@@ -512,7 +497,7 @@ class _DashboardPageState extends State<DashboardPage> {
           }
         }
 
-        // C) Fixed expenses → charge in the week that contains the due day
+        // C) Fixed expenses
         for (final r in fixedExpenseRows) {
           final monthly = (r['amount'] as num?) ?? 0;
           final dueDay  = (r['due_date'] as int?) ?? 1;
@@ -529,7 +514,7 @@ class _DashboardPageState extends State<DashboardPage> {
           weeklyVals[idx] -= monthly;
         }
 
-        // D) Carry any negative forward: clamp week to 0, subtract deficit from next week
+        // D) Carry negative forward clamp to zero then subtract from next week
         for (int i = 0; i < 4; i++) {
           if (weeklyVals[i] < 0) {
             final deficit = -weeklyVals[i];
@@ -538,9 +523,16 @@ class _DashboardPageState extends State<DashboardPage> {
           }
         }
 
-        // E) Only show available (non-zero) weeks, with labels
+        // E) Show only completed weeks do not show the current partial week
+        final today = DateTime.now();
+        final currentWeekIdx =
+            (today.day <= 7)  ? 0 :
+            (today.day <= 14) ? 1 :
+            (today.day <= 22) ? 2 : 3;
+
+        final lastCompleted = currentWeekIdx - 1;
         const wLabels = ['W1','W2','W3','W4'];
-        for (int i = 0; i < 4; i++) {
+        for (int i = 0; i <= lastCompleted && i < 4; i++) {
           if (weeklyVals[i] != 0) {
             _savingsSeries.add(weeklyVals[i]);
             _tmpSavingsLabels.add(wLabels[i]);
@@ -548,7 +540,7 @@ class _DashboardPageState extends State<DashboardPage> {
         }
 
       } else if (_periodIndex == 1) {
-        // ===== MONTHLY (current year) =====
+        // ===== MONTHLY current year =====
         final byMonth = List<num>.filled(12, 0);
         for (final r in mfrRows) {
           final d = DateTime.parse(r['period_start'] as String);
@@ -565,7 +557,7 @@ class _DashboardPageState extends State<DashboardPage> {
         }
 
       } else {
-        // ===== YEARLY (ALL years) =====
+        // ===== YEARLY all years =====
         final allMfr = await _sb
             .from('Monthly_Financial_Record')
             .select('period_start, monthly_saving')
@@ -588,7 +580,6 @@ class _DashboardPageState extends State<DashboardPage> {
         }
       }
 
-      // If your state has _savingsLabels, keep them in sync. If not, this is harmless.
       try { _savingsLabels = _tmpSavingsLabels; } catch (_) {}
 
       if (!mounted) return;
@@ -623,7 +614,6 @@ class _DashboardPageState extends State<DashboardPage> {
   List<_Bucket> _buildYearlyBuckets(int y1, int y2) =>
       [for (var y=y1; y<=y2; y++) _Bucket(y, null, DateTime(y, 6, 15))];
 
-  // remove buckets whose three series are all zero
   _Filtered _filterEmpty(List<String> labels, List<num> a, List<num> b, List<num> c) {
     final keep = <int>[];
     for (var i = 0; i < labels.length; i++) {
@@ -638,17 +628,14 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  // NEW: index of the current calendar bucket in RAW arrays
   int _currentRawBucketIndex() {
     if (_allBuckets.isEmpty) return -1;
     final now = DateTime.now();
     if (_periodIndex == 0) {
-      // weeks are fixed W1..W4 for current month buckets
       return (now.day <= 7) ? 0 : (now.day <= 14) ? 1 : (now.day <= 21) ? 2 : 3;
     } else if (_periodIndex == 1) {
       return now.month - 1;
     } else {
-      // find the year position (range is [now.year-4 .. now.year])
       for (int i = 0; i < _allBuckets.length; i++) {
         if (_allBuckets[i].year == now.year) return i;
       }
@@ -682,7 +669,6 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   Widget _buildBody(BuildContext context) {
-    // ===== Income Overview should reflect the CURRENT calendar bucket
     final idx = _currentRawBucketIndex();
     num totalExpenses = 0, totalEarnings = 0, totalIncome = 0;
     if (idx >= 0 && idx < _rawExpenses.length) {
@@ -691,21 +677,16 @@ class _DashboardPageState extends State<DashboardPage> {
       totalIncome   = _rawIncome[idx];
     }
 
-    // Base for gauge = earnings + income
     final denom = (totalIncome + totalEarnings);
     final left  = math.max(0, denom - totalExpenses);
     final percentLeft = denom <= 0 ? 0.0 : (left / denom).clamp(0, 1).toDouble();
 
-    // Legends for Income Overview — show exactly the current bucket values
     final incomeLegends = [
       _LegendItem('Expenses', '${totalExpenses.toStringAsFixed(0)} SAR', _violet),
       _LegendItem('Earnings', '${totalEarnings.toStringAsFixed(0)} SAR', _cyan),
       _LegendItem('Income',   '${totalIncome.toStringAsFixed(0)} SAR', _muted),
     ];
 
-    // Legends for the bar chart — keep existing filtered series, but legends below chart
-    // can still display current bucket values to stay consistent with the top panel.
-    // Legends for the bar chart: sum across the visible bars (all shown buckets)
     final trendsTotalExpenses = _seriesExpenses.fold<num>(0, (a, b) => a + b);
     final trendsTotalEarnings = _seriesEarnings.fold<num>(0, (a, b) => a + b);
     final trendsTotalIncome   = _seriesIncome.fold<num>(0, (a, b) => a + b);
@@ -721,7 +702,6 @@ class _DashboardPageState extends State<DashboardPage> {
         _LegendItem(s.name, '${s.value.toStringAsFixed(0)} SAR', s.color),
     ];
 
-    // Force gauge rebuild when period changes or the selected bucket changes
     final gaugeKey = ValueKey<String>(
       'gauge_${_periodIndex}_${idx}_${totalExpenses}_${totalEarnings}_${totalIncome}',
     );
@@ -732,7 +712,6 @@ class _DashboardPageState extends State<DashboardPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Title and balance
           Stack(
             children: [
               Positioned(
@@ -765,14 +744,12 @@ class _DashboardPageState extends State<DashboardPage> {
               style: TextStyle(color: AppColors.textGrey, fontSize: 15, fontWeight: FontWeight.w700)),
           const SizedBox(height: 18),
 
-          // Period control
           _HeaderPanel(
             periodIndex: _periodIndex,
             onPeriodChanged: (i) => setState(() { _periodIndex = i; _loadAll(); }),
           ),
           const SizedBox(height: 18),
 
-          // Income Overview
           const _BlockTitle('Income Overview'),
           const SizedBox(height: _betweenTitleAndCard),
           _SectionCard(
@@ -795,7 +772,6 @@ class _DashboardPageState extends State<DashboardPage> {
           ),
           const SizedBox(height: 16),
 
-          // Financial Trends
           const _BlockTitle('Financial Trends'),
           const SizedBox(height: _betweenTitleAndCard),
           _SectionCard(
@@ -819,7 +795,6 @@ class _DashboardPageState extends State<DashboardPage> {
           ),
           const SizedBox(height: 16),
 
-          // Savings Over Time
           const _BlockTitle('Savings Over Time'),
           const SizedBox(height: _betweenTitleAndCard),
           _SectionCard(
@@ -828,7 +803,7 @@ class _DashboardPageState extends State<DashboardPage> {
               padding: const EdgeInsets.only(top: 30, bottom: 10),
               child: SavingsSparkline(
                 values: _savingsSeries.map((e) => e.toDouble()).toList(),
-                labels: _savingsLabels,      // same length as values, from DB rows you kept
+                labels: _savingsLabels,
                 yAxisTitle: 'Monthly savings',
                 showPoints: true,
               ),
@@ -836,7 +811,6 @@ class _DashboardPageState extends State<DashboardPage> {
           ),
           const SizedBox(height: 16),
 
-          // Category Breakdown
           const _BlockTitle('Category Breakdown'),
           const SizedBox(height: _betweenTitleAndCard),
           _SectionCard(
@@ -889,11 +863,9 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   int _monthsActiveInYear(DateTime? st, DateTime? en, int year) {
-    // Clamp the active interval to the given year's bounds, then count months inclusive.
     final yearStart = DateTime(year, 1, 1);
     final yearEnd   = DateTime(year, 12, 31);
 
-    // Normalize to month starts
     DateTime start = st == null ? yearStart : DateTime(st.year, st.month, 1);
     DateTime end   = en == null ? yearEnd   : DateTime(en.year, en.month, 1);
 
@@ -904,7 +876,7 @@ class _DashboardPageState extends State<DashboardPage> {
 
     final startKey = start.year * 12 + start.month;
     final endKey   = end.year * 12 + end.month;
-    return endKey - startKey + 1; // inclusive month count
+    return endKey - startKey + 1;
   }
 
   void _showInfo(BuildContext context, String text) {

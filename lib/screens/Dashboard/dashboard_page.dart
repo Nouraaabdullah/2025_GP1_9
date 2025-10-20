@@ -137,6 +137,11 @@ class _DashboardPageState extends State<DashboardPage> {
           .gte('period_start', _iso(DateTime(now.year, 1, 1)))
           .lte('period_start', _iso(DateTime(now.year, 12, 31)));
 
+      // active category ids for filtering summaries and old rows
+      final activeCategoryIds = <String>{
+        for (final r in catRows) r['category_id'] as String,
+      };
+
       // 4) buckets
       final buckets = (_periodIndex == 0)
           ? _buildWeeklyBuckets(DateTime(now.year, now.month, 1), DateTime(now.year, now.month + 1, 0))
@@ -172,7 +177,6 @@ class _DashboardPageState extends State<DashboardPage> {
         }
       }
 
-
       // 5) reset series (RAW + filtered)
       final n = buckets.length;
       // raw (no filtering)
@@ -200,7 +204,6 @@ class _DashboardPageState extends State<DashboardPage> {
           _seriesEarnings[i] += amt;
         }
       }
-
 
       // 7) fixed income (monthly fix + weekly spread)
       for (final r in fixedIncomeRows) {
@@ -300,46 +303,157 @@ class _DashboardPageState extends State<DashboardPage> {
       _seriesEarnings = filtered.earnings;
       _seriesIncome   = filtered.income;
 
-      // 11) Category totals (variable + fixed expenses) for the selected window
+      // 11) Category totals based on period mode
       final catTotals = <String, num>{};
 
-      // variable expenses from Transaction by actual date in range
-      for (final r in trxRows) {
-        if ((r['type'] as String?) != 'Expense') continue;
-        final catId = r['category_id'] as String?;
-        if (catId == null) continue;
-        final amt = (r['amount'] as num?) ?? 0;
-        final date = DateTime.parse(r['date'] as String);
-        if (date.isBefore(rangeStart) || date.isAfter(rangeEnd)) continue;
-        catTotals[catId] = (catTotals[catId] ?? 0) + amt;
-      }
+      Future<void> _loadCategorySlicesMonthly() async {
+        // Current calendar month
+        final nowM = DateTime.now();
+        final y = nowM.year, m = nowM.month;
+        final mStart = DateTime(y, m, 1);
+        final mEnd   = DateTime(y, m + 1, 0);
 
-      // fixed expenses add by due date occurrence within the range
-      for (final r in fixedExpenseRows) {
-        final monthly = (r['amount'] as num?) ?? 0;
-        final catId   = r['category_id'] as String?;
-        if (catId == null) continue;
-        final dueDay  = (r['due_date'] as int?) ?? 1;
-        final st = _parseOrNull(r['start_time']);
-        final en = _parseOrNull(r['end_time']);
+        // Get records for this month
+        final mfrForMonth = await _sb
+            .from('Monthly_Financial_Record')
+            .select('record_id, period_start, period_end')
+            .eq('profile_id', profileId)
+            .gte('period_start', _iso(mStart))
+            .lte('period_start', _iso(mEnd));
 
-        DateTime iter = DateTime(rangeStart.year, rangeStart.month, 1);
-        final endIter = DateTime(rangeEnd.year, rangeEnd.month, 1);
-        while (!iter.isAfter(endIter)) {
-          final dd = math.min(dueDay, _lastDayOfMonth(iter.year, iter.month));
-          final dueDate = DateTime(iter.year, iter.month, dd);
-          final inUserRange = !dueDate.isBefore(rangeStart) && !dueDate.isAfter(rangeEnd);
-          final active = (st == null || !dueDate.isBefore(st)) && (en == null || !dueDate.isAfter(en));
-          if (inUserRange && active) {
-            catTotals[catId] = (catTotals[catId] ?? 0) + monthly;
-          }
-          iter = DateTime(iter.year, iter.month + 1, 1);
+        final recordIds = <String>[
+          for (final r in mfrForMonth)
+            if (r['record_id'] != null) r['record_id'] as String
+        ];
+        if (recordIds.isEmpty) return;
+
+        // Pull category summaries for those records
+        final catSumRows = await _sb
+            .from('Category_Summary')
+            .select('category_id, total_expense, record_id')
+            .inFilter('record_id', recordIds);
+
+        for (final r in catSumRows) {
+          final cid = r['category_id'] as String?;
+          if (cid == null) continue;
+          if (!activeCategoryIds.contains(cid)) continue;
+          final amt = (r['total_expense'] as num?) ?? 0;
+          if (amt <= 0) continue;
+          catTotals[cid] = (catTotals[cid] ?? 0) + amt;
         }
       }
 
+      Future<void> _loadCategorySlicesYearly() async {
+        // Current calendar year
+        final nowY = DateTime.now();
+        final y = nowY.year;
+        final yStart = DateTime(y, 1, 1);
+        final yEnd   = DateTime(y, 12, 31);
+
+        // Get records for this year
+        final mfrForYear = await _sb
+            .from('Monthly_Financial_Record')
+            .select('record_id, period_start, period_end')
+            .eq('profile_id', profileId)
+            .gte('period_start', _iso(yStart))
+            .lte('period_start', _iso(yEnd));
+
+        final recordIds = <String>[
+          for (final r in mfrForYear)
+            if (r['record_id'] != null) r['record_id'] as String
+        ];
+        if (recordIds.isEmpty) return;
+
+        // Fetch all Category_Summary rows for those records and aggregate
+        final catSumRows = await _sb
+            .from('Category_Summary')
+            .select('category_id, total_expense, record_id')
+            .inFilter('record_id', recordIds);
+
+        for (final r in catSumRows) {
+          final cid = r['category_id'] as String?;
+          if (cid == null) continue;
+          if (!activeCategoryIds.contains(cid)) continue;
+          final amt = (r['total_expense'] as num?) ?? 0;
+          if (amt <= 0) continue;
+          catTotals[cid] = (catTotals[cid] ?? 0) + amt;
+        }
+      }
+
+      void _loadCategorySlicesWeekly() {
+        // Current week of the month
+        final nowW = DateTime.now();
+        final y = nowW.year, m = nowW.month;
+        final lastDay = DateTime(y, m + 1, 0).day;
+
+        late int wStartDay, wEndDay;
+        final d = nowW.day;
+        if (d <= 7) {
+          wStartDay = 1;
+          wEndDay = 7;
+        } else if (d <= 14) {
+          wStartDay = 8;
+          wEndDay = 14;
+        } else if (d <= 22) {
+          wStartDay = 15;
+          wEndDay = 22;
+        } else {
+          wStartDay = 23;
+          wEndDay = lastDay;
+        }
+
+        final weekStart = DateTime(y, m, wStartDay);
+        final weekEnd   = DateTime(y, m, wEndDay);
+
+        // Variable expenses this week
+        for (final r in trxRows) {
+          if ((r['type'] as String?) != 'Expense') continue;
+          final cid = r['category_id'] as String?;
+          if (cid == null) continue;
+          if (!activeCategoryIds.contains(cid)) continue;
+          final amt = (r['amount'] as num?) ?? 0;
+          if (amt <= 0) continue;
+          final dt = DateTime.parse(r['date'] as String);
+          if (dt.isBefore(weekStart) || dt.isAfter(weekEnd)) continue;
+          catTotals[cid] = (catTotals[cid] ?? 0) + amt;
+        }
+
+        // Fixed expenses for due dates in this week
+        for (final r in fixedExpenseRows) {
+          final monthly = (r['amount'] as num?) ?? 0;
+          if (monthly <= 0) continue;
+          final cid = r['category_id'] as String?;
+          if (cid == null) continue;
+          if (!activeCategoryIds.contains(cid)) continue;
+
+          final dueDay = (r['due_date'] as int?) ?? 1;
+          final dd = dueDay.clamp(1, lastDay);
+          final dueDate = DateTime(y, m, dd);
+
+          final st = _parseOrNull(r['start_time']);
+          final en = _parseOrNull(r['end_time']);
+          final active = (st == null || !dueDate.isBefore(st)) && (en == null || !dueDate.isAfter(en));
+          if (!active) continue;
+
+          if (!dueDate.isBefore(weekStart) && !dueDate.isAfter(weekEnd)) {
+            catTotals[cid] = (catTotals[cid] ?? 0) + monthly;
+          }
+        }
+      }
+
+      // Choose the correct loader
+      if (_periodIndex == 0) {
+        _loadCategorySlicesWeekly();
+      } else if (_periodIndex == 1) {
+        await _loadCategorySlicesMonthly();
+      } else {
+        await _loadCategorySlicesYearly();
+      }
+
+      // Convert totals to slices
       _categorySlices = [
         for (final e in catTotals.entries)
-          if (e.value > 0)
+          if (e.value > 0 && activeCategoryIds.contains(e.key))
             CategorySlice(
               id: e.key,
               name: catNameById[e.key] ?? 'Unknown',
@@ -466,7 +580,6 @@ class _DashboardPageState extends State<DashboardPage> {
       // If your state has _savingsLabels, keep them in sync. If not, this is harmless.
       try { _savingsLabels = _tmpSavingsLabels; } catch (_) {}
 
-
       if (!mounted) return;
       setState(() { _loading = false; });
     } catch (e) {
@@ -591,7 +704,6 @@ class _DashboardPageState extends State<DashboardPage> {
       _LegendItem('Earnings', '${trendsTotalEarnings.toStringAsFixed(0)} SAR', _cyan),
       _LegendItem('Income',   '${trendsTotalIncome.toStringAsFixed(0)} SAR', _muted),
     ];
-
 
     final catItems = [
       for (final s in _categorySlices.take(_showAllCategories ? _categorySlices.length : 5))
@@ -724,7 +836,10 @@ class _DashboardPageState extends State<DashboardPage> {
                 const SizedBox(height: 8),
                 CategoryDonut(
                   slices: _categorySlices,
-                  centerLabel: 'Total Expenses\n﷼ ${(_seriesExpenses.fold<num>(0,(a,b)=>a+b)).toStringAsFixed(0)}',
+                  centerLabel: () {
+                    final t = _categorySlices.fold<num>(0, (a, s) => a + s.value);
+                    return 'Total Expenses\n﷼ ${t.toStringAsFixed(0)}';
+                  }(),
                 ),
                 const SizedBox(height: 12),
                 if (_categorySlices.isEmpty)

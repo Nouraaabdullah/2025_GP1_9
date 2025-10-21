@@ -1,3 +1,4 @@
+// lib/pages/Dashboard/income_chart.dart
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
@@ -28,8 +29,19 @@ class _IncomeSemicircleGaugeState extends State<IncomeSemicircleGauge> {
   String _tipText = '';
   Timer? _hideTimer;
 
-  // --- helpers ---------------------------------------------------
+  // Geometry (kept in one place so painter + hit-test always match)
+  static const Size _size = Size(275, 268);
+  static const double _stroke = 22.0;   // ring thickness
+  static const double _deflate = 14.0;  // arc inset
+  static const double _hitSlop = 14.0;  // extra touch tolerance
 
+  // Colors (match Dashboard legends)
+  static const _cExpenses = Color(0xFF8B5CF6);
+  static const _cEarnings = Color(0xFF22D3EE);
+  static const _cIncome   = Color(0xFF8C89B4);
+  static const _cTrack    = Color(0xFF3A3A5A);
+
+  // ----- helpers -------------------------------------------------
   double _normAngle(double a) {
     while (a < 0) a += 2 * math.pi;
     while (a >= 2 * math.pi) a -= 2 * math.pi;
@@ -37,16 +49,17 @@ class _IncomeSemicircleGaugeState extends State<IncomeSemicircleGauge> {
   }
 
   bool _angleWithin(double angle, double start, double sweep) {
+    // angles in [0..2π), sweep >= 0
     final end = _normAngle(start + sweep);
     angle = _normAngle(angle);
     if (sweep <= 0) return false;
     if (start <= end) {
       return angle >= start && angle <= end;
     } else {
+      // wrap-around
       return angle >= start || angle <= end;
     }
   }
-
   // ---------------------------------------------------------------
 
   @override
@@ -62,6 +75,7 @@ class _IncomeSemicircleGaugeState extends State<IncomeSemicircleGauge> {
     final inc = (widget.income ?? 0).clamp(0, double.infinity);
     final base = (ern + inc);
 
+    // Compute sweeps in degrees for drawing
     double sweepExp = 0, sweepErn = 0, sweepInc = 0;
     if (base > 0) {
       final used = exp.clamp(0, base);
@@ -75,28 +89,22 @@ class _IncomeSemicircleGaugeState extends State<IncomeSemicircleGauge> {
       sweepErn = remain * erShare;
       sweepInc = remain * incShare;
     } else {
+      // fallback to percent split if we don't have base values
       final p = widget.percent.clamp(0, 1);
       sweepErn = 180.0 * p;
       sweepInc = 180.0 - sweepErn;
     }
 
-    const Size size = Size(275, 268);
-
     return Center(
       child: GestureDetector(
         behavior: HitTestBehavior.translucent,
         onTapDown: (d) {
-          // geometry identical to painter
-          const stroke = 22.0;
-          const deflate = 14.0;
-          const hitSlop = 14.0;
-
-          final rect =
-              Rect.fromLTWH(0, 0, size.width, size.height).deflate(deflate);
+          // Geometry identical to painter
+          final rect = Rect.fromLTWH(0, 0, _size.width, _size.height).deflate(_deflate);
           final center = rect.center;
           final R = rect.width / 2;
-          final inner = R - stroke / 2 - hitSlop;
-          final outer = R + stroke / 2 + hitSlop;
+          final inner = R - _stroke / 2 - _hitSlop;
+          final outer = R + _stroke / 2 + _hitSlop;
 
           final box = context.findRenderObject() as RenderBox?;
           if (box == null) return;
@@ -105,13 +113,16 @@ class _IncomeSemicircleGaugeState extends State<IncomeSemicircleGauge> {
           final dx = local.dx - center.dx;
           final dy = local.dy - center.dy;
           final r = math.sqrt(dx * dx + dy * dy);
-
           if (r < inner || r > outer) return;
 
-          // Convert to 0..π (semicircle, top=0, clockwise)
-          var theta = math.atan2(dy, dx);
-          var angle = _normAngle(theta + math.pi / 2);
+          // Painter starts at 180° (π) and sweeps clockwise across the BOTTOM semicircle.
+          // So compute the true polar angle (0..2π from +X), ensure we are in [π..2π),
+          // then map that to a 0..π "semicircle" angle by subtracting π.
+          double angleFromPlusX = _normAngle(math.atan2(dy, dx)); // 0..2π
+          if (angleFromPlusX < math.pi) return; // touches on the top half are ignored
+          final semi = angleFromPlusX - math.pi; // 0..π along the painted semicircle
 
+          // Build sweeps in radians for hit-test using same math as drawing
           final expVal = exp;
           final ernVal = ern;
           final incVal = inc;
@@ -131,16 +142,20 @@ class _IncomeSemicircleGaugeState extends State<IncomeSemicircleGauge> {
             incSweep = math.pi - ernSweep;
           }
 
-          final startExp = 0.0;
-          final startErn = startExp + expSweep;
+          // Segments along the semicircle (0..π)
+          final startExp = math.pi;                // in painter space this is 180°
+          final startErn = startExp + expSweep;    // continues clockwise
           final startInc = startErn + ernSweep;
 
+          // Convert our local semicircle angle (0..π) to the painter's absolute space (π..2π)
+          final absAngle = semi + math.pi;
+
           String? text;
-          if (_angleWithin(angle, startExp, expSweep)) {
+          if (_angleWithin(absAngle, startExp, expSweep)) {
             text = 'Expenses: ${expVal.toStringAsFixed(0)} SAR';
-          } else if (_angleWithin(angle, startErn, ernSweep)) {
+          } else if (_angleWithin(absAngle, startErn, ernSweep)) {
             text = 'Earnings: ${ernVal.toStringAsFixed(0)} SAR';
-          } else if (_angleWithin(angle, startInc, incSweep)) {
+          } else if (_angleWithin(absAngle, startInc, incSweep)) {
             text = 'Income: ${incVal.toStringAsFixed(0)} SAR';
           } else {
             return;
@@ -148,8 +163,8 @@ class _IncomeSemicircleGaugeState extends State<IncomeSemicircleGauge> {
 
           setState(() {
             _tipPos = Offset(
-              (local.dx - 90).clamp(0, size.width - 180),
-              (local.dy - 56).clamp(0, size.height - 48),
+              (local.dx - 90).clamp(0, _size.width - 180),
+              (local.dy - 56).clamp(0, _size.height - 48),
             );
             _tipText = text!;
           });
@@ -159,40 +174,54 @@ class _IncomeSemicircleGaugeState extends State<IncomeSemicircleGauge> {
           });
         },
         child: SizedBox(
-          width: size.width,
-          height: size.height,
+          width: _size.width,
+          height: _size.height,
           child: Stack(
             children: [
+              // Track
               CustomPaint(
-                size: size,
+                size: _size,
                 painter: _ArcPainter(
-                    color: const Color(0xFF3A3A5A),
-                    startDeg: 180,
-                    sweep: 180),
+                  color: _cTrack,
+                  startDeg: 180,
+                  sweepDeg: 180,
+                  stroke: _stroke,
+                  deflate: _deflate,
+                ),
               ),
+              // Expenses, then Earnings, then Income
               if (sweepExp > 0)
                 CustomPaint(
-                  size: size,
+                  size: _size,
                   painter: _ArcPainter(
-                      color: const Color(0xFF8B5CF6),
-                      startDeg: 180,
-                      sweep: sweepExp),
+                    color: _cExpenses,
+                    startDeg: 180,
+                    sweepDeg: sweepExp,
+                    stroke: _stroke,
+                    deflate: _deflate,
+                  ),
                 ),
               if (sweepErn > 0)
                 CustomPaint(
-                  size: size,
+                  size: _size,
                   painter: _ArcPainter(
-                      color: const Color(0xFF22D3EE),
-                      startDeg: 180 + sweepExp,
-                      sweep: sweepErn),
+                    color: _cEarnings,
+                    startDeg: 180 + sweepExp,
+                    sweepDeg: sweepErn,
+                    stroke: _stroke,
+                    deflate: _deflate,
+                  ),
                 ),
               if (sweepInc > 0)
                 CustomPaint(
-                  size: size,
+                  size: _size,
                   painter: _ArcPainter(
-                      color: const Color(0xFF8C89B4),
-                      startDeg: 180 + sweepExp + sweepErn,
-                      sweep: sweepInc),
+                    color: _cIncome,
+                    startDeg: 180 + sweepExp + sweepErn,
+                    sweepDeg: sweepInc,
+                    stroke: _stroke,
+                    deflate: _deflate,
+                  ),
                 ),
               Positioned.fill(
                 child: Center(
@@ -222,31 +251,42 @@ class _IncomeSemicircleGaugeState extends State<IncomeSemicircleGauge> {
 }
 
 class _ArcPainter extends CustomPainter {
-  final double startDeg;
-  final double sweep;
+  final double startDeg; // absolute degrees from +X axis
+  final double sweepDeg;
   final Color color;
+  final double stroke;
+  final double deflate;
+
   const _ArcPainter({
     required this.color,
     required this.startDeg,
-    required this.sweep,
+    required this.sweepDeg,
+    required this.stroke,
+    required this.deflate,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
-    final rect = Rect.fromLTWH(0, 0, size.width, size.height).deflate(14);
+    final rect = Rect.fromLTWH(0, 0, size.width, size.height).deflate(deflate);
+
     final paint = Paint()
       ..color = color
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 22
+      ..strokeWidth = stroke
       ..strokeCap = StrokeCap.round;
+
     final startRad = startDeg * math.pi / 180.0;
-    final sweepRad = sweep * math.pi / 180.0;
+    final sweepRad = sweepDeg * math.pi / 180.0;
     canvas.drawArc(rect, startRad, sweepRad, false, paint);
   }
 
   @override
   bool shouldRepaint(covariant _ArcPainter old) =>
-      old.color != color || old.sweep != sweep || old.startDeg != startDeg;
+      old.color != color ||
+      old.sweepDeg != sweepDeg ||
+      old.startDeg != startDeg ||
+      old.stroke != stroke ||
+      old.deflate != deflate;
 }
 
 class _Bubble extends StatelessWidget {

@@ -40,12 +40,18 @@ class _DashboardPageState extends State<DashboardPage> {
   List<CategorySlice> _categorySlices = [];
   List<num> _savingsSeries = [];
   List<String> _savingsLabels = [];
-  // NEW: Raw series & buckets for Income Overview (no “drop empty”)
+  // RAW series & buckets for Income Overview (no “drop empty”)
   List<_Bucket> _allBuckets = [];
   List<num> _rawExpenses = [];
   List<num> _rawEarnings = [];
   List<num> _rawIncome   = [];
   List<String> _rawLabels = [];
+
+  // Weekly mini category charts
+  List<List<CategorySlice>> _weeklySlices = [[], [], [], []];
+  List<num> _weeklyTotals = [0, 0, 0, 0];
+  List<bool> _weekIsFuture = [false, false, false, false];
+  List<_LegendItem> _weeklyLegend = [];
 
   bool _loading = true;
   String? _error;
@@ -61,13 +67,11 @@ class _DashboardPageState extends State<DashboardPage> {
   Future<void> _loadAll() async {
     setState(() { _loading = true; _error = null; });
 
-    // ---- helpers ----
     String _iso(DateTime d) => '${d.year.toString().padLeft(4,'0')}-${d.month.toString().padLeft(2,'0')}-${d.day.toString().padLeft(2,'0')}';
     DateTime? _parseOrNull(dynamic s) => (s == null) ? null : DateTime.tryParse(s as String);
     int _lastDayOfMonth(int y, int m) => DateTime(y, m + 1, 0).day;
     int _weekIndexFromDay(int day) => (day <= 7) ? 0 : (day <= 14) ? 1 : (day <= 22) ? 2 : 3;
 
-    // months whose PAYDAY is in [st, en]
     int _monthsActiveByPayday(DateTime? st, DateTime? en, int year, int payday) {
       int cnt = 0;
       for (int m = 1; m <= 12; m++) {
@@ -137,7 +141,6 @@ class _DashboardPageState extends State<DashboardPage> {
           .gte('period_start', _iso(DateTime(now.year, 1, 1)))
           .lte('period_start', _iso(DateTime(now.year, 12, 31)));
 
-      // active category ids for filtering summaries and old rows
       final activeCategoryIds = <String>{
         for (final r in catRows) r['category_id'] as String,
       };
@@ -148,7 +151,7 @@ class _DashboardPageState extends State<DashboardPage> {
           : (_periodIndex == 1)
               ? _buildMonthlyBuckets(rangeStart.year)
               : _buildYearlyBuckets(rangeStart.year, rangeEnd.year);
-      _allBuckets = buckets; // save raw buckets
+      _allBuckets = buckets;
 
       // maps
       final catNameById = <String, String>{
@@ -164,11 +167,10 @@ class _DashboardPageState extends State<DashboardPage> {
 
       int bucketIndex(DateTime d) {
         if (_periodIndex == 0) {
-          // Weekly: W1=1–7, W2=8–14, W3=15–22, W4=23–end
           final dom = d.day;
           if (dom <= 7)  return 0;
           if (dom <= 14) return 1;
-          if (dom <= 22) return 2; // <-- was 21
+          if (dom <= 22) return 2;
           return 3;
         } else if (_periodIndex == 1) {
           return d.month - 1;
@@ -177,18 +179,16 @@ class _DashboardPageState extends State<DashboardPage> {
         }
       }
 
-      // 5) reset series (RAW + filtered)
+      // 5) reset series
       final n = buckets.length;
-      // raw (no filtering)
       _rawExpenses = List.filled(n, 0);
       _rawEarnings = List.filled(n, 0);
       _rawIncome   = List.filled(n, 0);
-      // to-be-filtered (start same as raw; will be filtered later)
       _seriesExpenses = List.filled(n, 0);
       _seriesEarnings = List.filled(n, 0);
       _seriesIncome   = List.filled(n, 0);
 
-      // 6) variable transactions by their actual date
+      // 6) variable transactions
       for (final r in trxRows) {
         final type = (r['type'] as String?) ?? '';
         final amt  = (r['amount'] as num?) ?? 0;
@@ -197,15 +197,15 @@ class _DashboardPageState extends State<DashboardPage> {
         final i = bucketIndex(date);
         if (i < 0 || i >= n) continue;
         if (type == 'Expense') {
-          _rawExpenses[i]   += amt;  // included in first chart
-          _seriesExpenses[i] += amt; // included in trends and category
+          _rawExpenses[i]   += amt;
+          _seriesExpenses[i] += amt;
         } else if (type == 'Earning') {
           _rawEarnings[i]   += amt;
           _seriesEarnings[i] += amt;
         }
       }
 
-      // 7) fixed income monthly fix plus weekly spread
+      // 7) fixed income
       for (final r in fixedIncomeRows) {
         final monthly = (r['monthly_income'] as num?) ?? 0;
         final st = _parseOrNull(r['start_time']);
@@ -244,7 +244,7 @@ class _DashboardPageState extends State<DashboardPage> {
         }
       }
 
-      // 8) fixed expenses due date aware
+      // 8) fixed expenses
       for (final r in fixedExpenseRows) {
         final monthly = (r['amount'] as num?) ?? 0;
         final dueDay  = (r['due_date'] as int?) ?? 1;
@@ -284,7 +284,7 @@ class _DashboardPageState extends State<DashboardPage> {
         }
       }
 
-      // 9) labels raw and filtered
+      // 9) labels
       if (_periodIndex == 2) {
         _rawLabels = [for (final b in buckets) '${b.year}'];
       } else if (_periodIndex == 0) {
@@ -293,7 +293,7 @@ class _DashboardPageState extends State<DashboardPage> {
         _rawLabels = const ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
       }
 
-      // only change for monthly mode hide future months in trends
+      // hide future months in monthly trends
       if (_periodIndex == 1) {
         final currentMonthIdx = DateTime.now().month - 1;
         for (int i = currentMonthIdx + 1; i < _seriesExpenses.length; i++) {
@@ -303,14 +303,14 @@ class _DashboardPageState extends State<DashboardPage> {
         }
       }
 
-      // 10) filter out empty buckets for charts 2–4 keep raw for income overview
+      // 10) filtered series for trends
       final filtered = _filterEmpty(_rawLabels, _seriesExpenses, _seriesEarnings, _seriesIncome);
       _bucketLabels   = filtered.labels;
       _seriesExpenses = filtered.expenses;
       _seriesEarnings = filtered.earnings;
       _seriesIncome   = filtered.income;
 
-      // 11) Category totals by period
+      // 11) category totals (single donut when not weekly)
       final catTotals = <String, num>{};
 
       Future<void> _loadCategorySlicesMonthly() async {
@@ -458,12 +458,111 @@ class _DashboardPageState extends State<DashboardPage> {
             ),
       ]..sort((a, b) => b.value.compareTo(a.value));
 
-      // 12) Savings only modifies _savingsSeries and _savingsLabels
+      // ===== Weekly four mini charts data =====
+      if (_periodIndex == 0) {
+        final y = now.year, m = now.month;
+        final lastDay = DateTime(y, m + 1, 0).day;
+        final weekRanges = <List<DateTime>>[
+          [DateTime(y, m, 1),  DateTime(y, m, 7)],
+          [DateTime(y, m, 8),  DateTime(y, m, 14)],
+          [DateTime(y, m, 15), DateTime(y, m, 22)],
+          [DateTime(y, m, 23), DateTime(y, m, lastDay)],
+        ];
+
+        _weeklySlices = [[], [], [], []];
+        _weeklyTotals = [0, 0, 0, 0];
+        _weekIsFuture = [false, false, false, false];
+
+        // future detection
+        final today = DateTime(now.year, now.month, now.day);
+        for (int i = 0; i < 4; i++) {
+          final start = weekRanges[i][0];
+          _weekIsFuture[i] = start.isAfter(today);
+        }
+
+        final perWeekTotals = <int, Map<String, num>>{ 0: {}, 1: {}, 2: {}, 3: {} };
+
+        // variable trx → per week
+        for (final r in trxRows) {
+          if ((r['type'] as String?) != 'Expense') continue;
+          final cid = r['category_id'] as String?;
+          if (cid == null || !activeCategoryIds.contains(cid)) continue;
+          final amt = (r['amount'] as num?) ?? 0;
+          if (amt <= 0) continue;
+          final dt = DateTime.parse(r['date'] as String);
+          if (dt.year != y || dt.month != m) continue;
+          final i = (dt.day <= 7) ? 0 : (dt.day <= 14) ? 1 : (dt.day <= 22) ? 2 : 3;
+          perWeekTotals[i]![cid] = (perWeekTotals[i]![cid] ?? 0) + amt;
+        }
+
+        // fixed expenses included only when due date is within week and week is not future
+        for (final r in fixedExpenseRows) {
+          final monthly = (r['amount'] as num?) ?? 0;
+          if (monthly <= 0) continue;
+          final cid = r['category_id'] as String?;
+          if (cid == null || !activeCategoryIds.contains(cid)) continue;
+
+          final dd = (r['due_date'] as int? ?? 1).clamp(1, lastDay);
+          final dueDate = DateTime(y, m, dd);
+
+          final st = _parseOrNull(r['start_time']);
+          final en = _parseOrNull(r['end_time']);
+          final active = (st == null || !dueDate.isBefore(st)) && (en == null || !dueDate.isAfter(en));
+          if (!active) continue;
+
+          final i = (dd <= 7) ? 0 : (dd <= 14) ? 1 : (dd <= 22) ? 2 : 3;
+          if (_weekIsFuture[i]) continue;
+
+          perWeekTotals[i]![cid] = (perWeekTotals[i]![cid] ?? 0) + monthly;
+        }
+
+        final combinedTotals = <String, num>{};
+        for (int i = 0; i < 4; i++) {
+          final totals = perWeekTotals[i]!;
+          final slices = <CategorySlice>[];
+          num weekSum = 0;
+
+          if (!_weekIsFuture[i] && totals.isNotEmpty) {
+            for (final e in totals.entries) {
+              weekSum += e.value;
+              combinedTotals[e.key] = (combinedTotals[e.key] ?? 0) + e.value;
+              slices.add(CategorySlice(
+                id: e.key,
+                name: catNameById[e.key] ?? 'Unknown',
+                value: e.value,
+                color: catColorById[e.key] ?? colorFromIconOrSeed(categoryId: e.key),
+              ));
+            }
+            slices.sort((a, b) => b.value.compareTo(a.value));
+          }
+
+          _weeklySlices[i] = slices;
+          _weeklyTotals[i] = weekSum; // 0 for past empty weeks
+        }
+
+        // legend (top 6)
+        final legendItems = <_LegendItem>[
+          for (final e in (combinedTotals.entries.toList()
+            ..sort((a, b) => (b.value).compareTo(a.value))))
+            _LegendItem(
+              catNameById[e.key] ?? 'Unknown',
+              '${e.value.toStringAsFixed(0)} SAR',
+              catColorById[e.key] ?? colorFromIconOrSeed(categoryId: e.key),
+            ),
+        ];
+        _weeklyLegend = legendItems.take(6).toList();
+      } else {
+        _weeklySlices = [[], [], [], []];
+        _weeklyTotals = [0, 0, 0, 0];
+        _weekIsFuture = [false, false, false, false];
+        _weeklyLegend = [];
+      }
+
+      // 12) savings series + labels
       _savingsSeries = [];
       List<String> _tmpSavingsLabels = [];
 
       if (_periodIndex == 0) {
-        // ===== WEEKLY current month =====
         final now = DateTime.now();
         final weeklyVals = List<num>.filled(4, 0);
 
@@ -514,7 +613,7 @@ class _DashboardPageState extends State<DashboardPage> {
           weeklyVals[idx] -= monthly;
         }
 
-        // D) Carry negative forward clamp to zero then subtract from next week
+        // D) carry negative forward
         for (int i = 0; i < 4; i++) {
           if (weeklyVals[i] < 0) {
             final deficit = -weeklyVals[i];
@@ -523,7 +622,7 @@ class _DashboardPageState extends State<DashboardPage> {
           }
         }
 
-        // E) Show only completed weeks do not show the current partial week
+        // E) completed weeks only
         final today = DateTime.now();
         final currentWeekIdx =
             (today.day <= 7)  ? 0 :
@@ -540,7 +639,6 @@ class _DashboardPageState extends State<DashboardPage> {
         }
 
       } else if (_periodIndex == 1) {
-        // ===== MONTHLY current year =====
         final byMonth = List<num>.filled(12, 0);
         for (final r in mfrRows) {
           final d = DateTime.parse(r['period_start'] as String);
@@ -555,9 +653,7 @@ class _DashboardPageState extends State<DashboardPage> {
             _tmpSavingsLabels.add(monthNames[i]);
           }
         }
-
       } else {
-        // ===== YEARLY all years =====
         final allMfr = await _sb
             .from('Monthly_Financial_Record')
             .select('period_start, monthly_saving')
@@ -706,6 +802,9 @@ class _DashboardPageState extends State<DashboardPage> {
       'gauge_${_periodIndex}_${idx}_${totalExpenses}_${totalEarnings}_${totalIncome}',
     );
 
+    final String savingsYAxisTitle =
+        _periodIndex == 0 ? 'Weekly savings' : _periodIndex == 1 ? 'Monthly savings' : 'Yearly savings';
+
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(20, 16, 20, kBottomNavigationBarHeight + 24),
@@ -798,13 +897,13 @@ class _DashboardPageState extends State<DashboardPage> {
           const _BlockTitle('Savings Over Time'),
           const SizedBox(height: _betweenTitleAndCard),
           _SectionCard(
-            onInfo: () => _showInfo(context, 'Y axis is monthly savings. X axis reflects the selected period. Points are drawn clearly.'),
+            onInfo: () => _showInfo(context, 'Y axis adapts to the selected period. Tap points for details.'),
             child: Padding(
               padding: const EdgeInsets.only(top: 30, bottom: 10),
               child: SavingsSparkline(
                 values: _savingsSeries.map((e) => e.toDouble()).toList(),
                 labels: _savingsLabels,
-                yAxisTitle: 'Monthly savings',
+                yAxisTitle: savingsYAxisTitle,
                 showPoints: true,
               ),
             ),
@@ -814,41 +913,67 @@ class _DashboardPageState extends State<DashboardPage> {
           const _BlockTitle('Category Breakdown'),
           const SizedBox(height: _betweenTitleAndCard),
           _SectionCard(
-            onInfo: () => _showInfo(context, 'Your expenses grouped by category.'),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 8),
-                CategoryDonut(
-                  slices: _categorySlices,
-                  centerLabel: () {
-                    final t = _categorySlices.fold<num>(0, (a, s) => a + s.value);
-                    return 'Total Expenses\n﷼ ${t.toStringAsFixed(0)}';
-                  }(),
-                ),
-                const SizedBox(height: 12),
-                if (_categorySlices.isEmpty)
-                  Center(child: Text('No category data', style: TextStyle(color: AppColors.textGrey)))
-                else
-                  _CategoryGrid(
-                    items: [
-                      for (final s in _categorySlices.take(_showAllCategories ? _categorySlices.length : 5))
-                        _LegendItem(s.name, '${s.value.toStringAsFixed(0)} SAR', s.color),
-                    ],
-                    showAll: _showAllCategories,
-                    initialCount: 3,
-                  ),
-                const SizedBox(height: 8),
-                if (_categorySlices.length > 3)
-                  TextButton(
-                    style: TextButton.styleFrom(
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 6),
+            onInfo: () => _showInfo(context, _periodIndex==0
+                ? 'Four mini charts one per week. Future weeks show No data yet. Past weeks with no spending show 0 SAR spent.'
+                : 'Your expenses grouped by category for the selected period.'),
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 8),
+
+                  if (_periodIndex == 0)
+                    Column(
+                      children: [
+                        _WeeklyMiniCategoryGrid(
+                          weeklySlices: _weeklySlices,
+                          weeklyTotals: _weeklyTotals,
+                          weekIsFuture: _weekIsFuture,
+                        ),
+                        const SizedBox(height: 14),
+                        if (_weeklyLegend.isEmpty)
+                          Center(child: Text('No money spent yet', style: TextStyle(color: AppColors.textGrey)))
+                        else
+                          _LegendRow(items: _weeklyLegend),
+                      ],
+                    )
+                  else
+                    Column(
+                      children: [
+                        CategoryDonut(
+                          slices: _categorySlices,
+                          centerLabel: () {
+                            final t = _categorySlices.fold<num>(0, (a, s) => a + s.value);
+                            return 'Total Expenses\nSAR ${t.toStringAsFixed(0)}';
+                          }(),
+                        ),
+                        const SizedBox(height: 12),
+                        if (_categorySlices.isEmpty)
+                          Center(child: Text('No money spent', style: TextStyle(color: AppColors.textGrey)))
+                        else
+                          _CategoryGrid(
+                            items: [
+                              for (final s in _categorySlices.take(_showAllCategories ? _categorySlices.length : 5))
+                                _LegendItem(s.name, '${s.value.toStringAsFixed(0)} SAR', s.color),
+                            ],
+                            showAll: _showAllCategories,
+                            initialCount: 3,
+                          ),
+                        const SizedBox(height: 8),
+                        if (_categorySlices.length > 3)
+                          TextButton(
+                            style: TextButton.styleFrom(
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 6),
+                            ),
+                            onPressed: () => setState(() => _showAllCategories = !_showAllCategories),
+                            child: Text(_showAllCategories ? 'Show less' : 'Show more'),
+                          ),
+                      ],
                     ),
-                    onPressed: () => setState(() => _showAllCategories = !_showAllCategories),
-                    child: Text(_showAllCategories ? 'Show less' : 'Show more'),
-                  ),
-              ],
+                ],
+              ),
             ),
           ),
           const SizedBox(height: 18),
@@ -935,6 +1060,7 @@ class _SectionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
+      constraints: const BoxConstraints(minHeight: 120),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
@@ -950,7 +1076,7 @@ class _SectionCard extends StatelessWidget {
           BoxShadow(color: Colors.black.withOpacity(0.25), blurRadius: 22, offset: const Offset(0, 10)),
         ],
       ),
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
       child: Stack(
         children: [
           Padding(
@@ -1027,7 +1153,18 @@ class _LegendCard extends StatelessWidget {
           _LegendDot(color: item.color),
           Column(
             children: [
-              Text(item.title, style: TextStyle(color: AppColors.textGrey, fontSize: 11, fontWeight: FontWeight.w600)),
+              Text(
+                item.title,
+                maxLines: 1,
+                softWrap: false,
+                overflow: TextOverflow.fade,
+                style: TextStyle(
+                  color: AppColors.textGrey,
+                  fontSize: 10, // slightly smaller so "Subscriptions" fits one line
+                  fontWeight: FontWeight.w600,
+                  height: 1.1,
+                ),
+              ),
               const SizedBox(height: 2),
               Text(item.value, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w800)),
             ],
@@ -1069,7 +1206,7 @@ class _CategoryGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     final visible = showAll ? items : items.take(initialCount).toList();
     if (visible.isEmpty) {
-      return Center(child: Text('No categories', style: TextStyle(color: AppColors.textGrey)));
+      return Center(child: Text('No money spent', style: TextStyle(color: AppColors.textGrey)));
     }
     return GridView.builder(
       shrinkWrap: true,
@@ -1190,6 +1327,80 @@ class _MotivationCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/* ================= Weekly mini charts UI ================= */
+class _WeeklyMiniCategoryGrid extends StatelessWidget {
+  final List<List<CategorySlice>> weeklySlices; // length 4
+  final List<num> weeklyTotals; // length 4
+  final List<bool> weekIsFuture; // length 4
+  const _WeeklyMiniCategoryGrid({
+    required this.weeklySlices,
+    required this.weeklyTotals,
+    required this.weekIsFuture,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final wLabels = const ['W1','W2','W3','W4'];
+
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: 4,
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        mainAxisSpacing: 12,
+        crossAxisSpacing: 12,
+        childAspectRatio: 1.10, // a touch taller to avoid overflow
+      ),
+      itemBuilder: (_, i) {
+        final isFuture = weekIsFuture[i];
+        final total = weeklyTotals[i];
+        final slices = weeklySlices[i];
+
+        final emptyPastText = '0 SAR spent';
+
+        return Container(
+          decoration: BoxDecoration(
+            color: AppColors.card.withOpacity(0.55),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: Colors.white.withOpacity(0.06), width: 1),
+            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.18), blurRadius: 10, offset: const Offset(0, 6))],
+          ),
+          padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
+          child: Column(
+            children: [
+              // Force a perfect circle and slightly smaller to avoid overflow.
+              Expanded(
+                child: Center(
+                  child: isFuture
+                      ? Text('No data yet', style: TextStyle(color: AppColors.textGrey, fontSize: 10, fontWeight: FontWeight.w700))
+                      : (slices.isEmpty && total == 0)
+                          ? Text(emptyPastText, style: TextStyle(color: AppColors.textGrey, fontSize: 8, fontWeight: FontWeight.w700))
+                          : SizedBox.square(
+                              dimension: 120,
+                              child: Center(
+                                child: CategoryDonut(
+                                  slices: slices,
+                                  // SAR instead of Arabic symbol
+                                  centerLabel: '${total.toStringAsFixed(0)} SAR',
+                                ),
+                              ),
+                            ),
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                wLabels[i],
+                style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

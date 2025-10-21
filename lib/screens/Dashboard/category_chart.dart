@@ -41,14 +41,16 @@ Color _seededCategoryColor(String categoryId) {
   return HSVColor.fromAHSV(1.0, hue, sat, val).toColor();
 }
 
-/* === Donut === */
+/* === Donut (with precise hit-testing) === */
 class CategoryDonut extends StatefulWidget {
   final List<CategorySlice> slices;
   final String centerLabel;
 
-  final double size;         // square size
-  final Alignment alignment; // anchor
-  final double thickness;    // ring thickness
+  // Sizing & style
+  final double size;             // square canvas size
+  final Alignment alignment;
+  final double thickness;        // ring thickness (stroke)
+  final double centerFontSize;   // center label
 
   const CategoryDonut({
     super.key,
@@ -56,7 +58,8 @@ class CategoryDonut extends StatefulWidget {
     required this.centerLabel,
     this.size = 240,
     this.alignment = Alignment.center,
-    this.thickness = 20,
+    this.thickness = 14,
+    this.centerFontSize = 14,
   });
 
   @override
@@ -64,6 +67,11 @@ class CategoryDonut extends StatefulWidget {
 }
 
 class _CategoryDonutState extends State<CategoryDonut> {
+  // Keep geometry constants in one place so painter & hit-test never drift
+  static const double _DEF = 8.0;     // deflate (inset) for the arc rect
+  static const double _GAP = 0.012;   // gap between segments (radians)
+  static const double _HIT = 16.0;    // radial touch tolerance
+
   Offset? _tipPos;
   String _tipText = '';
   Timer? _hideTimer;
@@ -85,24 +93,19 @@ class _CategoryDonutState extends State<CategoryDonut> {
     });
   }
 
-  // --- helpers for geometric hit test ---
-  double _normAngle(double a) {
+  double _norm(double a) {
     while (a < 0) a += 2 * math.pi;
     while (a >= 2 * math.pi) a -= 2 * math.pi;
     return a;
   }
 
   bool _angleWithin(double angle, double start, double sweep) {
-    final end = _normAngle(start + sweep);
-    angle = _normAngle(angle);
+    final end = _norm(start + sweep);
+    angle = _norm(angle);
     if (sweep <= 0) return false;
-    if (start <= end) {
-      return angle >= start && angle <= end;
-    } else {
-      return angle >= start || angle <= end;
-    }
+    if (start <= end) return angle >= start && angle <= end;
+    return angle >= start || angle <= end; // wrapped
   }
-  // --------------------------------------
 
   @override
   Widget build(BuildContext context) {
@@ -111,25 +114,31 @@ class _CategoryDonutState extends State<CategoryDonut> {
     if (slices.isEmpty) {
       return SizedBox(
         height: widget.size,
-        child: Center(child: Text('No category data', style: TextStyle(color: AppColors.textGrey))),
+        child: Center(
+          child: Text('No category data',
+              style: TextStyle(color: AppColors.textGrey, fontSize: 13)),
+        ),
       );
     }
 
     return Align(
       alignment: widget.alignment,
       child: GestureDetector(
+        behavior: HitTestBehavior.translucent,
         onTapDown: (d) {
-          // Mirror painter geometry
-          const deflate = 8.0;
-          const gap = 0.012;
-          final stroke = widget.thickness;
-          const hitSlop = 16.0;
-
-          final rect = Rect.fromLTWH(0, 0, widget.size, widget.size).deflate(deflate);
+          // === Geometry identical to painter ===
+          final square = Rect.fromLTWH(0, 0, widget.size, widget.size);
+          final diameter = math.min(square.width, square.height);
+          final rect = Rect.fromLTWH(
+            (square.width - diameter) / 2 + _DEF,
+            (square.height - diameter) / 2 + _DEF,
+            diameter - 2 * _DEF,
+            diameter - 2 * _DEF,
+          );
           final center = rect.center;
-          final R = rect.width / 2; // radius to center of stroke
-          final inner = R - stroke / 2 - hitSlop;
-          final outer = R + stroke / 2 + hitSlop;
+          final R = rect.width / 2; // to arc path center
+          final inner = R - widget.thickness / 2 - _HIT;
+          final outer = R + widget.thickness / 2 + _HIT;
 
           final box = context.findRenderObject() as RenderBox?;
           if (box == null) return;
@@ -141,21 +150,19 @@ class _CategoryDonutState extends State<CategoryDonut> {
           if (r < inner || r > outer) return;
 
           // angle basis: painter starts at -π/2 (top), clockwise
-          var theta = math.atan2(dy, dx);                // -π..π from +X
-          var angle = _normAngle(theta - (-math.pi / 2)); // 0 at top, clockwise
+          final theta = math.atan2(dy, dx);
+          final angle = _norm(theta - (-math.pi / 2));
 
           final total = slices.fold<double>(0, (a, s) => a + s.value.toDouble());
           if (total <= 0) return;
 
           double acc = 0.0;
-          for (int i = 0; i < slices.length; i++) {
-            final s = slices[i];
+          for (final s in slices) {
             final sweep = (s.value.toDouble() / total) * 2 * math.pi;
-            final segStart = acc + gap;
-            final segSweep = math.max(0.0, sweep - 2 * gap);
-
+            final segStart = acc + _GAP;
+            final segSweep = math.max(0.0, sweep - 2 * _GAP);
             if (segSweep > 0 && _angleWithin(angle, segStart, segSweep)) {
-              // mid point on the band for tooltip
+              // tooltip position near the arc mid
               final mid = segStart + segSweep / 2;
               final tip = Offset(
                 center.dx + R * math.cos(mid - math.pi / 2),
@@ -181,14 +188,19 @@ class _CategoryDonutState extends State<CategoryDonut> {
             children: [
               CustomPaint(
                 size: Size(widget.size, widget.size),
-                painter: _DonutPainter(slices: slices, thickness: widget.thickness),
+                painter: _DonutPainter(
+                  slices: slices,
+                  thickness: widget.thickness,
+                  deflate: _DEF,
+                  gap: _GAP,
+                ),
               ),
               Text(
                 widget.centerLabel,
                 textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: Color.fromARGB(255, 149, 149, 149),
-                  fontSize: 16,
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.9),
+                  fontSize: widget.centerFontSize,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -209,17 +221,32 @@ class _CategoryDonutState extends State<CategoryDonut> {
 class _DonutPainter extends CustomPainter {
   final List<CategorySlice> slices;
   final double thickness;
-  const _DonutPainter({required this.slices, required this.thickness});
+  final double deflate;
+  final double gap;
+  const _DonutPainter({
+    required this.slices,
+    required this.thickness,
+    required this.deflate,
+    required this.gap,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
     final total = slices.fold<double>(0, (a, s) => a + s.value.toDouble());
     if (total <= 0) return;
 
-    final rect = Rect.fromLTWH(0, 0, size.width, size.height).deflate(8);
-    const gap = 0.012; // radians
+    // perfect circle (avoid ellipse)
+    final diameter = math.min(size.width, size.height);
+    final rect = Rect.fromLTWH(
+      (size.width - diameter) / 2 + deflate,
+      (size.height - diameter) / 2 + deflate,
+      diameter - 2 * deflate,
+      diameter - 2 * deflate,
+    );
+
     var start = -math.pi / 2;
 
+    // base track
     final bg = Paint()
       ..color = const Color(0xFF3A3A5A)
       ..style = PaintingStyle.stroke
@@ -227,18 +254,18 @@ class _DonutPainter extends CustomPainter {
       ..strokeCap = StrokeCap.round;
     canvas.drawArc(rect, 0, math.pi * 2, false, bg);
 
+    // segments
     for (final s in slices) {
       final sweep = (s.value.toDouble() / total) * math.pi * 2;
-      final paint = Paint()
-        ..color = s.color
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = thickness
-        ..strokeCap = StrokeCap.butt;
-
       final segStart = start + gap;
-      final segSweep = math.max(0.0, sweep - gap * 2);
+      final segSweep = math.max(0.0, sweep - 2 * gap);
       if (segSweep > 0) {
-        canvas.drawArc(rect, segStart, segSweep, false, paint);
+        final p = Paint()
+          ..color = s.color
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = thickness
+          ..strokeCap = StrokeCap.round;
+        canvas.drawArc(rect, segStart, segSweep, false, p);
       }
       start += sweep;
     }
@@ -246,7 +273,10 @@ class _DonutPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _DonutPainter old) =>
-      old.slices.length != slices.length || old.thickness != thickness;
+      old.slices != slices ||
+      old.thickness != thickness ||
+      old.deflate != deflate ||
+      old.gap != gap;
 }
 
 class _Bubble extends StatelessWidget {
@@ -266,7 +296,11 @@ class _Bubble extends StatelessWidget {
           border: Border.all(color: Colors.white.withOpacity(0.08)),
           boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.25), blurRadius: 12)],
         ),
-        child: Text(text, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 12)),
+        child: Text(
+          text,
+          textAlign: TextAlign.center,
+          style: const TextStyle(color: Colors.white, fontSize: 12),
+        ),
       ),
     );
   }

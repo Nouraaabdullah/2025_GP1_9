@@ -161,6 +161,19 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
     return total;
   }
 
+  Future<num> _getCurrentBalance() async {
+    final profileId = await _getProfileId();
+    final dynamic res = await _sb
+        .from('User_Profile')
+        .select('current_balance')
+        .eq('profile_id', profileId)
+        .single();
+    final map = res as Map<String, dynamic>;
+    final v = map['current_balance'];
+    if (v is num) return v;
+    return num.tryParse('$v') ?? 0;
+  }
+
   Future<void> _updateBalance({required num amount, required bool isEarning}) async {
     final profileId = await _getProfileId();
     final dynamic getRes = await _sb
@@ -251,15 +264,17 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
     return num.tryParse('$v') ?? 0;
   }
 
-  // color picker helper opened via root navigator to avoid nested dependents
+  // color picker helper opened via root navigator with hue/saturation wheel + brightness
   Future<Color?> _pickWheelColor(Color initial) async {
     Color tempColor = initial;
+    double brightness = HSVColor.fromColor(tempColor).value;
+
     return showDialog<Color>(
       context: context,
       useRootNavigator: true,
       builder: (ctx) {
         return AlertDialog(
-          backgroundColor: const Color(0xFF2A2550),
+          backgroundColor: AppColors.card,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: const Text(
             "Pick a Color",
@@ -267,35 +282,87 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
           ),
           content: StatefulBuilder(
             builder: (context, setInner) {
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  GestureDetector(
-                    onPanDown: (d) => _updateColor(d.localPosition, setInner, (c) => tempColor = c),
-                    onPanUpdate: (d) => _updateColor(d.localPosition, setInner, (c) => tempColor = c),
-                    child: CustomPaint(
-                      size: const Size(150, 150),
-                      painter: _ColorWheelPainter(tempColor),
+              return SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Color wheel (hue+saturation)
+                    GestureDetector(
+                      onPanDown: (d) => _updateColor(
+                        d.localPosition,
+                        setInner,
+                        (c) => tempColor = c,
+                        brightness,
+                      ),
+                      onPanUpdate: (d) => _updateColor(
+                        d.localPosition,
+                        setInner,
+                        (c) => tempColor = c,
+                        brightness,
+                      ),
+                      child: SizedBox(
+                        width: 250,
+                        height: 250,
+                        child: CustomPaint(
+                          painter: _ColorWheelPainter(tempColor),
+                          child: Center(
+                            child: Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                color: tempColor,
+                                shape: BoxShape.circle,
+                                border: Border.all(color: Colors.white, width: 3),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: tempColor,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white70, width: 2),
+                    const SizedBox(height: 16),
+                    // Brightness (value) slider
+                    Row(
+                      children: [
+                        const Icon(Icons.brightness_6, color: Colors.white70, size: 20),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: SliderTheme(
+                            data: SliderThemeData(
+                              activeTrackColor: AppColors.accent,
+                              inactiveTrackColor: Colors.white24,
+                              thumbColor: AppColors.accent,
+                              overlayColor: AppColors.accent.withOpacity(0.25),
+                              trackHeight: 4,
+                            ),
+                            child: Slider(
+                              value: brightness,
+                              min: 0.0,
+                              max: 1.0,
+                              onChanged: (v) {
+                                setInner(() {
+                                  brightness = v;
+                                  final hsv = HSVColor.fromColor(tempColor);
+                                  tempColor = hsv.withValue(v).toColor();
+                                });
+                              },
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                ],
+                  ],
+                ),
               );
             },
           ),
           actions: [
             TextButton(
+              onPressed: () => Navigator.of(ctx, rootNavigator: true).pop(null),
+              child: const Text("Cancel", style: TextStyle(color: Colors.white70)),
+            ),
+            TextButton(
               onPressed: () => Navigator.of(ctx, rootNavigator: true).pop(tempColor),
-              child: const Text("Done", style: TextStyle(color: Colors.white)),
+              child: Text("Done", style: TextStyle(color: AppColors.accent, fontWeight: FontWeight.w600)),
             ),
           ],
         );
@@ -305,182 +372,178 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
 
   // create category dialog
 
-Future<String> _createCategoryDialog() async {
-  final nameCtrl = TextEditingController();
-  final limitCtrl = TextEditingController();
+  Future<String> _createCategoryDialog() async {
+    final nameCtrl = TextEditingController();
+    final limitCtrl = TextEditingController();
 
-  Color chosenColor = const Color(0xFF7959F5);
-  IconData? chosenIcon;
+    Color chosenColor = const Color(0xFF7959F5);
+    IconData? chosenIcon;
 
-  final availableIcons = <IconData>[
-    Icons.fastfood,
-    Icons.shopping_bag,
-    Icons.home,
-    Icons.airplanemode_active,
-    Icons.movie,
-    Icons.sports_soccer,
-    Icons.work,
-    Icons.pets,
-    Icons.brush,
-    Icons.local_cafe,
-    Icons.computer,
-    Icons.attach_money,
-  ];
+    final availableIcons = <IconData>[
+      Icons.fastfood,
+      Icons.shopping_bag,
+      Icons.home,
+      Icons.airplanemode_active,
+      Icons.movie,
+      Icons.sports_soccer,
+      Icons.work,
+      Icons.pets,
+      Icons.brush,
+      Icons.local_cafe,
+      Icons.computer,
+      Icons.attach_money,
+    ];
 
-  String? createdCategoryName;
+    String? createdCategoryName;
 
-  await showDialog(
-    context: context,
-    useRootNavigator: true,
-    barrierDismissible: false, // prevent swipe-tap dismiss races
-    builder: (ctx) {
-      final formKey = GlobalKey<FormState>();
-      return StatefulBuilder(
-        builder: (ctx, setDialog) {
-          return AlertDialog(
-            backgroundColor: AppColors.card,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            title: const Text('New Category', style: TextStyle(color: Colors.white)),
-            content: Form(
-              key: formKey,
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextFormField(
-                      controller: nameCtrl,
-                      decoration: _inputDecoration().copyWith(hintText: 'Name'),
-                      validator: (v) => (v == null || v.trim().isEmpty) ? 'Enter a name' : null,
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: limitCtrl,
-                      decoration: _inputDecoration().copyWith(hintText: 'Monthly limit'),
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      validator: (v) => (v == null || v.trim().isEmpty)
-                          ? 'Enter a limit'
-                          : (double.tryParse(v.trim()) == null ? 'Enter a number' : null),
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        const Text('Color', style: TextStyle(color: Colors.white70)),
-                        const SizedBox(width: 10),
-                        GestureDetector(
-                          onTap: () async {
-                            final picked = await _pickWheelColor(chosenColor);
-                            if (picked != null) setDialog(() => chosenColor = picked);
-                          },
-                          child: Container(
-                            width: 28, height: 28,
-                            decoration: BoxDecoration(
-                              color: chosenColor,
-                              shape: BoxShape.circle,
-                              border: Border.all(color: Colors.white70),
+    await showDialog(
+      context: context,
+      useRootNavigator: true,
+      barrierDismissible: false,
+      builder: (ctx) {
+        final formKey = GlobalKey<FormState>();
+        return StatefulBuilder(
+          builder: (ctx, setDialog) {
+            return AlertDialog(
+              backgroundColor: AppColors.card,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: const Text('New Category', style: TextStyle(color: Colors.white)),
+              content: Form(
+                key: formKey,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TextFormField(
+                        controller: nameCtrl,
+                        decoration: _inputDecoration().copyWith(hintText: 'Name'),
+                        validator: (v) => (v == null || v.trim().isEmpty) ? 'Enter a name' : null,
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: limitCtrl,
+                        decoration: _inputDecoration().copyWith(hintText: 'Monthly limit'),
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        validator: (v) => (v == null || v.trim().isEmpty)
+                            ? 'Enter a limit'
+                            : (double.tryParse(v.trim()) == null ? 'Enter a number' : null),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          const Text('Color', style: TextStyle(color: Colors.white70)),
+                          const SizedBox(width: 10),
+                          GestureDetector(
+                            onTap: () async {
+                              final picked = await _pickWheelColor(chosenColor);
+                              if (picked != null) setDialog(() => chosenColor = picked);
+                            },
+                            child: Container(
+                              width: 28, height: 28,
+                              decoration: BoxDecoration(
+                                color: chosenColor,
+                                shape: BoxShape.circle,
+                                border: Border.all(color: Colors.white70),
+                              ),
                             ),
                           ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: availableIcons.map((icon) {
-                          final isSelected = chosenIcon == icon;
-                          return GestureDetector(
-                            onTap: () => setDialog(() => chosenIcon = icon),
-                            child: Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: isSelected ? AppColors.accent : const Color(0xFF2A2550),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Icon(icon, color: Colors.white, size: 22),
-                            ),
-                          );
-                        }).toList(),
+                        ],
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 12),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: availableIcons.map((icon) {
+                            final isSelected = chosenIcon == icon;
+                            return GestureDetector(
+                              onTap: () => setDialog(() => chosenIcon = icon),
+                              child: Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: isSelected ? AppColors.accent : const Color(0xFF2A2550),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Icon(icon, color: Colors.white, size: 22),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(ctx, rootNavigator: true).pop(),
-                child: const Text('Cancel'),
-              ),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: AppColors.accent),
-                onPressed: () async {
-                  if (!formKey.currentState!.validate()) return;
-                  if (chosenIcon == null) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Pick an icon')),
-                    );
-                    return;
-                  }
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx, rootNavigator: true).pop(),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.accent),
+                  onPressed: () async {
+                    if (!formKey.currentState!.validate()) return;
+                    if (chosenIcon == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Pick an icon')),
+                      );
+                      return;
+                    }
 
-                  final profileId = await _getProfileId();
-                  final name = nameCtrl.text.trim();
-                  final limit = num.parse(limitCtrl.text.trim());
+                    final profileId = await _getProfileId();
+                    final name = nameCtrl.text.trim();
+                    final limit = num.parse(limitCtrl.text.trim());
 
-                  final inserted = await _sb.from('Category').insert({
-                    'name': name,
-                    'type': 'Custom', // ← correct enum for user-created
-                    'monthly_limit': limit,
-                    'icon': chosenIcon.toString().split('.').last,
-                    'icon_color': chosenColor.value.toRadixString(16),
-                    'is_archived': false,
-                    'profile_id': profileId,
-                  }).select('category_id,name').single();
+                    final inserted = await _sb.from('Category').insert({
+                      'name': name,
+                      'type': 'Custom',
+                      'monthly_limit': limit,
+                      'icon': chosenIcon.toString().split('.').last,
+                      'icon_color': chosenColor.value.toRadixString(16),
+                      'is_archived': false,
+                      'profile_id': profileId,
+                    }).select('category_id,name').single();
 
-                  createdCategoryName = inserted['name'] as String;
+                    createdCategoryName = inserted['name'] as String;
 
-                  // Close dialog last, after DB call finishes
-                  if (context.mounted) {
-                    Navigator.of(ctx, rootNavigator: true).pop();
-                  }
-                },
-                child: const Text('Create', style: TextStyle(color: Colors.white)),
-              ),
-            ],
-          );
-        },
-      );
-    },
-  );
+                    if (context.mounted) {
+                      Navigator.of(ctx, rootNavigator: true).pop();
+                    }
+                  },
+                  child: const Text('Create', style: TextStyle(color: Colors.white)),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
 
-  // Do NOT dispose local controllers here; it can race with dialog teardown.
-  // nameCtrl.dispose();
-  // limitCtrl.dispose();
-
-  if (createdCategoryName == null) {
-    throw Exception('Creation cancelled');
+    if (createdCategoryName == null) {
+      throw Exception('Creation cancelled');
+    }
+    return createdCategoryName!;
   }
-  return createdCategoryName!;
-}
 
-
-  // color wheel math
+  // color wheel math (hue+saturation with adjustable brightness)
   void _updateColor(
     Offset position,
     void Function(void Function()) setStateDialog,
     void Function(Color) setColor,
+    double brightness,
   ) {
-    const radius = 75.0;
-    const center = Offset(radius, radius);
-    final dx = position.dx - center.dx;
-    final dy = position.dy - center.dy;
-    final distance = math.sqrt(dx * dx + dy * dy);
+    const double radius = 125.0; // matches 250x250 wheel
+    final double dx = position.dx - radius;
+    final double dy = position.dy - radius;
+    final double distance = math.sqrt(dx * dx + dy * dy);
 
-    if (distance > radius || distance < radius - 15) return;
+    if (distance > radius) return;
 
-    final angle = (math.atan2(dy, dx) * 180 / math.pi + 360) % 360;
-    final color = HSVColor.fromAHSV(1, angle, 1, 1).toColor();
+    final double angle = (math.atan2(dy, dx) * 180 / math.pi + 360) % 360;
+    final double saturation = (distance / radius).clamp(0.0, 1.0);
+
+    final color = HSVColor.fromAHSV(1.0, angle, saturation, brightness).toColor();
 
     setStateDialog(() {});
     setColor(color);
@@ -549,11 +612,9 @@ Future<String> _createCategoryDialog() async {
           ? currBalRow['current_balance'] as num
           : num.tryParse('${currBalRow['current_balance']}') ?? 0;
 
-      final num savedTotal = await _sumAllMonthlySavingsExceptCurrent(profileId, _selectedDate);
-
-      if (currentBalance <= savedTotal && mounted) {
+      if (currentBalance <= 0) {
         _showOverspendNote(
-          'Alert: your balance $currentBalance is at or below your saved total $savedTotal.',
+          'Alert: your balance $currentBalance is at 0 or less.',
         );
       }
     }
@@ -564,7 +625,165 @@ Future<String> _createCategoryDialog() async {
       SnackBar(
         content: Text(msg),
         behavior: SnackBarBehavior.floating,
-        backgroundColor: Colors.redAccent,
+        backgroundColor: const Color.fromARGB(255, 93, 73, 148),
+      ),
+    );
+  }
+
+  // === confirmation dialog and zero balance info ===
+
+  Future<bool> _showConfirmTransactionDialog({
+    required double currentBalance,
+    required double amount,
+    required bool isExpense,
+    String? categoryName,
+    required String dateText,
+  }) async {
+    final double newBalance =
+        isExpense ? currentBalance - amount : currentBalance + amount;
+
+    final Color amountColor = isExpense ? Colors.redAccent : Colors.greenAccent;
+    final String amountPrefix = isExpense ? '-' : '+';
+
+    final textStyleLabel = TextStyle(
+      color: AppColors.textGrey,
+      fontSize: 14,
+      height: 1.25,
+    );
+    const textStyleValue = TextStyle(
+      color: Colors.white,
+      fontSize: 15,
+      fontWeight: FontWeight.w600,
+    );
+
+    final bool? ok = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        return Dialog(
+          backgroundColor: AppColors.card,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 22, 20, 14),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text(
+                  'Confirm Transaction',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                _ConfirmRow(
+                  label: 'Current Balance',
+                  value: '${currentBalance.toStringAsFixed(2)} SAR',
+                  labelStyle: textStyleLabel,
+                  valueStyle: textStyleValue,
+                ),
+                const SizedBox(height: 10),
+
+                _ConfirmRow(
+                  label: 'New Balance',
+                  value: '${newBalance.toStringAsFixed(2)} SAR',
+                  labelStyle: textStyleLabel,
+                  valueStyle: textStyleValue,
+                ),
+                const SizedBox(height: 10),
+
+                _ConfirmRow(
+                  label: 'Date',
+                  value: dateText,
+                  labelStyle: textStyleLabel,
+                  valueStyle: textStyleValue,
+                ),
+                const SizedBox(height: 10),
+
+                _ConfirmRow(
+                  label: 'Amount',
+                  value: '$amountPrefix${amount.toStringAsFixed(2)} SAR',
+                  labelStyle: textStyleLabel,
+                  valueStyle: textStyleValue.copyWith(color: amountColor),
+                ),
+                const SizedBox(height: 10),
+
+                if (isExpense && (categoryName != null && categoryName.isNotEmpty))
+                  _ConfirmRow(
+                    label: 'Category',
+                    value: categoryName,
+                    labelStyle: textStyleLabel,
+                    valueStyle: textStyleValue,
+                  ),
+                const SizedBox(height: 22),
+
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextButton(
+                        onPressed: () => Navigator.of(ctx).pop(false),
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.white70,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                        ),
+                        child: const Text('Cancel'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.of(ctx).pop(true),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.accent,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: const Text('Confirm'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    return ok ?? false;
+  }
+
+  Future<void> _showZeroBalanceInfoIfNeeded({
+    required bool isExpense,
+    required double newBalance,
+  }) async {
+    if (!isExpense || newBalance != 0) return;
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.card,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Heads up',
+          style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700),
+        ),
+        content: const Text(
+          'This expense will bring your balance to 0. We will log it and continue. Future expenses will make your balance negative.',
+          style: TextStyle(color: Colors.white70, fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('OK'),
+          ),
+        ],
       ),
     );
   }
@@ -616,8 +835,31 @@ Future<String> _createCategoryDialog() async {
       }
     }
 
+    // new confirmation flow
     try {
+      final isExpense = _type == 'Expense';
+      final amount = double.parse(_amountCtrl.text.trim());
+      final currentBalance = (await _getCurrentBalance()).toDouble();
+
+      final confirmed = await _showConfirmTransactionDialog(
+        currentBalance: currentBalance,
+        amount: amount,
+        isExpense: isExpense,
+        categoryName: isExpense ? _selectedCategory : null,
+        dateText: _fmt(_selectedDate),
+      );
+      if (!confirmed) return;
+
+      final newBalance =
+          isExpense ? currentBalance - amount : currentBalance + amount;
+
+      await _showZeroBalanceInfoIfNeeded(
+        isExpense: isExpense,
+        newBalance: newBalance,
+      );
+
       await _submitToDb();
+
       final preview =
           '$_type • ${_selectedCategory ?? ''} • ${_amountCtrl.text.trim()} • ${_fmt(_selectedDate)}';
       if (!mounted) return;
@@ -1005,11 +1247,12 @@ class _ColorWheelPainter extends CustomPainter {
     final center = Offset(size.width / 2, size.height / 2);
     final radius = size.width / 2;
 
+    // Draw hue ring
     for (double i = 0; i < 360; i++) {
       final paint = Paint()
-        ..color = HSVColor.fromAHSV(1, i, 1, 1).toColor()
-        ..strokeWidth = 15
-        ..style = PaintingStyle.stroke;
+        ..color = HSVColor.fromAHSV(1.0, i, 1.0, 1.0).toColor()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2;
       canvas.drawArc(
         Rect.fromCircle(center: center, radius: radius),
         i * math.pi / 180,
@@ -1019,12 +1262,37 @@ class _ColorWheelPainter extends CustomPainter {
       );
     }
 
-    final highlight = Paint()
-      ..color = selectedColor
-      ..style = PaintingStyle.fill;
-    canvas.drawCircle(center, 8, highlight);
+    // Radial white -> transparent (saturation)
+    final saturationPaint = Paint()
+      ..shader = const RadialGradient(
+        colors: [Colors.white, Color.fromARGB(0, 255, 255, 255)],
+      ).createShader(Rect.fromCircle(center: center, radius: radius));
+    canvas.drawCircle(center, radius, saturationPaint);
   }
 
   @override
   bool shouldRepaint(_) => true;
+}
+
+class _ConfirmRow extends StatelessWidget {
+  final String label;
+  final String value;
+  final TextStyle labelStyle;
+  final TextStyle valueStyle;
+  const _ConfirmRow({
+    required this.label,
+    required this.value,
+    required this.labelStyle,
+    required this.valueStyle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(child: Text(label, style: labelStyle)),
+        Text(value, style: valueStyle),
+      ],
+    );
+  }
 }

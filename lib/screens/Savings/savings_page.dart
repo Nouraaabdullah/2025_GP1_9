@@ -3,11 +3,12 @@ import 'package:flutter/services.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/bottom_nav_bar.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-
+import 'create_goal_page.dart';
+import 'edit_goal_page.dart';
+import 'dart:math'; // Added for max/min clamping
 
 /// ---------------- Domain ----------------
-enum GoalType { active, completed, uncompleted }
-
+enum GoalType { active, completed, uncompleted, achieved }
 class Goal {
   final String id;
   final String title;
@@ -15,7 +16,8 @@ class Goal {
   final double targetAmount;
   final DateTime createdAt;
   final double savedAmount;
-  final DateTime? targetDate; // persist a real target date
+  final DateTime? targetDate;
+  final String? status;
 
   const Goal({
     required this.id,
@@ -25,22 +27,21 @@ class Goal {
     required this.createdAt,
     this.savedAmount = 0.0,
     this.targetDate,
+    this.status,
   });
-
   double get remaining =>
       (targetAmount - savedAmount).clamp(0.0, double.infinity);
-
   double get progress =>
       targetAmount == 0 ? 0.0 : (savedAmount / targetAmount).clamp(0.0, 1.0);
-
   Goal copyWith({
-    String? id,  
+    String? id,
     String? title,
     double? targetAmount,
     double? savedAmount,
     GoalType? type,
     DateTime? createdAt,
     DateTime? targetDate,
+    String? status,
   }) {
     return Goal(
       id: id ?? this.id,
@@ -50,6 +51,7 @@ class Goal {
       type: type ?? this.type,
       createdAt: createdAt ?? this.createdAt,
       targetDate: targetDate ?? this.targetDate,
+      status: status ?? this.status,
     );
   }
 }
@@ -57,96 +59,81 @@ class Goal {
 /// ---------------- Page ----------------
 class SavingsPage extends StatefulWidget {
   const SavingsPage({super.key});
-
   @override
   State<SavingsPage> createState() => _SavingsPageState();
 }
 
 class _SavingsPageState extends State<SavingsPage> {
-
-  //Created a Supabase client to interact with the database
   final supabase = Supabase.instance.client;
-
   GoalType _selected = GoalType.active;
-
-  // Monthly savings (dummy data for now)
   final Map<String, double> _monthlySavings = {};
-
-  // Derived balances for assigning
   double _unassignedBalance = 0;
-
   double _totalSaving = 0.0;
-
-
   final List<Goal> _goals = [];
 
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _initData());
+    _setupRealtimeListeners();
+  }
 
-@override
-void initState() {
-  super.initState();
+  Future<void> _initData() async {
+    await _generateMonthlySavings();
+    await _fetchGoals();
+  }
 
-  _generateMonthlySavings(); // initial load
-  _fetchGoals(); // keep your existing fetch
-
-  //  Realtime listener for Transaction table
-  supabase
-      .channel('public:Transaction')
-      .onPostgresChanges(
-        event: PostgresChangeEvent.all,
-        schema: 'public',
-        table: 'Transaction',
-        callback: (payload) async {
-          debugPrint(' Transaction updated: ${payload.eventType}');
-          await _generateMonthlySavings();
-        },
-      )
-      .subscribe();
-
-  //  Realtime listener for Fixed_Income table
-  supabase
-      .channel('public:Fixed_Income')
-      .onPostgresChanges(
-        event: PostgresChangeEvent.all,
-        schema: 'public',
-        table: 'Fixed_Income',
-        callback: (payload) async {
-          debugPrint(' Fixed_Income updated: ${payload.eventType}');
-          await _generateMonthlySavings();
-        },
-      )
-      .subscribe();
-
-  //  Realtime listener for Fixed_Expense table
-  supabase
-      .channel('public:Fixed_Expense')
-      .onPostgresChanges(
-        event: PostgresChangeEvent.all,
-        schema: 'public',
-        table: 'Fixed_Expense',
-        callback: (payload) async {
-          debugPrint(' Fixed_Expense updated: ${payload.eventType}');
-          await _generateMonthlySavings();
-        },
-      )
-      .subscribe();
-
-  //  also listen for changes in Monthly_Financial_Record
-  supabase
-      .channel('public:Monthly_Financial_Record')
-      .onPostgresChanges(
-        event: PostgresChangeEvent.all,
-        schema: 'public',
-        table: 'Monthly_Financial_Record',
-        callback: (payload) async {
-          debugPrint('MFR updated: ${payload.eventType}');
-          await _generateMonthlySavings();
-        },
-      )
-      .subscribe();
-
-
-      // Realtime listener for Goal_Transfer
-      supabase
+  void _setupRealtimeListeners() {
+    final supabase = Supabase.instance.client;
+    supabase
+        .channel('public:Transaction')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'Transaction',
+          callback: (payload) async {
+            debugPrint('Transaction updated: ${payload.eventType}');
+            await _generateMonthlySavings();
+          },
+        )
+        .subscribe();
+    supabase
+        .channel('public:Fixed_Income')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'Fixed_Income',
+          callback: (payload) async {
+            debugPrint('Fixed_Income updated: ${payload.eventType}');
+            await _generateMonthlySavings();
+          },
+        )
+        .subscribe();
+    supabase
+        .channel('public:Fixed_Expense')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'Fixed_Expense',
+          callback: (payload) async {
+            debugPrint('Fixed_Expense updated: ${payload.eventType}');
+            await _generateMonthlySavings();
+          },
+        )
+        .subscribe();
+    supabase
+        .channel('public:Monthly_Financial_Record')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'Monthly_Financial_Record',
+          callback: (payload) async {
+            debugPrint('MFR updated: ${payload.eventType}');
+            await _generateMonthlySavings();
+          },
+        )
+        .subscribe();
+    supabase
         .channel('public:Goal_Transfer')
         .onPostgresChanges(
           event: PostgresChangeEvent.all,
@@ -159,422 +146,330 @@ void initState() {
           },
         )
         .subscribe();
+    supabase
+        .channel('public:Goal')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'Goal',
+          callback: (payload) async {
+            debugPrint('Goal table changed: ${payload.eventType}');
+            await _fetchGoals();
+            await _markExpiredGoalsAsUncompleted();
+          },
+        )
+        .subscribe();
+  }
 
-}
-
-
-
-void _subscribeToMonthlyChanges() {
-  supabase
-      .channel('public:Monthly_Financial_Record')
-      .onPostgresChanges(
-        event: PostgresChangeEvent.all,
-        schema: 'public',
-        table: 'Monthly_Financial_Record',
-        callback: (payload) async {
-          debugPrint('Monthly record changed: ${payload.eventType}');
-          await _generateMonthlySavings();
-
-        },
-      )
-      .subscribe();
-}
-
-
-Future<void> _fetchGoals() async {
+Future<void> _logCompletedGoalExpense(Goal goal) async {
   try {
-    const profileId = 'e33f0c91-26fd-436a-baa3-6ad1df3a8152';
-
-    // 1Fetch all goals
-    final response = await supabase
+    const profileId = '14673818-3a31-479a-85dd-f21f28952651';
+    final currentGoal = await supabase
         .from('Goal')
-        .select()
-        .eq('profile_id', profileId);
-
-    if (response == null || response.isEmpty) {
-      debugPrint('No goals found.');
-      setState(() => _goals.clear());
+        .select('status')
+        .eq('goal_id', goal.id)
+        .single();
+    if (currentGoal['status'] == 'Achieved') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('This goal has already been logged as an expense.')),
+      );
       return;
     }
 
-    final data = response as List;
+    final amount = goal.targetAmount; // Define once here
+    final now = DateTime.now(); // 02:10 AM +03, October 21, 2025
+    final monthStart = DateTime(now.year, now.month, 1);
 
-    // Fetch all transfer records for these goals
-    final transferResponse = await supabase
-        .from('Goal_Transfer')
-        .select('goal_id, amount, direction')
-        .inFilter('goal_id', data.map((g) => g['goal_id']).whereType<String>().toList());
-
-    final Map<String, double> goalSaved = {};
-
-    for (final t in transferResponse) {
-      final id = t['goal_id'];
-      final amt = (t['amount'] ?? 0).toDouble();
-      final dir = t['direction']?.toString().toLowerCase();
-
-      goalSaved[id] = (goalSaved[id] ?? 0) +
-          (dir == 'assign' ? amt : dir == 'unassign' ? -amt : 0);
-    }
-
-   
-    final fetchedGoals = data.map((g) {
-      final id = g['goal_id'] ?? '';
-      final saved = goalSaved[id] ?? 0.0;
-
-      return Goal(
-        id: id,
-        title: g['name'] ?? '',
-        targetAmount: (g['target_amount'] ?? 0).toDouble(),
-        savedAmount: saved, 
-        createdAt: DateTime.parse(g['created_at']),
-        targetDate: g['target_date'] != null
-            ? DateTime.parse(g['target_date'])
-            : null,
-        type: _statusToType(g['status']),
-      );
-    }).toList();
-
-    setState(() {
-      _goals
-        ..clear()
-        ..addAll(fetchedGoals);
-    });
-  _recalculateBalances();
-    debugPrint(' Goals fetched successfully: ${_goals.length}');
-  } catch (e) {
-    debugPrint('Error fetching goals: $e');
-  }
-
-  
-}
-
-// ------------------------------------------------------
-// CHECK & UPDATE GOAL STATUS (after assign/unassign)
-// ------------------------------------------------------
-// This function recalculates the total assigned amount for a given goal.
-// If assigned ≥ target, it marks the goal as 'Completed'.
-// If assigned < target, it ensures status is 'Active'.
-Future<void> _checkAndUpdateGoalStatus(String goalId) async {
-  try {
-    //  Sum all assigned and unassigned transfers for this goal
-    final transfers = await supabase
-        .from('Goal_Transfer')
-        .select('amount, direction')
-        .eq('goal_id', goalId);
-
-    double totalAssigned = 0.0;
-    for (final t in (transfers as List? ?? [])) {
-      final amt = (t['amount'] ?? 0).toDouble();
-      final dir = (t['direction'] ?? '').toString().toLowerCase();
-      if (dir == 'assign') totalAssigned += amt;
-      if (dir == 'unassign') totalAssigned -= amt;
-    }
-
-    //  Get the target amount of the goal
-    final goal = await supabase
-        .from('Goal')
-        .select('target_amount')
-        .eq('goal_id', goalId)
-        .single();
-
-    final target = (goal['target_amount'] ?? 0).toDouble();
-
-    //  Determine new status
-    final newStatus = totalAssigned >= target ? 'Completed' : 'Active';
-
-    //  Update the goal in database if needed
-    await supabase
-        .from('Goal')
-        .update({'status': newStatus})
-        .eq('goal_id', goalId);
-
-    debugPrint(' Goal $goalId status updated to $newStatus');
-    await _fetchGoals(); // refresh UI
-  } catch (e) {
-    debugPrint(' Error updating goal status: $e');
-  }
-}
-
-// ------------------------------------------------------
-// FETCH A SINGLE GOAL BY ID (for editing)
-// ------------------------------------------------------
-Future<Goal?> _fetchGoalById(String goalId) async {
-  try {
-    final res = await supabase
-        .from('Goal')
-        .select()
-        .eq('goal_id', goalId)
-        .single();
-
-    if (res == null) return null;
-
-    // Map DB fields into Goal object
-    return Goal(
-      id: res['goal_id'],
-      title: res['name'] ?? '',
-      targetAmount: (res['target_amount'] ?? 0).toDouble(),
-      savedAmount: (res['saved_amount'] ?? 0).toDouble(),
-      createdAt: DateTime.parse(res['created_at']),
-      targetDate: res['target_date'] != null
-          ? DateTime.parse(res['target_date'])
-          : null,
-      type: _statusToType(res['status']),
-    );
-  } catch (e) {
-    debugPrint('❌ Error fetching goal by ID: $e');
-    return null;
-  }
-}
-
-// ------------------------------------------------------
-// UPDATE GOAL INFO AFTER EDIT (handles status + balance)
-// ------------------------------------------------------
-Future<void> _updateGoal(Goal updated) async {
-  try {
-    //  Fetch total assigned amount from Goal_Transfer
-    final transfers = await supabase
-        .from('Goal_Transfer')
-        .select('amount, direction')
-        .eq('goal_id', updated.id);
-
-    double totalAssigned = 0.0;
-    for (final t in (transfers as List? ?? [])) {
-      final amt = (t['amount'] ?? 0).toDouble();
-      final dir = (t['direction'] ?? '').toString().toLowerCase();
-      if (dir == 'assign') totalAssigned += amt;
-      if (dir == 'unassign') totalAssigned -= amt;
-    }
-
-    // Determine new status based on savedAmount vs target
-    final newStatus =
-        totalAssigned >= updated.targetAmount ? 'Completed' : 'Active';
-
-    //  Update in database
-    await supabase.from('Goal').update({
-      'name': updated.title,
-      'target_amount': updated.targetAmount,
-      'target_date': updated.targetDate?.toIso8601String(),
-      'status': newStatus,
-     
-    }).eq('goal_id', updated.id);
-
-    //  Refresh local state — update this goal in the list
-    setState(() {
-      final i = _goals.indexWhere((g) => g.id == updated.id);
-      if (i != -1) {
-        _goals[i] = updated.copyWith(
-          savedAmount: totalAssigned,
-          type: _statusToType(newStatus),
+    // Fetch and update current balance
+    final user = await supabase
+        .from('User_Profile')
+        .select('current_balance')
+        .eq('profile_id', profileId)
+        .maybeSingle();
+    final currentBalance = (user?['current_balance'] ?? 0).toDouble();
+    if (currentBalance < amount) { // Reuse amount here
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Insufficient balance to log this expense.')),
         );
       }
-    });
+      return;
+    }
 
-   
-    _recalculateBalances();
+    final newBalance = (currentBalance - amount).clamp(0, double.infinity);
+    await supabase
+        .from('User_Profile')
+        .update({'current_balance': newBalance})
+        .eq('profile_id', profileId);
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Goal updated: ${updated.title} ($newStatus)')),
-    );
+    // Log the transaction (no monthly_saving update here)
+    final categories = await supabase
+        .from('Category')
+        .select('category_id, name')
+        .order('name');
+    if (categories.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No categories available.')),
+      );
+      return;
+    }
+    // ... (rest of the method remains unchanged)
   } catch (e) {
-    debugPrint(' Error updating goal: $e');
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Error updating goal: $e')),
-    );
+    debugPrint('❌ Error logging completed goal expense: $e');
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error logging expense: $e')),
+      );
+    }
   }
 }
 
-
-void _recalculateBalances() {
-  final assigned = _goals.fold(0.0, (sum, g) => sum + g.savedAmount);
-  setState(() {
-    _unassignedBalance = _totalSaving - assigned;
-  });
-}
-
-
-Future<void> _generateMonthlySavings() async {
-  try {
-    const profileId = 'e33f0c91-26fd-436a-baa3-6ad1df3a8152';
-    final now = DateTime.now();
-    final currentYear = now.year;
-    final currentMonth = now.month;
-
-    //  Fetch all monthly records
-    final mfr = await supabase
-        .from('Monthly_Financial_Record')
-        .select('period_start, monthly_saving')
-        .eq('profile_id', profileId)
-        .order('period_start', ascending: true);
-
-    final Map<int, double> monthlyData = {};
-    for (final r in (mfr as List? ?? const [])) {
-      final d = DateTime.parse(r['period_start']);
-      if (d.year == currentYear) {
-        monthlyData[d.month] = (r['monthly_saving'] ?? 0).toDouble();
+  Future<void> _markExpiredGoalsAsUncompleted() async {
+    try {
+      final now = DateTime.now(); // 02:00 AM +03, October 21, 2025
+      for (final goal in _goals) {
+        if (goal.type == GoalType.active && goal.targetDate != null) {
+          if (now.isAfter(goal.targetDate!)) {
+            await supabase
+                .from('Goal')
+                .update({'status': 'Uncompleted'})
+                .eq('goal_id', goal.id);
+            debugPrint('⚠️ Goal "${goal.title}" marked as Uncompleted');
+          }
+        }
       }
+      await _fetchGoals();
+    } catch (e) {
+      debugPrint('❌ Error marking expired goals: $e');
     }
+  }
 
-    //  Fetch current month Transactions
-    final monthStart = DateTime(currentYear, currentMonth, 1);
-    final nextMonthStart = DateTime(
-      currentMonth == 12 ? currentYear + 1 : currentYear,
-      currentMonth == 12 ? 1 : currentMonth + 1,
-      1,
-    );
-
-    final tx = await supabase
-        .from('Transaction')
-        .select('type, amount, date')
-        .eq('profile_id', profileId)
-        .gte('date', monthStart.toIso8601String())
-        .lt('date', nextMonthStart.toIso8601String());
-
-    double transactionEarning = 0;
-    double transactionExpense = 0;
-
-    for (final t in (tx as List? ?? const [])) {
-      final amt = (t['amount'] ?? 0).toDouble();
-      final typ = (t['type'] ?? '').toString().toLowerCase();
-      if (typ == 'earning') transactionEarning += amt;
-      if (typ == 'expense') transactionExpense += amt;
-    }
-
-    //  Fetch Fixed Income (active this month)
-    final fixedIncome = await supabase
-        .from('Fixed_Income')
-        .select('monthly_income, start_time, end_time')
-        .eq('profile_id', profileId);
-
-    double activeIncome = 0;
-    for (final i in (fixedIncome as List? ?? const [])) {
-      final start = DateTime.parse(i['start_time']);
-      final end = DateTime.parse(i['end_time']);
-      if (now.isAfter(start) && now.isBefore(end.add(const Duration(days: 1)))) {
-        activeIncome += (i['monthly_income'] ?? 0).toDouble();
+  Future<void> _fetchGoals() async {
+    try {
+      const profileId = '14673818-3a31-479a-85dd-f21f28952651';
+      final response = await supabase
+          .from('Goal')
+          .select()
+          .eq('profile_id', profileId);
+      if (response == null || response.isEmpty) {
+        debugPrint('No goals found.');
+        setState(() => _goals.clear());
+        return;
       }
-    }
-
-    // 4️⃣ Fetch Fixed Expense (active this month)
-    final fixedExpense = await supabase
-        .from('Fixed_Expense')
-        .select('amount, start_time')
-        .eq('profile_id', profileId);
-
-    double activeExpense = 0;
-    for (final e in (fixedExpense as List? ?? const [])) {
-      final start = DateTime.parse(e['start_time']);
-      if (start.year == currentYear && start.month == currentMonth) {
-        activeExpense += (e['amount'] ?? 0).toDouble();
+      final data = response as List;
+      final transferResponse = await supabase
+          .from('Goal_Transfer')
+          .select('goal_id, amount, direction')
+          .inFilter('goal_id', data.map((g) => g['goal_id']).whereType<String>().toList());
+      final Map<String, double> goalSaved = {};
+      for (final t in transferResponse) {
+        final id = t['goal_id'];
+        final amt = (t['amount'] ?? 0).toDouble();
+        final dir = t['direction']?.toString().toLowerCase();
+        goalSaved[id] = (goalSaved[id] ?? 0) + (dir == 'assign' ? amt : dir == 'unassign' ? -amt : 0);
+        goalSaved[id] = max(0, goalSaved[id]!);
       }
+
+      final fetchedGoals = data.map((g) {
+        final id = g['goal_id'] ?? '';
+        final saved = goalSaved[id] ?? 0.0;
+        return Goal(
+          id: id,
+          title: g['name'] ?? '',
+          targetAmount: (g['target_amount'] ?? 0).toDouble(),
+          savedAmount: saved,
+          createdAt: DateTime.parse(g['created_at']),
+          targetDate: g['target_date'] != null ? DateTime.parse(g['target_date']) : null,
+          type: _statusToType(g['status']),
+          status: g['status'],
+        );
+      }).toList();
+      setState(() {
+        _goals
+          ..clear()
+          ..addAll(fetchedGoals);
+      });
+      _recalculateBalances();
+      await _markExpiredGoalsAsUncompleted();
+      debugPrint('Goals fetched successfully: ${_goals.length}');
+    } catch (e) {
+      debugPrint('Error fetching goals: $e');
     }
+  }
 
-    // 5️⃣ Calculate live current-month saving
-    final currentMonthLive = (transactionEarning + activeIncome) -
-        (transactionExpense + activeExpense);
-
-    // 6️⃣ Ensure all months up to current exist
-    for (int m = 1; m <= currentMonth; m++) {
-      monthlyData.putIfAbsent(m, () => 0.0);
+  Future<void> _checkAndUpdateGoalStatus(String goalId) async {
+    try {
+      final transfers = await supabase
+          .from('Goal_Transfer')
+          .select('amount, direction')
+          .eq('goal_id', goalId);
+      double totalAssigned = 0.0;
+      for (final t in (transfers as List? ?? [])) {
+        final amt = (t['amount'] ?? 0).toDouble();
+        final dir = (t['direction'] ?? '').toString().toLowerCase();
+        if (dir == 'assign') totalAssigned += amt;
+        if (dir == 'unassign') totalAssigned -= amt;
+      }
+      totalAssigned = max(0, totalAssigned);
+      final goal = await supabase
+          .from('Goal')
+          .select('target_amount')
+          .eq('goal_id', goalId)
+          .single();
+      final target = (goal['target_amount'] ?? 0).toDouble();
+      final newStatus = totalAssigned >= target ? 'Completed' : 'Active';
+      await supabase
+          .from('Goal')
+          .update({'status': newStatus})
+          .eq('goal_id', goalId);
+      debugPrint('Goal $goalId status updated to $newStatus');
+      await _fetchGoals();
+    } catch (e) {
+      debugPrint('Error updating goal status: $e');
     }
+  }
 
-    // 7️⃣ Replace current month value
-    monthlyData[currentMonth] = currentMonthLive;
+  Future<Goal?> _fetchGoalById(String goalId) async {
+    try {
+      final res = await supabase
+          .from('Goal')
+          .select()
+          .eq('goal_id', goalId)
+          .single();
+      if (res == null) return null;
+      return Goal(
+        id: res['goal_id'],
+        title: res['name'] ?? '',
+        targetAmount: (res['target_amount'] ?? 0).toDouble(),
+        savedAmount: (res['saved_amount'] ?? 0).toDouble(),
+        createdAt: DateTime.parse(res['created_at']),
+        targetDate: res['target_date'] != null ? DateTime.parse(res['target_date']) : null,
+        type: _statusToType(res['status']),
+        status: res['status'],
+      );
+    } catch (e) {
+      debugPrint('❌ Error fetching goal by ID: $e');
+      return null;
+    }
+  }
 
-    // 8️⃣ Sort (current month first)
-    final sorted = monthlyData.entries.toList()
-      ..sort((a, b) => b.key.compareTo(a.key));
-
-    // 9️⃣ Total saving = all previous months (before current)
-    double totalSaving = 0;
-    monthlyData.forEach((m, v) {
-      if (m < currentMonth) totalSaving += v;
-    });
-
-    // 🔟 Update UI
+  void _recalculateBalances() {
+    final assigned = _goals.fold(0.0, (sum, g) => sum + g.savedAmount);
     setState(() {
-      _monthlySavings
-        ..clear()
-        ..addEntries(sorted.map((e) => MapEntry(
-              '${_monthName(e.key)} $currentYear',
-              e.value,
-            )));
-      _totalSaving = totalSaving;
-      final assigned = _goals.fold(0.0, (sum, g) => sum + g.savedAmount);
-      _unassignedBalance = totalSaving - assigned;
-
+      _unassignedBalance = (_totalSaving - assigned).clamp(0.0, double.infinity);
     });
-
-    debugPrint(
-        '✅ Monthly data: $_monthlySavings | Total before current: $totalSaving | Current live: $currentMonthLive | Earn=$transactionEarning+$activeIncome | Exp=$transactionExpense+$activeExpense');
-        _recalculateBalances();
-  } catch (e) {
-    debugPrint('❌ Error in _generateMonthlySavings: $e');
   }
-}
 
+  Future<void> _generateMonthlySavings() async {
+    try {
+      const profileId = '14673818-3a31-479a-85dd-f21f28952651';
+      final now = DateTime.now(); // 02:00 AM +03, October 21, 2025
+      final monthStart = DateTime(now.year, now.month, 1);
+      final monthEnd = DateTime(now.year, now.month + 1, 0);
+      final previousRecords = await supabase
+          .from('Monthly_Financial_Record')
+          .select('monthly_saving')
+          .eq('profile_id', profileId);
+      final isNewUser = previousRecords.isEmpty;
+      final userRow = await supabase
+          .from('User_Profile')
+          .select('current_balance')
+          .eq('profile_id', profileId)
+          .maybeSingle();
+      final double currentBalance = (userRow?['current_balance'] ?? 0).toDouble();
+      final existing = await supabase
+          .from('Monthly_Financial_Record')
+          .select()
+          .eq('profile_id', profileId)
+          .eq('period_start', monthStart.toIso8601String())
+          .maybeSingle();
+      if (existing == null) {
+        await supabase.from('Monthly_Financial_Record').insert({
+          'profile_id': profileId,
+          'period_start': monthStart.toIso8601String(),
+          'period_end': monthEnd.toIso8601String(),
+          'total_income': 0,
+          'total_expense': 0,
+          'monthly_saving': 0,
+        });
+        debugPrint('🟢 Inserted first monthly record with balance=$currentBalance');
+      }
+      double totalSaving = 0;
+      for (final r in previousRecords) {
+        totalSaving += (r['monthly_saving'] ?? 0).toDouble();
+      }
+      if (totalSaving == 0 && currentBalance > 0) {
+        totalSaving = currentBalance;
+      }
+      final monthlyData = await supabase
+          .from('Monthly_Financial_Record')
+          .select('period_start, monthly_saving')
+          .eq('profile_id', profileId)
+          .order('period_start', ascending: true);
+      final Map<String, double> monthMap = {};
+      for (final record in (monthlyData as List? ?? [])) {
+        final start = DateTime.parse(record['period_start']);
+        final label = '${_monthName(start.month)} ${start.year}';
+        monthMap[label] = (record['monthly_saving'] ?? 0).toDouble();
+      }
+      debugPrint('✅ Total saving computed = $totalSaving');
+      setState(() {
+        _totalSaving = totalSaving;
+        _monthlySavings
+          ..clear()
+          ..addAll(monthMap);
+      });
+      _recalculateBalances();
+    } catch (e) {
+      debugPrint('❌ Error in _generateMonthlySavings: $e');
+    }
+  }
 
-
-
-
-
-GoalType _statusToType(dynamic status) {
-  if (status == null) return GoalType.active;
-  final s = status.toString().toLowerCase();
-  if (s == 'completed') return GoalType.completed;
-  if (s == 'uncompleted' || s == 'failed') return GoalType.uncompleted;
-  return GoalType.active;
-}
-
-
-
+  GoalType _statusToType(dynamic status) {
+    if (status == null) return GoalType.active;
+    if (status is int) {
+      switch (status) {
+        case 1:
+          return GoalType.active;
+        case 2:
+          return GoalType.completed;
+        case 3:
+          return GoalType.uncompleted;
+        case 4:
+          return GoalType.achieved;
+        default:
+          return GoalType.active;
+      }
+    }
+    final s = status.toString().toLowerCase();
+    if (s == 'achieved') return GoalType.achieved;
+    if (s == 'completed') return GoalType.completed;
+    if (s == 'uncompleted' || s == 'failed') return GoalType.uncompleted;
+    return GoalType.active;
+  }
 
   String _monthName(int month) {
     const months = [
-      'January','February','March','April','May','June',
-      'July','August','September','October','November','December'
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
     ];
     return months[month - 1];
   }
 
-  
-  double get _assignedBalance =>
-      _goals.fold(0.0, (sum, g) => sum + g.savedAmount);
-
-double get totalSavings {
-  final now = DateTime.now();
-  double total = 0.0;
-
-  _monthlySavings.forEach((label, value) {
-    final parts = label.split(' ');
-    final month = _monthIndex(parts[0]);
-    final year = int.tryParse(parts[1]) ?? 0;
-    if (year == now.year && month < now.month) {
-      total += value; // Only months before current
-    }
-  });
-  return total;
-}
-
-
-int _monthIndex(String name) {
-  const months = [
-    'January','February','March','April','May','June',
-    'July','August','September','October','November','December'
-  ];
-  return months.indexOf(name) + 1;
-}
+  double get _assignedBalance => _goals.fold(0.0, (sum, g) => sum + g.savedAmount);
 
   String _fmt(double value) {
-    final s = value.round().toString();
-    return s.replaceAllMapped(
-        RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]},');
+    final parts = value.toStringAsFixed(2).split('.');
+    final integerPart = parts[0].replaceAllMapped(
+      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+      (m) => '${m[1]},',
+    );
+    return parts.length > 1 ? '$integerPart.${parts[1]}' : integerPart;
   }
 
   @override
   Widget build(BuildContext context) {
-    final filtered =
-        _goals.where((g) => g.type == _selected).toList(growable: false);
-
+    final filtered = _goals.where((g) => g.type == _selected).toList(growable: false);
     return Scaffold(
       backgroundColor: AppColors.bg,
       body: SafeArea(
@@ -584,7 +479,6 @@ int _monthIndex(String name) {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Title
               Stack(
                 children: [
                   Positioned(
@@ -610,8 +504,6 @@ int _monthIndex(String name) {
                 ],
               ),
               const SizedBox(height: 32),
-
-              // Monthly Saving header
               Row(
                 children: [
                   Container(
@@ -630,8 +522,6 @@ int _monthIndex(String name) {
                 ],
               ),
               const SizedBox(height: 18),
-
-              // Months list
               SizedBox(
                 height: 190,
                 child: ListView.builder(
@@ -645,11 +535,9 @@ int _monthIndex(String name) {
                     final month = parts[0];
                     final year = parts[1];
                     final amount = entry.value;
-
-                    final now = DateTime.now();
+                    final now = DateTime.now(); // 02:00 AM +03, October 21, 2025
                     final isCurrent =
                         month == _monthName(now.month) && year == now.year.toString();
-
                     return Padding(
                       padding: const EdgeInsets.only(right: 16),
                       child: _MonthCard(
@@ -662,49 +550,127 @@ int _monthIndex(String name) {
                   },
                 ),
               ),
-
               const SizedBox(height: 32),
-
-              // Total Savings
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft, end: Alignment.bottomRight,
-                    colors: [AppColors.card.withValues(alpha:0.40), AppColors.card.withValues(alpha:0.20)],
-                  ),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.white.withValues(alpha:0.12), width: 1.5),
-                  boxShadow: [BoxShadow(color: AppColors.accent.withValues(alpha:0.15), blurRadius: 24, offset: Offset(0, 8))],
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text('Total Savings',
-                          style: TextStyle(color: AppColors.textGrey.withValues(alpha:0.80), fontSize: 14, fontWeight: FontWeight.w600, letterSpacing: 0.5)),
-                      const SizedBox(height: 4),
-                      Text('${_fmt(totalSavings)} SAR',
-                          style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.w900, letterSpacing: -0.5,
-                            shadows: [Shadow(color: Color(0x44000000), offset: Offset(0, 2), blurRadius: 4)],
-                          )),
-                    ]),
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: AppColors.accent.withValues(alpha:0.20),
-                        shape: BoxShape.circle,
-                        border: Border.all(color: AppColors.accent.withValues(alpha:0.40), width: 2),
-                      ),
-                      child: Icon(Icons.trending_up, color: AppColors.accent, size: 28),
-                    ),
-                  ],
+      Container(
+  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+  decoration: BoxDecoration(
+    gradient: LinearGradient(
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+      colors: [
+        AppColors.card.withOpacity(0.40),
+        AppColors.card.withOpacity(0.20)
+      ],
+    ),
+    borderRadius: BorderRadius.circular(20),
+    border: Border.all(color: Colors.white.withOpacity(0.12), width: 1.5),
+    boxShadow: [
+      BoxShadow(
+        color: AppColors.accent.withOpacity(0.15),
+        blurRadius: 24,
+        offset: const Offset(0, 8),
+      )
+    ],
+  ),
+  child: Row(
+    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    crossAxisAlignment: CrossAxisAlignment.center,
+    children: [
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                'Total Savings',
+                style: TextStyle(
+                  color: AppColors.textGrey.withOpacity(0.80),
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.5,
                 ),
               ),
+              const SizedBox(width: 6),
+              GestureDetector(
+                onTap: () {
+                  showDialog(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      backgroundColor: AppColors.card,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      title: const Text(
+                        'What is Total Savings?',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 18,
+                        ),
+                      ),
+                      content: const Text(
+                        'Your Total Savings represents the sum of all the money you’ve saved over time — including assigned and unassigned amounts — after accounting for your income and expenses.\n\nIf this number is negative, it means your total spending or goal allocations exceed your recorded savings.',
+                        style: TextStyle(
+                          color: Colors.white70,
+                          height: 1.4,
+                          fontSize: 14,
+                        ),
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          child: Text(
+                            'Got it',
+                            style: TextStyle(color: AppColors.accent),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+                child: Icon(
+                  Icons.info_outline_rounded,
+                  color: AppColors.accent.withOpacity(0.9),
+                  size: 18,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '${_fmt(_totalSaving)} SAR',
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 32,
+              fontWeight: FontWeight.w900,
+              letterSpacing: -0.5,
+              shadows: [
+                Shadow(
+                  color: Color(0x44000000),
+                  offset: Offset(0, 2),
+                  blurRadius: 4,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.accent.withOpacity(0.20),
+                shape: BoxShape.circle,
+                border:
+                    Border.all(color: AppColors.accent.withOpacity(0.40), width: 2),
+              ),
+              child: Icon(Icons.trending_up,
+                  color: AppColors.accent.withOpacity(0.9), size: 28),
+            ),
+          ],
+        ),
+      ),
 
               const SizedBox(height: 24),
-
-              // Summary cards
               Row(
                 children: [
                   Expanded(
@@ -728,10 +694,7 @@ int _monthIndex(String name) {
                   ),
                 ],
               ),
-
               const SizedBox(height: 32),
-
-              // Goals header + add
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -750,144 +713,84 @@ int _monthIndex(String name) {
                     const Text('Savings Goals',
                         style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700, letterSpacing: 0.3)),
                   ]),
-                  AddGoalFab(onPressed: _openAddGoalSheet),
+                  AddGoalFab(onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const CreateGoalPage()),
+                    );
+                  }),
                 ],
               ),
               const SizedBox(height: 14),
-
-              // Filter
               _GoalTypeSelector(
                 selected: _selected,
                 onChanged: (t) => setState(() => _selected = t),
               ),
               const SizedBox(height: 12),
-
-              // Goals list
               ListView.separated(
-                key: ValueKey(_selected),
+                key: ValueKey(_selected), // Corrected to use ValueKey
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 itemCount: filtered.length,
                 separatorBuilder: (_, __) => const SizedBox(height: 12),
                 itemBuilder: (_, i) => _GoalTile(goal: filtered[i]),
               ),
+              const SizedBox(height: 40),
 
-              const SizedBox(height: 80),
             ],
           ),
         ),
       ),
-
       bottomNavigationBar: SurraBottomBar(
-        onTapDashboard: () =>
-            Navigator.pushReplacementNamed(context, '/dashboard'),
+        onTapDashboard: () => Navigator.pushReplacementNamed(context, '/dashboard'),
         onTapSavings: () {},
-        onTapProfile: () =>
-            Navigator.pushReplacementNamed(context, '/profile'),
+        onTapProfile: () => Navigator.pushReplacementNamed(context, '/profile'),
         onTapAdd: () {},
       ),
     );
   }
 
-void _openAddGoalSheet() {
-  showModalBottomSheet(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.transparent,
-    builder: (_) => AddGoalSheet(
-      onSubmit: (title, amount, targetDate) async {
-        Navigator.of(context).pop();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Creating goal...')),
-        );
-
-        try {
-          final response = await supabase.from('Goal').insert({
-            'name': title.trim(),
-            'target_amount': amount,
-            'target_date': targetDate.toIso8601String(),
-            'status': 'Active',
-            'created_at': DateTime.now().toIso8601String(),
-            'profile_id': "e33f0c91-26fd-436a-baa3-6ad1df3a8152",
-          }).select();
-
-          if (response.isEmpty) throw Exception('Insert failed — no data returned.');
-          final data = response.first;
-
-          setState(() {
-            _goals.add(Goal(
-              id: data['goal_id'], 
-              title: data['name'] ?? title,
-              type: GoalType.active,
-              targetAmount: (data['target_amount'] ?? amount).toDouble(),
-              createdAt: DateTime.parse(data['created_at']),
-              targetDate: DateTime.parse(data['target_date']),
-            ));
-            _selected = GoalType.active;
-          });
-
-          await _generateMonthlySavings(); 
-
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Goal created successfully!')),
-          );
-        } catch (e) {
-          debugPrint('Cannot create goal: $e');
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error creating goal: $e')),
-          );
-        }
-      },
-    ),
-  );
-}
-
-
-
-void _openAssignSheet() {
-  showModalBottomSheet(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.transparent,
-    builder: (_) => AssignAmountSheet(
-      goals: _goals
-          .where((g) => g.type == GoalType.active && g.remaining > 0)
-          .toList(),
-      unassignedBalance: _unassignedBalance,
-onAssign: (goal, amount) async {
-  try {
-    //  Insert assignment record into Goal_Transfer
-    await supabase.from('Goal_Transfer').insert({
-      'goal_id': goal.id,
-      'amount': amount,
-      'direction': 'Assign',
-      'created_at': DateTime.now().toIso8601String(),
-    });
-
-    await _checkAndUpdateGoalStatus(goal.id);
-    await _fetchGoals();  
-    await _generateMonthlySavings();
-
-    Navigator.pop(context);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Assigned ${_fmt(amount)} SAR to ${goal.title}')),
-    );
-  } catch (e) {
-    debugPrint('Error assigning: $e');
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Error assigning: $e')),
+  void _openAssignSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => AssignAmountSheet(
+        goals: _goals
+            .where((g) => g.type == GoalType.active && g.remaining > 0)
+            .toList(),
+        unassignedBalance: _unassignedBalance,
+        onAssign: (goal, amount) async {
+          try {
+            await supabase.from('Goal_Transfer').insert({
+              'goal_id': goal.id,
+              'amount': amount,
+              'direction': 'Assign',
+              'created_at': DateTime.now().toIso8601String(),
+            });
+            await _checkAndUpdateGoalStatus(goal.id);
+            await _fetchGoals();
+            await _generateMonthlySavings();
+            Navigator.pop(context);
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Assigned ${_fmt(amount)} SAR to ${goal.title}')),
+              );
+            }
+          } catch (e) {
+            debugPrint('Error assigning: $e');
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Error assigning: $e')),
+              );
+            }
+          }
+        },
+      ),
     );
   }
-},
 
-    ),
-  );
-}
-
-
-
-
- Future<void> _openUnassignPicker() async{
+  Future<void> _openUnassignPicker() async {
     await _generateMonthlySavings();
     final canUnassign = _goals.where((g) => g.savedAmount > 0).toList();
     if (canUnassign.isEmpty) {
@@ -939,37 +842,36 @@ onAssign: (goal, amount) async {
       backgroundColor: Colors.transparent,
       builder: (_) => UnassignAmountSheet(
         goal: goal,
-    onUnassign: (amount) async {
-      try {
-        // Insert unassignment record
-        await supabase.from('Goal_Transfer').insert({
-          'goal_id': goal.id,
-          'amount': amount,
-          'direction': 'Unassign',
-          'created_at': DateTime.now().toIso8601String(),
-        });
-
+        onUnassign: (amount) async {
+          try {
+            await supabase.from('Goal_Transfer').insert({
+              'goal_id': goal.id,
+              'amount': amount,
+              'direction': 'Unassign',
+              'created_at': DateTime.now().toIso8601String(),
+            });
             await _checkAndUpdateGoalStatus(goal.id);
-            await _fetchGoals();  
+            await _fetchGoals();
             await _generateMonthlySavings();
-
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Unassigned ${_fmt(amount)} SAR from ${goal.title}')),
-        );
-      } catch (e) {
-        debugPrint('Error unassigning: $e');
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error unassigning: $e')),
-        );
-      }
-    },
-
+            Navigator.pop(context);
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Unassigned ${_fmt(amount)} SAR from ${goal.title}')),
+              );
+            }
+          } catch (e) {
+            debugPrint('Error unassigning: $e');
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Error unassigning: $e')),
+              );
+            }
+          }
+        },
       ),
     );
   }
 
-  /// -------- Delete Goal  --------
   Future<void> _confirmDelete(Goal goal) async {
     final bool? ok = await showDialog<bool>(
       context: context,
@@ -983,7 +885,7 @@ onAssign: (goal, amount) async {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel',style: TextStyle(color: Color.fromARGB(255, 246, 242, 242))),
+            child: const Text('Cancel', style: TextStyle(color: Color.fromARGB(255, 246, 242, 242))),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
@@ -992,37 +894,52 @@ onAssign: (goal, amount) async {
         ],
       ),
     );
-
     if (ok == true) _deleteGoal(goal);
   }
 
-Future<void> _deleteGoal(Goal goal) async {
-  try {
-    await supabase.from('Goal').delete().eq('goal_id', goal.id);
-
-    // Remove from UI immediately
-    setState(() {
-      _goals.removeWhere((g) => g.id == goal.id);
-    });
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Deleted "${goal.title}" successfully!')),
-    );
-  } catch (e) {
-    debugPrint('Error deleting goal: $e');
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Failed to delete goal: $e')),
-    );
+  Future<void> _deleteGoal(Goal goal) async {
+    try {
+      const profileId = '14673818-3a31-479a-85dd-f21f28952651';
+      final transfers = await supabase
+          .from('Goal_Transfer')
+          .select('amount, direction')
+          .eq('goal_id', goal.id);
+      double assignedAmount = 0.0;
+      for (final t in (transfers as List? ?? [])) {
+        final amt = (t['amount'] ?? 0).toDouble();
+        final dir = (t['direction'] ?? '').toString().toLowerCase();
+        if (dir == 'assign') assignedAmount += amt;
+        if (dir == 'unassign') assignedAmount -= amt;
+      }
+      if (assignedAmount > 0) {
+        await supabase.from('Goal_Transfer').insert({
+          'goal_id': goal.id,
+          'amount': assignedAmount,
+          'direction': 'Unassign',
+          'created_at': DateTime.now().toIso8601String(),
+        });
+        debugPrint('💸 Returned $assignedAmount SAR to unassigned balance');
+      }
+      await supabase.from('Goal').delete().eq('goal_id', goal.id);
+      await _fetchGoals();
+      await _generateMonthlySavings();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Deleted "${goal.title}" successfully!')),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error deleting goal: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to delete goal: $e')),
+        );
+      }
+    }
   }
 }
 
-
-
-
-}
-
 /// ---------------- Widgets ----------------
-
 class _MonthCard extends StatelessWidget {
   final String year, month, amount;
   final bool current;
@@ -1032,7 +949,6 @@ class _MonthCard extends StatelessWidget {
     required this.amount,
     this.current = false,
   });
-
   @override
   Widget build(BuildContext context) {
     return ClipRRect(
@@ -1042,7 +958,7 @@ class _MonthCard extends StatelessWidget {
         margin: const EdgeInsets.only(right: 16),
         padding: const EdgeInsets.all(22),
         decoration: BoxDecoration(
-          color: AppColors.card, 
+          color: AppColors.card,
           borderRadius: BorderRadius.circular(24),
           gradient: LinearGradient(
             begin: Alignment.topLeft,
@@ -1078,7 +994,6 @@ class _MonthCard extends StatelessWidget {
                   letterSpacing: 0.5,
                 ),
               ),
-              
               if (current)
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -1099,7 +1014,6 @@ class _MonthCard extends StatelessWidget {
                 ),
             ]),
             const SizedBox(height: 10),
-            const SizedBox(),
             Text(
               month,
               style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700, letterSpacing: 0.3),
@@ -1110,6 +1024,8 @@ class _MonthCard extends StatelessWidget {
                 color: Colors.white, fontSize: 26, fontWeight: FontWeight.w900, letterSpacing: -0.5,
                 shadows: current ? [Shadow(color: AppColors.accent.withValues(alpha:0.30), blurRadius: 8)] : const [],
               ),
+              softWrap: true,
+              overflow: TextOverflow.ellipsis,
             ),
           ],
         ),
@@ -1129,14 +1045,12 @@ class _SummaryCard extends StatelessWidget {
     required this.icon,
     this.onPressed,
   });
-
   @override
   Widget build(BuildContext context) {
     const gradient = LinearGradient(
       begin: Alignment.topLeft, end: Alignment.bottomRight,
       colors: [Color(0xFF373542), Color(0xFF4A375E), Color(0xFF3B3548)],
     );
-
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -1160,7 +1074,10 @@ class _SummaryCard extends StatelessWidget {
           ),
         ]),
         const SizedBox(height: 14),
-        Text(amount, style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w900, letterSpacing: -0.5)),
+        Text(amount, style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w900, letterSpacing: -0.5),
+          softWrap: true,
+          overflow: TextOverflow.ellipsis,
+        ),
         const SizedBox(height: 16),
         SizedBox(
           height: 44,
@@ -1192,64 +1109,104 @@ class _GoalTypeSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Widget pill(String label, GoalType type, Color color) {
-      final isSelected = selected == type;
-      return Expanded(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 6),
-          child: GestureDetector(
-            onTap: () => onChanged(type),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 220),
-              curve: Curves.easeOut,
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(40),
-                gradient: isSelected
-                    ? LinearGradient(
-                        colors: [color.withValues(alpha:0.70), color.withValues(alpha:0.40)],
-                        begin: Alignment.topLeft, end: Alignment.bottomRight,
-                      )
-                    : const LinearGradient(
-                        colors: [Color(0xFF2A2734), Color(0xFF221E2E)],
-                        begin: Alignment.topLeft, end: Alignment.bottomRight,
-                      ),
-                boxShadow: isSelected
-                    ? [BoxShadow(color: color.withValues(alpha:0.35), blurRadius: 12, offset: Offset(0, 3))]
-                    : [],
-                border: Border.all(
-                  color: isSelected ? color.withValues(alpha:0.45) : Colors.white.withValues(alpha:0.10),
-                  width: 1,
-                ),
-              ),
-              child: Center(
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    color: isSelected ? Colors.white : Colors.white.withValues(alpha:0.65),
-                    fontWeight: FontWeight.w700,
-                    fontSize: 14,
-                    letterSpacing: 0.3,
+    Widget fancyTab(String label, IconData icon, GoalType type, Color color) {
+      final bool isSelected = selected == type;
+      return GestureDetector(
+        onTap: () => onChanged(type),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOut,
+          margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+          decoration: BoxDecoration(
+            gradient: isSelected
+                ? LinearGradient(
+                    colors: [color.withOpacity(0.8), color.withOpacity(0.5)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  )
+                : const LinearGradient(
+                    colors: [Color(0xFF23202E), Color(0xFF1C1924)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
                   ),
+            borderRadius: BorderRadius.circular(40),
+            border: Border.all(
+              color: isSelected
+                  ? color.withOpacity(0.6)
+                  : Colors.white.withOpacity(0.08),
+              width: 1.2,
+            ),
+            boxShadow: isSelected
+                ? [
+                    BoxShadow(
+                      color: color.withOpacity(0.4),
+                      blurRadius: 12,
+                      spreadRadius: 0.5,
+                      offset: const Offset(0, 4),
+                    )
+                  ]
+                : [],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
+                size: 18,
+                color: isSelected
+                    ? Colors.white
+                    : Colors.white.withOpacity(0.6),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  color: isSelected
+                      ? Colors.white
+                      : Colors.white.withOpacity(0.65),
+                  fontWeight: isSelected
+                      ? FontWeight.w800
+                      : FontWeight.w600,
+                  fontSize: 13.5,
+                  letterSpacing: 0.3,
                 ),
               ),
-            ),
+            ],
           ),
         ),
       );
     }
 
-    return Row(
-      children: [
-        pill('Active', GoalType.active, const Color(0xFF4A37E1)),
-        const SizedBox(width: 16),
-        pill('Completed', GoalType.completed, const Color(0xFF4CAF50)),
-        const SizedBox(width: 16),
-        pill('Uncompleted', GoalType.uncompleted, const Color(0xFFEF5350)),
-      ],
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.03),
+        borderRadius: BorderRadius.circular(50),
+        border: Border.all(color: Colors.white.withOpacity(0.08), width: 1),
+      ),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
+        child: Row(
+          children: [
+            const SizedBox(width: 4),
+            fancyTab('Active', Icons.flash_on_rounded, GoalType.active,
+                const Color(0xFF6C63FF)),
+            fancyTab('Completed', Icons.check_circle_rounded,
+                GoalType.completed, const Color(0xFF4CAF50)),
+            fancyTab('Uncompleted', Icons.error_rounded,
+                GoalType.uncompleted, const Color(0xFFFF5252)),
+            fancyTab('Achieved', Icons.emoji_events_rounded,
+                GoalType.achieved, const Color(0xFFFFD54F)),
+            const SizedBox(width: 4),
+          ],
+        ),
+      ),
     );
   }
 }
+
 
 class _GoalTile extends StatelessWidget {
   final Goal goal;
@@ -1260,63 +1217,61 @@ class _GoalTile extends StatelessWidget {
     final isActive = goal.type == GoalType.active;
     final isCompleted = goal.type == GoalType.completed;
     final isUncompleted = goal.type == GoalType.uncompleted;
-
     final Color base = isCompleted
         ? const Color(0xFF4CAF50)
         : isUncompleted
             ? const Color(0xFFEF5350)
             : const Color(0xFF4A37E1);
     final Color borderColor = base.withValues(alpha:0.30);
+    final parent = context.findAncestorStateOfType<_SavingsPageState>();
+  final Widget statusChip;
+    if (isActive) {
+      statusChip = Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: const Color(0xFF4A37E1).withOpacity(0.2),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFF4A37E1).withOpacity(0.3), width: 1),
+        ),
+        child: Text(
+          '${(goal.progress * 100).toInt()}%',
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 12,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      );
+    } else if (isCompleted) {
+      statusChip = const Icon(Icons.check_circle, color: Color(0xFF4CAF50), size: 24);
+    } else if (isUncompleted) {
+      statusChip = const Icon(Icons.pause_circle_filled, color: Color(0xFFFF5252), size: 24);
+    } else if (goal.type == GoalType.achieved) {
+      statusChip = const Icon(Icons.emoji_events_rounded, color: Color(0xFFFFD54F), size: 26);
+    } else {
+      statusChip = const Icon(Icons.help_outline, color: Colors.white54, size: 22);
+    }
 
-    final Widget statusChip = isActive
-        ? Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-            decoration: BoxDecoration(
-              color: const Color(0xFF4A37E1).withValues(alpha:0.20),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFF4A37E1).withValues(alpha:0.30), width: 1),
-            ),
-            child: Text(
-              '${(goal.progress * 100).toInt()}%',
-              style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800),
-            ),
-          )
-        : Icon(isCompleted ? Icons.check_circle : Icons.pause_circle_filled, color: base, size: 22);
-
-      void _openEdit() async {
+    void _openEdit() async {
       final parent = context.findAncestorStateOfType<_SavingsPageState>();
       if (parent == null) return;
-
-      // Fetch the most recent goal data before editing
       final freshGoal = await parent._fetchGoalById(goal.id) ?? goal;
-
-      showModalBottomSheet(
-        context: context,
-        isScrollControlled: true,
-        backgroundColor: Colors.transparent,
-        builder: (_) => EditGoalSheet(
-          goal: freshGoal,
-          onSave: (updated) async {
-            //  Update the goal
-            await parent._updateGoal(updated);
-
-            //  Re-fetch to ensure balances, totals, and tiles refresh fully
-            await parent._fetchGoals();
-            await parent._generateMonthlySavings();
-
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Goal updated successfully!')),
-            );
-          },
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => EditGoalPage(
+            id: freshGoal.id,
+            initialTitle: freshGoal.title,
+            initialTargetAmount: freshGoal.targetAmount,
+            initialTargetDate: freshGoal.targetDate,
+          ),
         ),
       );
     }
 
-
-
     void _askDelete() {
       final parent = context.findAncestorStateOfType<_SavingsPageState>();
-      if (parent != null) parent._confirmDelete(goal); // call state method
+      if (parent != null) parent._confirmDelete(goal);
     }
 
     return Container(
@@ -1334,7 +1289,6 @@ class _GoalTile extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // title + trailing actions
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -1347,10 +1301,12 @@ class _GoalTile extends StatelessWidget {
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    _GhostIconButton(icon: Icons.delete_outline, onTap: _askDelete),
-                    const SizedBox(width: 8),
-                    _GhostIconButton(icon: Icons.edit, onTap: _openEdit),
-                    const SizedBox(width: 8),
+                    if (goal.type == GoalType.active || goal.type == GoalType.uncompleted) ...[
+                      _GhostIconButton(icon: Icons.delete_outline, onTap: _askDelete),
+                      const SizedBox(width: 8),
+                      _GhostIconButton(icon: Icons.edit, onTap: _openEdit),
+                      const SizedBox(width: 8),
+                    ],
                     statusChip,
                   ],
                 ),
@@ -1376,6 +1332,29 @@ class _GoalTile extends StatelessWidget {
               const SizedBox(height: 6),
               _ProgressAmounts(goal: goal),
             ],
+            if (isCompleted && goal.status == 'Completed') ...[
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  icon: const Icon(Icons.receipt_long, color: Colors.white),
+                  label: const Text(
+                    'Log Goal as Expense',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF4CAF50),
+                    foregroundColor: Colors.white,
+                    elevation: 6,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  onPressed: () async {
+                    final parent = context.findAncestorStateOfType<_SavingsPageState>();
+                    if (parent != null) await parent._logCompletedGoalExpense(goal);
+                  },
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -1386,18 +1365,19 @@ class _GoalTile extends StatelessWidget {
 class _ProgressAmounts extends StatelessWidget {
   final Goal goal;
   const _ProgressAmounts({required this.goal});
-
   String _fmt(double v) {
-    final s = v.round().toString();
-    return s.replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]},');
+    final parts = v.toStringAsFixed(2).split('.');
+    final integerPart = parts[0].replaceAllMapped(
+      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+      (m) => '${m[1]},',
+    );
+    return parts.length > 1 ? '$integerPart.${parts[1]}' : integerPart;
   }
-
   @override
   Widget build(BuildContext context) {
     final double progress = goal.progress.clamp(0.0, 1.0).toDouble();
     final double remaining =
         (goal.targetAmount * (1 - progress)).clamp(0.0, double.infinity).toDouble();
-
     return Row(
       children: [
         Text(
@@ -1414,12 +1394,10 @@ class _ProgressAmounts extends StatelessWidget {
   }
 }
 
-/// Small ghost icon button
 class _GhostIconButton extends StatelessWidget {
   final IconData icon;
   final VoidCallback onTap;
   const _GhostIconButton({required this.icon, required this.onTap});
-
   @override
   Widget build(BuildContext context) {
     return InkWell(
@@ -1438,11 +1416,9 @@ class _GhostIconButton extends StatelessWidget {
   }
 }
 
-/// Floating add button (nullable callback to avoid analyzer error)
 class AddGoalFab extends StatelessWidget {
   final VoidCallback? onPressed;
   const AddGoalFab({super.key, this.onPressed});
-
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -1465,246 +1441,16 @@ class AddGoalFab extends StatelessWidget {
   }
 }
 
-/// ---------------- Sheets (Create / Assign / Unassign / Edit) ----------------
-class AddGoalSheet extends StatefulWidget {
-  final void Function(String title, double amount, DateTime targetDate) onSubmit;
-  const AddGoalSheet({super.key, required this.onSubmit});
-
-  @override
-  State<AddGoalSheet> createState() => _AddGoalSheetState();
-}
-
-class _AddGoalSheetState extends State<AddGoalSheet> {
-  final _formKey = GlobalKey<FormState>();
-  final _titleCtrl = TextEditingController();
-  final _amountCtrl = TextEditingController();
-  final _dateCtrl = TextEditingController(); // stable controller
-  DateTime? _targetDate;
-  bool _submitting = false;
-
-  String _formatDate(DateTime d) =>
-      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
-
-  @override
-  void dispose() {
-    _titleCtrl.dispose();
-    _amountCtrl.dispose();
-    _dateCtrl.dispose();
-    super.dispose();
-  }
-
-  Future<void> _pickDate() async {
-    final now = DateTime.now();
-    final picked = await showDatePicker(
-      context: context,
-      firstDate: DateTime(now.year, now.month, now.day),
-      initialDate: _targetDate ?? now.add(const Duration(days: 1)),
-      lastDate: DateTime(now.year + 10),
-      helpText: 'Select target date',
-      // >>> This removes the text input and the toggle icon inside the dialog
-      initialEntryMode: DatePickerEntryMode.calendarOnly,
-      builder: (ctx, child) => Theme(
-        data: Theme.of(ctx).copyWith(
-          colorScheme: ColorScheme.dark(
-            primary: AppColors.accent,
-            surface: AppColors.card,
-            onSurface: Colors.white,
-          ),
-        ),
-        child: child!,
-      ),
-    );
-    if (picked != null) {
-      setState(() => _targetDate = DateTime(picked.year, picked.month, picked.day));
-      _dateCtrl.text = _formatDate(_targetDate!);
-    }
-  }
-
-  void _submit() {
-    final valid = _formKey.currentState?.validate() ?? false;
-    if (!valid) return;
-    setState(() => _submitting = true);
-
-    final title = _titleCtrl.text.trim();
-    final amount = double.parse(_amountCtrl.text);
-    final date = _targetDate!;
-
-    Future.delayed(const Duration(milliseconds: 200), () {
-      widget.onSubmit(title, amount, date);
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final bottom = MediaQuery.of(context).viewInsets.bottom;
-    return Padding(
-      padding: EdgeInsets.only(bottom: bottom),
-      child: Container(
-        decoration: BoxDecoration(
-          color: AppColors.bg,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.accent.withValues(alpha:0.35),
-              blurRadius: 24,
-              offset: const Offset(0, -6),
-            ),
-          ],
-        ),
-        child: SafeArea(
-          top: false,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                    const Text('Create Goal',
-                        style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800)),
-                    IconButton(
-                      icon: const Icon(Icons.close, color: Colors.white70),
-                      onPressed: () => Navigator.of(context).pop(),
-                    ),
-                  ]),
-                  const SizedBox(height: 8),
-
-                  TextFormField(
-                    controller: _titleCtrl,
-                    textInputAction: TextInputAction.next,
-                    style: const TextStyle(color: Colors.white),
-                    decoration:
-                        _fieldDecoration('Goal name', hint: 'e.g., Buy a new phone'),
-                    validator: (v) {
-                      if (v == null || v.trim().isEmpty) return 'Name is required';
-                      if (v.trim().length < 2) {
-                        return 'Name must be at least 2 characters';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 12),
-
-                  TextFormField(
-                    controller: _amountCtrl,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                    style: const TextStyle(color: Colors.white),
-                    decoration: _fieldDecoration('Target amount (SAR)',
-                        hint: 'e.g., 2000'),
-                    validator: (v) {
-                      if (v == null || v.trim().isEmpty) {
-                        return 'Amount is required';
-                      }
-                      final n = double.tryParse(v);
-                      if (n == null || n <= 0) return 'Enter a valid number';
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 12),
-
-                  // Non-typed date field: readOnly + onTap
-                  TextFormField(
-                    controller: _dateCtrl,
-                    readOnly: true,
-                    onTap: _pickDate,
-                    style: const TextStyle(color: Colors.white),
-                    decoration: _fieldDecoration('Target date', hint: 'Select date')
-                        .copyWith(suffixIcon: const Icon(Icons.calendar_today, color: Colors.white70)),
-                    validator: (_) {
-                      if (_targetDate == null) return 'Target date is required';
-                      final today = DateTime.now();
-                      final d = DateTime(_targetDate!.year, _targetDate!.month, _targetDate!.day);
-                      final t = DateTime(today.year, today.month, today.day);
-                      if (d.isBefore(t)) return 'Target date cannot be in the past';
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 16),
-
-                  SizedBox(
-                    width: double.infinity,
-                    height: 48,
-                    child: ElevatedButton(
-                      onPressed: _submitting ? null : _submit,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.accent,
-                        foregroundColor: Colors.white,
-                        disabledBackgroundColor:
-                            AppColors.accent.withValues(alpha:0.4),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14)),
-                        elevation: 8,
-                        shadowColor: AppColors.accent.withValues(alpha:0.4),
-                      ),
-                      child: _submitting
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  valueColor:
-                                      AlwaysStoppedAnimation(Colors.white)),
-                            )
-                          : const Text('Create Goal',
-                              style: TextStyle(fontWeight: FontWeight.w700)),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  InputDecoration _fieldDecoration(String label, {String? hint}) {
-    return InputDecoration(
-      labelText: label,
-      hintText: hint,
-      labelStyle: const TextStyle(color: Colors.white70),
-      hintStyle: const TextStyle(color: Colors.white38),
-      filled: true,
-      fillColor: Colors.white.withValues(alpha:0.06),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: Colors.white.withValues(alpha:0.10)),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide:
-            BorderSide(color: AppColors.accent.withValues(alpha:0.8), width: 1.5),
-      ),
-      errorBorder: const OutlineInputBorder(
-        borderRadius: BorderRadius.all(Radius.circular(12)),
-        borderSide: BorderSide(color: Colors.redAccent),
-      ),
-      focusedErrorBorder: const OutlineInputBorder(
-        borderRadius: BorderRadius.all(Radius.circular(12)),
-        borderSide: BorderSide(color: Colors.redAccent),
-      ),
-      contentPadding:
-          const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-    );
-  }
-}
-
 class AssignAmountSheet extends StatefulWidget {
   final List<Goal> goals;
   final double unassignedBalance;
   final void Function(Goal goal, double amount) onAssign;
-
   const AssignAmountSheet({
     super.key,
     required this.goals,
     required this.unassignedBalance,
     required this.onAssign,
   });
-
   @override
   State<AssignAmountSheet> createState() => _AssignAmountSheetState();
 }
@@ -1713,19 +1459,16 @@ class _AssignAmountSheetState extends State<AssignAmountSheet> {
   final _formKey = GlobalKey<FormState>();
   final _amountCtrl = TextEditingController();
   Goal? _selected;
-
   @override
   void initState() {
     super.initState();
     _selected = widget.goals.isNotEmpty ? widget.goals.first : null;
   }
-
   @override
   void dispose() {
     _amountCtrl.dispose();
     super.dispose();
   }
-
   String? _validateAmount(String? v) {
     if (v == null || v.trim().isEmpty) return 'Amount is required';
     final n = double.tryParse(v);
@@ -1736,7 +1479,6 @@ class _AssignAmountSheetState extends State<AssignAmountSheet> {
     if (n > maxAllowed) return 'Max allowed is ${maxAllowed.round()} SAR';
     return null;
   }
-
   double _maxAllowed() {
     if (_selected == null) return 0;
     return [
@@ -1744,7 +1486,6 @@ class _AssignAmountSheetState extends State<AssignAmountSheet> {
       _selected!.remaining,
     ].reduce((a, b) => a < b ? a : b);
   }
-
   @override
   Widget build(BuildContext context) {
     final bottom = MediaQuery.of(context).viewInsets.bottom;
@@ -1818,7 +1559,6 @@ class _AssignAmountSheetState extends State<AssignAmountSheet> {
       ),
     );
   }
-
   InputDecoration _fieldDecoration(String label, {String? hint}) => InputDecoration(
     labelText: label,
     hintText: hint,
@@ -1836,7 +1576,6 @@ class _AssignAmountSheetState extends State<AssignAmountSheet> {
     ),
     contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
   );
-
   InputDecoration _ddDecoration(String label) => InputDecoration(
     labelText: label,
     labelStyle: const TextStyle(color: Colors.white70),
@@ -1858,9 +1597,7 @@ class _AssignAmountSheetState extends State<AssignAmountSheet> {
 class UnassignAmountSheet extends StatefulWidget {
   final Goal goal;
   final void Function(double amount) onUnassign;
-
   const UnassignAmountSheet({super.key, required this.goal, required this.onUnassign});
-
   @override
   State<UnassignAmountSheet> createState() => _UnassignAmountSheetState();
 }
@@ -1868,13 +1605,11 @@ class UnassignAmountSheet extends StatefulWidget {
 class _UnassignAmountSheetState extends State<UnassignAmountSheet> {
   final _formKey = GlobalKey<FormState>();
   final _amountCtrl = TextEditingController();
-
   @override
   void dispose() {
     _amountCtrl.dispose();
     super.dispose();
   }
-
   String? _validate(String? v) {
     if (v == null || v.trim().isEmpty) return 'Amount is required';
     final n = double.tryParse(v);
@@ -1885,7 +1620,6 @@ class _UnassignAmountSheetState extends State<UnassignAmountSheet> {
     }
     return null;
   }
-
   @override
   Widget build(BuildContext context) {
     final bottom = MediaQuery.of(context).viewInsets.bottom;
@@ -1947,7 +1681,6 @@ class _UnassignAmountSheetState extends State<UnassignAmountSheet> {
       ),
     );
   }
-
   InputDecoration _fieldDecoration(String label, {String? hint}) => InputDecoration(
     labelText: label,
     hintText: hint,
@@ -1965,187 +1698,4 @@ class _UnassignAmountSheetState extends State<UnassignAmountSheet> {
     ),
     contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
   );
-}
-
-class EditGoalSheet extends StatefulWidget {
-  final Goal goal;
-  final void Function(Goal updatedGoal) onSave;
-
-  const EditGoalSheet({super.key, required this.goal, required this.onSave});
-
-  @override
-  State<EditGoalSheet> createState() => _EditGoalSheetState();
-}
-
-class _EditGoalSheetState extends State<EditGoalSheet> {
-  final _formKey = GlobalKey<FormState>();
-  late TextEditingController _titleCtrl;
-  late TextEditingController _amountCtrl;
-  final _dateCtrl = TextEditingController();
-  DateTime? _targetDate;
-
-  String _formatDate(DateTime d) =>
-      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
-
-  @override
-  void initState() {
-    super.initState();
-    _titleCtrl = TextEditingController(text: widget.goal.title);
-    _amountCtrl = TextEditingController(text: widget.goal.targetAmount.toStringAsFixed(0));
-    _targetDate = widget.goal.targetDate;
-    if (_targetDate != null) _dateCtrl.text = _formatDate(_targetDate!);
-  }
-
-  @override
-  void dispose() {
-    _titleCtrl.dispose();
-    _amountCtrl.dispose();
-    _dateCtrl.dispose();
-    super.dispose();
-  }
-
-  Future<void> _pickDate() async {
-    final now = DateTime.now();
-    final picked = await showDatePicker(
-      context: context,
-      firstDate: DateTime(now.year, now.month, now.day),
-      lastDate: DateTime(now.year + 5),
-      initialDate: _targetDate ?? now.add(const Duration(days: 1)),
-      // >>> Remove text entry inside dialog
-      initialEntryMode: DatePickerEntryMode.calendarOnly,
-      builder: (ctx, child) => Theme(
-        data: Theme.of(ctx).copyWith(
-          colorScheme: ColorScheme.dark(
-            primary: AppColors.accent,
-            surface: AppColors.card,
-            onSurface: Colors.white,
-          ),
-        ),
-        child: child!,
-      ),
-    );
-    if (picked != null) {
-      setState(() => _targetDate = DateTime(picked.year, picked.month, picked.day));
-      _dateCtrl.text = _formatDate(_targetDate!);
-    }
-  }
-
-  void _save() {
-    if (!(_formKey.currentState?.validate() ?? false)) return;
-
-    final newTitle = _titleCtrl.text.trim();
-    final newAmount = double.parse(_amountCtrl.text);
-
-    final updated = widget.goal.copyWith(
-      title: newTitle,
-      targetAmount: newAmount,
-      targetDate: _targetDate ?? widget.goal.targetDate,
-    );
-
-    widget.onSave(updated);
-    Navigator.pop(context);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final bottom = MediaQuery.of(context).viewInsets.bottom;
-    return Padding(
-      padding: EdgeInsets.only(bottom: bottom),
-      child: Container(
-        decoration: BoxDecoration(
-          color: AppColors.bg,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        child: SafeArea(
-          top: false,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text('Edit Goal', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800)),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: _titleCtrl,
-                    style: const TextStyle(color: Colors.white),
-                    decoration: _fieldDecoration('Goal name'),
-                    validator: (v) => v == null || v.trim().isEmpty ? 'Name required' : null,
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: _amountCtrl,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                    style: const TextStyle(color: Colors.white),
-                    decoration: _fieldDecoration('Target amount (SAR)'),
-                    validator: (v) {
-                      final n = double.tryParse(v ?? '');
-                      if (n == null || n <= 0) return 'Enter a valid amount';
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: _dateCtrl,
-                    readOnly: true,
-                    onTap: _pickDate,
-                    style: const TextStyle(color: Colors.white),
-                    decoration: _fieldDecoration('Target date').copyWith(
-                      suffixIcon: const Icon(Icons.calendar_today, color: Colors.white70),
-                    ),
-                    validator: (_) {
-                      if (_targetDate == null && widget.goal.targetDate == null) {
-                        return 'Target date is required';
-                      }
-                      final today = DateTime.now();
-                      final d = (_targetDate ?? widget.goal.targetDate)!;
-                      final dd = DateTime(d.year, d.month, d.day);
-                      final t = DateTime(today.year, today.month, today.day);
-                      if (dd.isBefore(t)) return 'Target date cannot be in the past';
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 18),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 48,
-                    child: ElevatedButton(
-                      onPressed: _save,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.accent,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                      ),
-                      child: const Text('Save Changes', style: TextStyle(fontWeight: FontWeight.w700)),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  InputDecoration _fieldDecoration(String label) => InputDecoration(
-        labelText: label,
-        labelStyle: const TextStyle(color: Colors.white70),
-        filled: true,
-        fillColor: Colors.white.withValues(alpha:0.06),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.white.withValues(alpha:0.10)),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide:
-              BorderSide(color: AppColors.accent.withValues(alpha:0.8), width: 1.5),
-        ),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      );
 }

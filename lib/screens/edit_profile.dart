@@ -16,7 +16,6 @@ class EditProfilePage extends StatefulWidget {
 }
 
 class _EditProfilePageState extends State<EditProfilePage> {
-  static const String kProfileId = 'e33f0c91-26fd-436a-baa3-6ad1df3a8152';
   final _sb = Supabase.instance.client;
 
   List<Map<String, dynamic>> _incomes = [];
@@ -33,6 +32,18 @@ class _EditProfilePageState extends State<EditProfilePage> {
     _loadAll();
   }
 
+  // ======= GET PROFILE ID =======
+  Future<String> _getProfileId() async {
+    final uid = _sb.auth.currentUser?.id;
+    if (uid == null) throw Exception('Not signed in');
+    final row = await _sb
+        .from('User_Profile')
+        .select('profile_id')
+        .eq('user_id', uid)
+        .single();
+    return row['profile_id'] as String;
+  }
+
   Future<void> _loadAll() async {
     if (!mounted) return;
 
@@ -41,18 +52,20 @@ class _EditProfilePageState extends State<EditProfilePage> {
       _error = null;
     });
     try {
+      final profileId = await _getProfileId();
+
       // Load user profile to get current balance
       final profileData = await _sb
           .from('User_Profile')
           .select('current_balance')
-          .eq('profile_id', kProfileId)
+          .eq('profile_id', profileId)
           .single();
 
       // Load active incomes (where end_time is null)
       final incomesData = await _sb
           .from('Fixed_Income')
           .select('income_id,name,monthly_income,payday,start_time,end_time')
-          .eq('profile_id', kProfileId)
+          .eq('profile_id', profileId)
           .isFilter('end_time', null)
           .order('name');
 
@@ -62,7 +75,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
           .select(
             'expense_id,name,amount,due_date,category_id,start_time,end_time',
           )
-          .eq('profile_id', kProfileId)
+          .eq('profile_id', profileId)
           .isFilter('end_time', null)
           .order('name');
 
@@ -72,7 +85,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
           .select(
             'category_id,name,type,monthly_limit,is_archived,icon,icon_color',
           )
-          .eq('profile_id', kProfileId)
+          .eq('profile_id', profileId)
           .eq('is_archived', false)
           .order('name');
 
@@ -97,34 +110,44 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
   // ---------------- Navigation Methods ----------------
   void _navigateToEditBalance() async {
-    final result = await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => EditBalancePage(
-          currentBalance: _currentBalance,
-          profileId: kProfileId,
+    try {
+      final profileId = await _getProfileId();
+      final result = await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => EditBalancePage(
+            currentBalance: _currentBalance,
+            profileId: profileId,
+          ),
         ),
-      ),
-    );
+      );
 
-    // Reload data if balance was updated
-    if (result == true) {
-      _loadAll();
+      // Reload data if balance was updated
+      if (result == true) {
+        _loadAll();
+      }
+    } catch (e) {
+      _showError('Error navigating to edit balance: $e');
     }
   }
 
   void _navigateToAddEditIncome({Map<String, dynamic>? income}) async {
-    final result = await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) =>
-            AddEditIncomePage(income: income, profileId: kProfileId),
-      ),
-    );
+    try {
+      final profileId = await _getProfileId();
+      final result = await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) =>
+              AddEditIncomePage(income: income, profileId: profileId),
+        ),
+      );
 
-    // Reload data if something was saved
-    if (result == true) {
-      _loadAll();
+      // Reload data if something was saved
+      if (result == true) {
+        _loadAll();
+      }
+    } catch (e) {
+      _showError('Error navigating to income page: $e');
     }
   }
 
@@ -134,35 +157,45 @@ class _EditProfilePageState extends State<EditProfilePage> {
       return;
     }
 
-    final result = await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => AddEditExpensePage(
-          expense: expense,
-          profileId: kProfileId,
-          categories: _categories,
+    try {
+      final profileId = await _getProfileId();
+      final result = await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => AddEditExpensePage(
+            expense: expense,
+            profileId: profileId,
+            categories: _categories,
+          ),
         ),
-      ),
-    );
+      );
 
-    // Reload data if something was saved
-    if (result == true) {
-      _loadAll();
+      // Reload data if something was saved
+      if (result == true) {
+        _loadAll();
+      }
+    } catch (e) {
+      _showError('Error navigating to expense page: $e');
     }
   }
 
   void _navigateToAddEditCategory({Map<String, dynamic>? category}) async {
-    final result = await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) =>
-            AddEditCategoryPage(category: category, profileId: kProfileId),
-      ),
-    );
+    try {
+      final profileId = await _getProfileId();
+      final result = await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) =>
+              AddEditCategoryPage(category: category, profileId: profileId),
+        ),
+      );
 
-    // Reload data if something was saved
-    if (result == true) {
-      _loadAll();
+      // Reload data if something was saved
+      if (result == true) {
+        _loadAll();
+      }
+    } catch (e) {
+      _showError('Error navigating to category page: $e');
     }
   }
 
@@ -176,10 +209,20 @@ class _EditProfilePageState extends State<EditProfilePage> {
           ? const Center(child: CircularProgressIndicator())
           : (_error != null
                 ? Center(
-                    child: Text(
-                      _error!,
-                      style: const TextStyle(color: Colors.white70),
-                      textAlign: TextAlign.center,
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          _error!,
+                          style: const TextStyle(color: Colors.white70),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 20),
+                        ElevatedButton(
+                          onPressed: _loadAll,
+                          child: const Text('Retry'),
+                        ),
+                      ],
                     ),
                   )
                 : CustomScrollView(
@@ -307,11 +350,12 @@ class _EditProfilePageState extends State<EditProfilePage> {
                                     amount: _fmtMoney(
                                       inc['monthly_income'] ?? 0.0,
                                     ),
-                                    payDay: (inc['payday'] ?? 1) as int,
                                     onEdit: () =>
                                         _navigateToAddEditIncome(income: inc),
                                     onDelete: () =>
                                         _confirmDeleteIncome(inc['income_id']),
+                                    canDelete: _incomes.length > 1,
+                                    isLastIncome: _incomes.length <= 1,
                                   ),
                                 ),
                               ),
@@ -342,8 +386,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
                                   child: _expenseItem(
                                     name: exp['name'] ?? '',
                                     amount: _fmtMoney(exp['amount'] ?? 0.0),
-                                    dueDate: (exp['due_date'] ?? 1) as int,
-                                    categoryName: _catName(exp['category_id']),
                                     onEdit: () =>
                                         _navigateToAddEditExpense(expense: exp),
                                     onDelete: () => _confirmDeleteExpense(
@@ -383,12 +425,15 @@ class _EditProfilePageState extends State<EditProfilePage> {
                                     ),
                                     icon: cat['icon'] ?? 'category',
                                     iconColor: cat['icon_color'] ?? '#7D5EF6',
+                                    type: cat['type'] as String? ?? 'Custom',
                                     onEdit: () => _navigateToAddEditCategory(
                                       category: cat,
                                     ),
-                                    onDelete: () => _confirmDeleteCategory(
-                                      cat['category_id'],
-                                    ),
+                                    onDelete: cat['type'] == 'Custom'
+                                        ? () => _confirmDeleteCategory(
+                                            cat['category_id'],
+                                          )
+                                        : null, // No delete for fixed categories
                                   ),
                                 ),
                               ),
@@ -409,13 +454,14 @@ class _EditProfilePageState extends State<EditProfilePage> {
     );
   }
 
-  // ----------------- Item rows -----------------
+  // ----------------- Simplified Item rows -----------------
   Widget _incomeItem({
     required String name,
     required String amount,
-    required int payDay,
     required VoidCallback onEdit,
     required VoidCallback onDelete,
+    required bool canDelete,
+    required bool isLastIncome,
   }) {
     return Container(
       height: 56,
@@ -429,19 +475,37 @@ class _EditProfilePageState extends State<EditProfilePage> {
           _roundIcon(const Color(0xFF5E52E6), Icons.attach_money),
           const SizedBox(width: 12),
           Expanded(
-            child: Text(
-              '$name - $amount SAR  •  Pay day: $payDay',
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 13.5,
-                fontWeight: FontWeight.w500,
-              ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '$amount SAR',
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Colors.white70, fontSize: 12),
+                ),
+              ],
             ),
           ),
           _editBtn(onEdit),
           const SizedBox(width: 8),
-          _deleteBtn(onDelete),
+          if (isLastIncome)
+            Tooltip(
+              message: 'You must have at least one income source',
+              child: _deleteBtn(() {}, enabled: false),
+            )
+          else
+            _deleteBtn(onDelete, enabled: true),
         ],
       ),
     );
@@ -450,8 +514,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
   Widget _expenseItem({
     required String name,
     required String amount,
-    required int dueDate,
-    required String categoryName,
     required VoidCallback onEdit,
     required VoidCallback onDelete,
   }) {
@@ -467,19 +529,31 @@ class _EditProfilePageState extends State<EditProfilePage> {
           _roundIcon(const Color(0xFFB388FF), Icons.receipt_long),
           const SizedBox(width: 12),
           Expanded(
-            child: Text(
-              '$name - $amount SAR  •  Due day: $dueDate  •  $categoryName',
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 13.5,
-                fontWeight: FontWeight.w500,
-              ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '$amount SAR',
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Colors.white70, fontSize: 12),
+                ),
+              ],
             ),
           ),
           _editBtn(onEdit),
           const SizedBox(width: 8),
-          _deleteBtn(onDelete),
+          _deleteBtn(onDelete, enabled: true),
         ],
       ),
     );
@@ -490,8 +564,9 @@ class _EditProfilePageState extends State<EditProfilePage> {
     required String limit,
     required String icon,
     required String iconColor,
+    required String type,
     required VoidCallback onEdit,
-    required VoidCallback onDelete,
+    required VoidCallback? onDelete, // Can be null for fixed categories
   }) {
     Color color = _hexToColor(iconColor);
     IconData iconData = _getIconData(icon);
@@ -508,19 +583,33 @@ class _EditProfilePageState extends State<EditProfilePage> {
           _roundIcon(color, iconData),
           const SizedBox(width: 12),
           Expanded(
-            child: Text(
-              '$name  •  Limit: $limit SAR',
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 13.5,
-                fontWeight: FontWeight.w500,
-              ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Limit: $limit SAR',
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Colors.white70, fontSize: 12),
+                ),
+              ],
             ),
           ),
           _editBtn(onEdit),
-          const SizedBox(width: 8),
-          _deleteBtn(onDelete),
+          if (onDelete != null) ...[
+            const SizedBox(width: 8),
+            _deleteBtn(onDelete, enabled: true),
+          ],
         ],
       ),
     );
@@ -548,9 +637,13 @@ class _EditProfilePageState extends State<EditProfilePage> {
     ),
   );
 
-  Widget _deleteBtn(VoidCallback onTap) => IconButton(
-    icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
-    onPressed: onTap,
+  Widget _deleteBtn(VoidCallback onTap, {bool enabled = true}) => IconButton(
+    icon: Icon(
+      Icons.delete_outline,
+      color: Colors.red, // Always red now
+      size: 20,
+    ),
+    onPressed: enabled ? onTap : null,
     padding: EdgeInsets.zero,
     constraints: const BoxConstraints(),
   );
@@ -571,126 +664,35 @@ class _EditProfilePageState extends State<EditProfilePage> {
     );
   }
 
-  // ----------------- Confirm deletes -----------------
-  void _confirmDeleteIncome(String incomeId) {
-    _confirmDelete('Income', () async {
-      try {
-        // Set end_time to archive the income
-        await _sb
-            .from('Fixed_Income')
-            .update({'end_time': _iso(DateTime.now())})
-            .eq('income_id', incomeId);
-
-        await _loadAll();
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Income deleted successfully'),
-              backgroundColor: Color(0xFF4CAF50),
-            ),
-          );
-        }
-      } catch (e) {
-        _showError('Error deleting income: $e');
-      }
-    });
-  }
-
-  void _confirmDeleteExpense(String expenseId) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1F1D33),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text(
-          'Delete Expense',
-          style: TextStyle(color: Colors.white),
-        ),
-        content: const Text(
-          'Are you sure you want to permanently delete this expense?',
-          style: TextStyle(color: Colors.white70),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(color: Colors.white70),
-            ),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            onPressed: () async {
-              Navigator.pop(ctx);
-
-              try {
-                // Permanently delete the expense from database
-                await _sb
-                    .from('Fixed_Expense')
-                    .delete()
-                    .eq('expense_id', expenseId);
-
-                await _loadAll();
-
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Expense deleted successfully'),
-                      backgroundColor: Color(0xFF4CAF50),
-                    ),
-                  );
-                }
-              } catch (e) {
-                _showError('Error deleting expense: $e');
-              }
-            },
-            child: const Text('Delete', style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _confirmDeleteCategory(String categoryId) {
-    _confirmDelete('Category', () async {
-      try {
-        await _sb
-            .from('Category')
-            .update({'is_archived': true})
-            .eq('category_id', categoryId);
-        await _loadAll();
-      } catch (e) {
-        _showError('Error deleting category: $e');
-      }
-    });
-  }
-
-  void _confirmDelete(String type, Future<void> Function() action) {
+  // ----------------- Unified Delete Confirmation -----------------
+  void _showDeleteConfirmation({
+    required String title,
+    required String content,
+    required Future<void> Function() onConfirm,
+  }) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF1F1D33),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text(
-          'Delete $type',
-          style: const TextStyle(color: Colors.white),
+          title,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+          ),
         ),
         content: Text(
-          'Are you sure you want to delete this $type?',
-          style: const TextStyle(color: Colors.white70),
+          content,
+          style: const TextStyle(color: Colors.white70, fontSize: 14),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
             child: const Text(
               'Cancel',
-              style: TextStyle(color: Colors.white70),
+              style: TextStyle(color: Colors.white70, fontSize: 14),
             ),
           ),
           ElevatedButton(
@@ -699,15 +701,142 @@ class _EditProfilePageState extends State<EditProfilePage> {
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
               ),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
             ),
             onPressed: () async {
               Navigator.pop(ctx);
-              await action();
+              try {
+                await onConfirm();
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Deleted successfully'),
+                      backgroundColor: Color(0xFF4CAF50),
+                    ),
+                  );
+                }
+              } catch (e) {
+                if (mounted) {
+                  _showError('Error deleting: $e');
+                }
+              }
             },
-            child: const Text('Delete', style: TextStyle(color: Colors.white)),
+            child: const Text(
+              'Delete',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ),
         ],
       ),
+    );
+  }
+
+  // ----------------- Warning Dialog -----------------
+  void _showWarningDialog({required String title, required String content}) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1F1D33),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(
+          title,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        content: Text(
+          content,
+          style: const TextStyle(color: Colors.white70, fontSize: 14),
+        ),
+        actions: [
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF5E52E6),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            ),
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text(
+              'OK',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ----------------- Confirm deletes -----------------
+  void _confirmDeleteIncome(String incomeId) {
+    // Double check (in case UI state is out of sync)
+    if (_incomes.length <= 1) {
+      _showWarningDialog(
+        title: 'Cannot Delete Income',
+        content:
+            'You must have at least one income source. '
+            'Please add another income before deleting this one.',
+      );
+      return;
+    }
+
+    _showDeleteConfirmation(
+      title: 'Delete Income',
+      content: 'Are you sure you want to delete this income?',
+      onConfirm: () async {
+        final profileId = await _getProfileId();
+        // Set end_time to archive the income
+        await _sb
+            .from('Fixed_Income')
+            .update({'end_time': _iso(DateTime.now())})
+            .eq('income_id', incomeId)
+            .eq('profile_id', profileId);
+        await _loadAll();
+      },
+    );
+  }
+
+  void _confirmDeleteExpense(String expenseId) {
+    _showDeleteConfirmation(
+      title: 'Delete Expense',
+      content: 'Are you sure you want to permanently delete this expense?',
+      onConfirm: () async {
+        final profileId = await _getProfileId();
+        // Permanently delete the expense from database
+        await _sb
+            .from('Fixed_Expense')
+            .delete()
+            .eq('expense_id', expenseId)
+            .eq('profile_id', profileId);
+        await _loadAll();
+      },
+    );
+  }
+
+  void _confirmDeleteCategory(String categoryId) {
+    _showDeleteConfirmation(
+      title: 'Delete Category',
+      content: 'Are you sure you want to delete this category?',
+      onConfirm: () async {
+        final profileId = await _getProfileId();
+        await _sb
+            .from('Category')
+            .update({'is_archived': true})
+            .eq('category_id', categoryId)
+            .eq('profile_id', profileId);
+        await _loadAll();
+      },
     );
   }
 

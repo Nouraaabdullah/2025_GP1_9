@@ -15,16 +15,14 @@ class ProfileMainPage extends StatefulWidget {
 }
 
 class _ProfileMainPageState extends State<ProfileMainPage> {
-  static const String kProfileId = 'e33f0c91-26fd-436a-baa3-6ad1df3a8152';
   final _sb = Supabase.instance.client;
-
   late Future<_DashboardData> _future;
   bool _isRefreshing = false;
 
   @override
   void initState() {
     super.initState();
-    _future = _fetchDashboard(kProfileId);
+    _future = _fetchDashboard();
   }
 
   @override
@@ -32,6 +30,18 @@ class _ProfileMainPageState extends State<ProfileMainPage> {
     super.didChangeDependencies();
     // Refresh when returning to this page
     _refreshData();
+  }
+
+  // ======= GET PROFILE ID =======
+  Future<String> _getProfileId() async {
+    final uid = _sb.auth.currentUser?.id;
+    if (uid == null) throw Exception('Not signed in');
+    final row = await _sb
+        .from('User_Profile')
+        .select('profile_id')
+        .eq('user_id', uid)
+        .single();
+    return row['profile_id'] as String;
   }
 
   // ======= REFRESH DATA =======
@@ -43,7 +53,7 @@ class _ProfileMainPageState extends State<ProfileMainPage> {
     });
 
     try {
-      final newData = await _fetchDashboard(kProfileId);
+      final newData = await _fetchDashboard();
       setState(() {
         _future = Future.value(newData);
       });
@@ -56,9 +66,80 @@ class _ProfileMainPageState extends State<ProfileMainPage> {
     }
   }
 
-  // ======= FETCH DATA =======
-  Future<_DashboardData> _fetchDashboard(String profileId) async {
+  // ======= LOGOUT METHOD =======
+  Future<void> _logout() async {
     try {
+      // Show confirmation dialog
+      final shouldLogout = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          backgroundColor: AppColors.card,
+          title: const Text('Logout', style: TextStyle(color: Colors.white)),
+          content: const Text(
+            'Are you sure you want to logout?',
+            style: TextStyle(color: Colors.white70),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text(
+                'Cancel',
+                style: TextStyle(color: Colors.white70),
+              ),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Logout'),
+            ),
+          ],
+        ),
+      );
+
+      if (shouldLogout == true) {
+        await _sb.auth.signOut();
+        // Navigate to login page - adjust the route name as needed
+        if (mounted) {
+          Navigator.pushNamedAndRemoveUntil(
+            context,
+            '/login',
+            (route) => false,
+          );
+        }
+      }
+    } catch (e) {
+      print('Logout error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Logout failed: $e')));
+      }
+    }
+  }
+
+  Future<void> _recoverFromError() async {
+    try {
+      // Sign out and back in if there's an auth issue
+      await _sb.auth.signOut();
+      // Navigate to login page - you'll need to adjust this based on your app structure
+      if (mounted) {
+        Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+      }
+    } catch (e) {
+      print('Recovery failed: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Recovery failed: $e')));
+      }
+    }
+  }
+
+  // ======= FETCH DATA =======
+  Future<_DashboardData> _fetchDashboard() async {
+    try {
+      final profileId = await _getProfileId();
+
       // --- helper for date formatting
       String _isoDate(DateTime d) =>
           '${d.year.toString().padLeft(4, '0')}-'
@@ -243,6 +324,14 @@ class _ProfileMainPageState extends State<ProfileMainPage> {
                       onPressed: _refreshData,
                       child: const Text('Retry'),
                     ),
+                    const SizedBox(height: 10),
+                    ElevatedButton(
+                      onPressed: _logout,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red,
+                      ),
+                      child: const Text('Logout & Sign In Again'),
+                    ),
                   ],
                 ),
               );
@@ -288,6 +377,16 @@ class _ProfileMainPageState extends State<ProfileMainPage> {
                                       ),
                                     ),
                                   ),
+                                // Logout button
+                                IconButton(
+                                  icon: const Icon(
+                                    Icons.logout,
+                                    color: Colors.white,
+                                  ),
+                                  onPressed: _logout,
+                                  tooltip: 'Logout',
+                                ),
+                                // Edit button
                                 IconButton(
                                   icon: const Icon(
                                     Icons.edit,
@@ -544,7 +643,7 @@ class _ProfileMainPageState extends State<ProfileMainPage> {
   }
 }
 
-// ... (Keep the same model classes and category cards from previous code)
+// ... (keep the same _DashboardData, _CategoryDash, _CategoryCard, _EmptyCategoryCard classes)
 class _DashboardData {
   final String fullName;
   final double currentBalance;

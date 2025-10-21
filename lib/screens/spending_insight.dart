@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme/app_colors.dart';
@@ -12,20 +14,32 @@ class SpendingInsightPage extends StatefulWidget {
 }
 
 class _SpendingInsightPageState extends State<SpendingInsightPage> {
-  static const String kProfileId = 'e33f0c91-26fd-436a-baa3-6ad1df3a8152';
   final _sb = Supabase.instance.client;
-
   late Future<_SpendingData> _future;
 
   @override
   void initState() {
     super.initState();
-    _future = _fetchSpendingData(kProfileId);
+    _future = _fetchSpendingData();
+  }
+
+  // ======= GET PROFILE ID =======
+  Future<String> _getProfileId() async {
+    final uid = _sb.auth.currentUser?.id;
+    if (uid == null) throw Exception('Not signed in');
+    final row = await _sb
+        .from('User_Profile')
+        .select('profile_id')
+        .eq('user_id', uid)
+        .single();
+    return row['profile_id'] as String;
   }
 
   // ======= FETCH DATA =======
-  Future<_SpendingData> _fetchSpendingData(String profileId) async {
+  Future<_SpendingData> _fetchSpendingData() async {
     try {
+      final profileId = await _getProfileId();
+
       // --- helper for date formatting
       String _isoDate(DateTime d) =>
           '${d.year.toString().padLeft(4, '0')}-'
@@ -213,10 +227,24 @@ class _SpendingInsightPageState extends State<SpendingInsightPage> {
           }
           if (snap.hasError) {
             return Center(
-              child: Text(
-                'Failed to load spending insights\n${snap.error}',
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.white),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    'Failed to load spending insights\n${snap.error}',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.white),
+                  ),
+                  const SizedBox(height: 20),
+                  ElevatedButton(
+                    onPressed: () {
+                      setState(() {
+                        _future = _fetchSpendingData();
+                      });
+                    },
+                    child: const Text('Retry'),
+                  ),
+                ],
               ),
             );
           }
@@ -290,7 +318,7 @@ class _SpendingInsightPageState extends State<SpendingInsightPage> {
                       const SizedBox(height: 6),
                       Center(
                         child: Text(
-                          '${_fmt(data.currentBalance)} ر.س',
+                          '${_fmt(data.currentBalance)} SAR',
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 40,
@@ -300,7 +328,7 @@ class _SpendingInsightPageState extends State<SpendingInsightPage> {
                       ),
                       const SizedBox(height: 16),
 
-                      // ===== Top full progress card (multicolor) =====
+                      // ===== Category Spending Progress Chart =====
                       Container(
                         decoration: BoxDecoration(
                           color: AppColors.card,
@@ -308,7 +336,17 @@ class _SpendingInsightPageState extends State<SpendingInsightPage> {
                         ),
                         padding: const EdgeInsets.all(16),
                         child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
+                            const Text(
+                              'Category Spending Progress',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
                             Row(
                               children: [
                                 const Expanded(
@@ -336,7 +374,7 @@ class _SpendingInsightPageState extends State<SpendingInsightPage> {
                               children: [
                                 Expanded(
                                   child: Text(
-                                    '${_fmt(data.leftToSpend)}',
+                                    '${_fmt(data.leftToSpend)} SAR',
                                     style: const TextStyle(
                                       color: Colors.white,
                                       fontSize: 15,
@@ -345,7 +383,7 @@ class _SpendingInsightPageState extends State<SpendingInsightPage> {
                                   ),
                                 ),
                                 Text(
-                                  '${_fmt(data.totalMonthlyBudget)}',
+                                  '${_fmt(data.totalMonthlyBudget)} SAR',
                                   style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 15,
@@ -356,15 +394,9 @@ class _SpendingInsightPageState extends State<SpendingInsightPage> {
                             ),
                             const SizedBox(height: 12),
                             if (data.totalMonthlyBudget > 0)
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(8),
-                                child: SizedBox(
-                                  height: 9,
-                                  child: _buildCombinedProgressBar(
-                                    data.categories,
-                                    data.totalMonthlyBudget,
-                                  ),
-                                ),
+                              _buildInteractiveProgressBar(
+                                data.categories,
+                                data.totalMonthlyBudget,
                               )
                             else
                               Container(
@@ -408,7 +440,7 @@ class _SpendingInsightPageState extends State<SpendingInsightPage> {
     );
   }
 
-  Widget _buildCombinedProgressBar(
+  Widget _buildInteractiveProgressBar(
     List<_CategorySpending> categories,
     double totalBudget,
   ) {
@@ -426,28 +458,47 @@ class _SpendingInsightPageState extends State<SpendingInsightPage> {
       );
     }
 
-    return Row(
+    return Column(
       children: [
-        for (final category in validCategories)
-          if (category.spent > 0)
-            Expanded(
-              flex: (category.spent / totalBudget * 1000).round(),
-              child: ColoredBox(color: _hexToColor(category.color)),
-            ),
-        // Remaining space (left to spend)
-        Expanded(
-          flex:
-              ((totalBudget -
-                          validCategories.fold(
-                            0.0,
-                            (sum, c) => sum + c.spent,
-                          )) /
-                      totalBudget *
-                      1000)
-                  .round(),
-          child: const ColoredBox(color: AppColors.pNeutral),
+        // Progress bar with hover detection
+        SizedBox(
+          height: 20,
+          child: _ProgressBarWithHover(
+            categories: validCategories,
+            totalBudget: totalBudget,
+          ),
         ),
+        const SizedBox(height: 8),
+        // Legend for categories
+        _buildProgressBarLegend(validCategories),
       ],
+    );
+  }
+
+  Widget _buildProgressBarLegend(List<_CategorySpending> categories) {
+    return Wrap(
+      spacing: 12,
+      runSpacing: 8,
+      children: categories.map((category) {
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 12,
+              height: 12,
+              decoration: BoxDecoration(
+                color: _hexToColor(category.color),
+                shape: BoxShape.circle,
+              ),
+            ),
+            const SizedBox(width: 4),
+            Text(
+              category.name,
+              style: const TextStyle(color: Colors.white70, fontSize: 12),
+            ),
+          ],
+        );
+      }).toList(),
     );
   }
 
@@ -496,18 +547,27 @@ class _SpendingInsightPageState extends State<SpendingInsightPage> {
                       ),
                     ),
                     const SizedBox(height: 2),
-                    Text(
-                      'Limit: ${_fmt(limit)} ر.س',
-                      style: const TextStyle(
-                        color: Color(0xFF9CA3AF),
-                        fontSize: 12,
+                    if (limit > 0)
+                      Text(
+                        'Limit: ${_fmt(limit)} SAR',
+                        style: const TextStyle(
+                          color: Color(0xFF9CA3AF),
+                          fontSize: 12,
+                        ),
+                      )
+                    else
+                      Text(
+                        'No limit set',
+                        style: const TextStyle(
+                          color: Color(0xFF9CA3AF),
+                          fontSize: 12,
+                        ),
                       ),
-                    ),
                   ],
                 ),
               ),
               Text(
-                '${_fmt(spent)} ر.س',
+                'Spent ${_fmt(spent)} SAR',
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 15,
@@ -517,27 +577,240 @@ class _SpendingInsightPageState extends State<SpendingInsightPage> {
             ],
           ),
           const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(10),
-                  child: LinearProgressIndicator(
-                    value: progress,
-                    minHeight: 6,
-                    color: color,
-                    backgroundColor: AppColors.pNeutral,
+          if (limit > 0)
+            Row(
+              children: [
+                Expanded(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: LinearProgressIndicator(
+                      value: progress,
+                      minHeight: 6,
+                      color: color,
+                      backgroundColor: AppColors.pNeutral,
+                    ),
                   ),
                 ),
+                const SizedBox(width: 10),
+                Text(
+                  'Left ${_fmt(leftToSpend > 0 ? leftToSpend : 0)} SAR',
+                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                ),
+              ],
+            )
+          else
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Text(
+                'Spent ${_fmt(spent)} SAR in this category',
+                style: const TextStyle(color: Color(0xFF9CA3AF), fontSize: 14),
               ),
-              const SizedBox(width: 10),
-              Text(
-                'Left ${_fmt(leftToSpend > 0 ? leftToSpend : 0)}',
-                style: const TextStyle(color: Colors.white, fontSize: 14),
-              ),
-            ],
-          ),
+            ),
         ],
+      ),
+    );
+  }
+}
+
+// ======= HOVER-BASED PROGRESS BAR =======
+class _ProgressBarWithHover extends StatefulWidget {
+  final List<_CategorySpending> categories;
+  final double totalBudget;
+
+  const _ProgressBarWithHover({
+    required this.categories,
+    required this.totalBudget,
+  });
+
+  @override
+  State<_ProgressBarWithHover> createState() => _ProgressBarWithHoverState();
+}
+
+class _ProgressBarWithHoverState extends State<_ProgressBarWithHover> {
+  Offset? _tipPos;
+  String _tipText = '';
+  Timer? _hideTimer;
+
+  @override
+  void dispose() {
+    _hideTimer?.cancel();
+    super.dispose();
+  }
+
+  // Add _hexToColor method here to fix the red error
+  Color _hexToColor(String hex) {
+    hex = hex.replaceAll('#', '');
+    if (hex.length == 6) {
+      hex = 'FF$hex';
+    }
+    return Color(int.parse(hex, radix: 16));
+  }
+
+  void _showTip(Offset local, String text) {
+    _hideTimer?.cancel();
+    setState(() {
+      _tipPos = local;
+      _tipText = text;
+    });
+    _hideTimer = Timer(const Duration(milliseconds: 2500), () {
+      if (mounted) setState(() => _tipPos = null);
+    });
+  }
+
+  void _handleHover(Offset localPos, Size size) {
+    final categories = widget.categories;
+    final totalBudget = widget.totalBudget;
+
+    // Calculate which segment is being hovered
+    final segmentWidth = size.width / (totalBudget > 0 ? totalBudget : 1);
+    double currentPosition = 0.0;
+
+    for (final category in categories) {
+      final segmentEnd = currentPosition + category.spent;
+
+      if (localPos.dx >= currentPosition * segmentWidth &&
+          localPos.dx <= segmentEnd * segmentWidth) {
+        final tipX =
+            (currentPosition * segmentWidth +
+                    (category.spent * segmentWidth) / 2)
+                .clamp(60.0, size.width - 60.0);
+
+        _showTip(
+          Offset(tipX - 60, -50), // Position above the segment
+          '${category.name}\nSpent: ${category.spent.toStringAsFixed(0)}/${category.limit!.toStringAsFixed(0)} SAR',
+        );
+        return;
+      }
+      currentPosition = segmentEnd;
+    }
+
+    // If no segment found, hide tooltip
+    _hideTimer?.cancel();
+    setState(() => _tipPos = null);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final categories = widget.categories;
+    final totalBudget = widget.totalBudget;
+
+    return Stack(
+      children: [
+        // Progress bar segments
+        Container(
+          height: 20,
+          decoration: BoxDecoration(borderRadius: BorderRadius.circular(8)),
+          child: MouseRegion(
+            onHover: (event) {
+              final box = context.findRenderObject() as RenderBox?;
+              if (box != null) {
+                final local = box.globalToLocal(event.position);
+                _handleHover(local, box.size);
+              }
+            },
+            onExit: (event) {
+              _hideTimer?.cancel();
+              setState(() => _tipPos = null);
+            },
+            child: Row(
+              children: [
+                for (final category in categories)
+                  if (category.spent > 0)
+                    Expanded(
+                      flex: (category.spent / totalBudget * 1000).round(),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: _hexToColor(category.color),
+                          borderRadius: _getSegmentBorderRadius(
+                            category,
+                            categories,
+                            totalBudget,
+                          ),
+                        ),
+                      ),
+                    ),
+                // Remaining space (left to spend)
+                Expanded(
+                  flex:
+                      ((totalBudget -
+                                  categories.fold(
+                                    0.0,
+                                    (sum, c) => sum + c.spent,
+                                  )) /
+                              totalBudget *
+                              1000)
+                          .round(),
+                  child: Container(
+                    decoration: const BoxDecoration(
+                      color: AppColors.pNeutral,
+                      borderRadius: BorderRadius.only(
+                        topRight: Radius.circular(8),
+                        bottomRight: Radius.circular(8),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+
+        // Tooltip
+        if (_tipPos != null)
+          Positioned(
+            left: _tipPos!.dx,
+            top: _tipPos!.dy,
+            child: _Bubble(text: _tipText),
+          ),
+      ],
+    );
+  }
+
+  BorderRadius _getSegmentBorderRadius(
+    _CategorySpending category,
+    List<_CategorySpending> categories,
+    double totalBudget,
+  ) {
+    final index = categories.indexOf(category);
+    final isFirst = index == 0;
+    final isLast =
+        index == categories.length - 1 &&
+        (totalBudget - categories.fold(0.0, (sum, c) => sum + c.spent)) <= 0;
+
+    return BorderRadius.only(
+      topLeft: isFirst ? const Radius.circular(8) : Radius.zero,
+      bottomLeft: isFirst ? const Radius.circular(8) : Radius.zero,
+      topRight: isLast ? const Radius.circular(8) : Radius.zero,
+      bottomRight: isLast ? const Radius.circular(8) : Radius.zero,
+    );
+  }
+}
+
+// Tooltip bubble (same as your dashboard)
+class _Bubble extends StatelessWidget {
+  final String text;
+  const _Bubble({required this.text});
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedOpacity(
+      opacity: 1,
+      duration: const Duration(milliseconds: 120),
+      child: Container(
+        width: 180,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: AppColors.card,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: Colors.white.withOpacity(0.08)),
+          boxShadow: [
+            BoxShadow(color: Colors.black.withOpacity(0.25), blurRadius: 12),
+          ],
+        ),
+        child: Text(
+          text,
+          textAlign: TextAlign.center,
+          style: const TextStyle(color: Colors.white, fontSize: 12),
+        ),
       ),
     );
   }

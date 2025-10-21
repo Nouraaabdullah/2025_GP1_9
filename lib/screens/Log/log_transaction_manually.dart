@@ -379,19 +379,28 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
     Color chosenColor = const Color(0xFF7959F5);
     IconData? chosenIcon;
 
+    // *** ICONS UPDATED TO MATCH YOUR TEAMMATE'S SET ***
     final availableIcons = <IconData>[
-      Icons.fastfood,
-      Icons.shopping_bag,
+      Icons.category,
+      Icons.shopping_cart,
+      Icons.restaurant,
+      Icons.directions_car,
       Icons.home,
-      Icons.airplanemode_active,
-      Icons.movie,
-      Icons.sports_soccer,
-      Icons.work,
-      Icons.pets,
-      Icons.brush,
-      Icons.local_cafe,
-      Icons.computer,
+      Icons.local_hospital,
+      Icons.school,
+      Icons.sports_esports,
       Icons.attach_money,
+      Icons.savings,
+      Icons.flight,
+      Icons.local_offer,
+      Icons.fitness_center,
+      Icons.movie,
+      Icons.music_note,
+      Icons.book,
+      Icons.pets,
+      Icons.child_care,
+      Icons.spa,
+      Icons.construction,
     ];
 
     String? createdCategoryName;

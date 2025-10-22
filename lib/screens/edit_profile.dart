@@ -61,10 +61,12 @@ class _EditProfilePageState extends State<EditProfilePage> {
           .eq('profile_id', profileId)
           .single();
 
-      // Load active incomes (where end_time is null)
+      // Load active incomes (where end_time is null) - INCLUDING is_primary
       final incomesData = await _sb
           .from('Fixed_Income')
-          .select('income_id,name,monthly_income,payday,start_time,end_time')
+          .select(
+            'income_id,name,monthly_income,payday,start_time,end_time,is_primary',
+          )
           .eq('profile_id', profileId)
           .isFilter('end_time', null)
           .order('name');
@@ -368,6 +370,9 @@ class _EditProfilePageState extends State<EditProfilePage> {
                                         _confirmDeleteIncome(inc['income_id']),
                                     canDelete: _incomes.length > 1,
                                     isLastIncome: _incomes.length <= 1,
+                                    isPrimary:
+                                        inc['is_primary'] ==
+                                        true, // NEW: Check if primary
                                   ),
                                 ),
                               ),
@@ -499,6 +504,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
     required VoidCallback onDelete,
     required bool canDelete,
     required bool isLastIncome,
+    required bool isPrimary, // NEW: Primary income flag
   }) {
     return Container(
       height: 56,
@@ -516,14 +522,39 @@ class _EditProfilePageState extends State<EditProfilePage> {
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  name,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
+                Row(
+                  children: [
+                    Text(
+                      name,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    if (isPrimary) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.green.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          'Primary',
+                          style: TextStyle(
+                            color: Colors.green[300],
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
                 const SizedBox(height: 2),
                 Text(
@@ -534,15 +565,12 @@ class _EditProfilePageState extends State<EditProfilePage> {
               ],
             ),
           ),
-          _editBtn(onEdit),
-          const SizedBox(width: 8),
-          if (isLastIncome)
-            Tooltip(
-              message: 'You must have at least one income source',
-              child: _deleteBtn(() {}, enabled: false),
-            )
-          else
+          // DELETE BUTTON ON LEFT (hidden for primary incomes)
+          if (!isPrimary && canDelete && !isLastIncome)
             _deleteBtn(onDelete, enabled: true),
+          const SizedBox(width: 8),
+          // EDIT BUTTON ON RIGHT
+          _editBtn(onEdit),
         ],
       ),
     );
@@ -588,9 +616,11 @@ class _EditProfilePageState extends State<EditProfilePage> {
               ],
             ),
           ),
-          _editBtn(onEdit),
-          const SizedBox(width: 8),
+          // DELETE BUTTON ON LEFT
           _deleteBtn(onDelete, enabled: true),
+          const SizedBox(width: 8),
+          // EDIT BUTTON ON RIGHT
+          _editBtn(onEdit),
         ],
       ),
     );
@@ -642,11 +672,11 @@ class _EditProfilePageState extends State<EditProfilePage> {
               ],
             ),
           ),
+          // DELETE BUTTON ON LEFT (only for custom categories)
+          if (onDelete != null) _deleteBtn(onDelete, enabled: true),
+          const SizedBox(width: 8),
+          // EDIT BUTTON ON RIGHT
           _editBtn(onEdit),
-          if (onDelete != null) ...[
-            const SizedBox(width: 8),
-            _deleteBtn(onDelete, enabled: true),
-          ],
         ],
       ),
     );
@@ -677,7 +707,9 @@ class _EditProfilePageState extends State<EditProfilePage> {
   Widget _deleteBtn(VoidCallback onTap, {bool enabled = true}) => IconButton(
     icon: Icon(
       Icons.delete_outline,
-      color: Colors.red, // Always red now
+      color: enabled
+          ? Colors.red
+          : Colors.grey, // Red when enabled, grey when disabled
       size: 20,
     ),
     onPressed: enabled ? onTap : null,

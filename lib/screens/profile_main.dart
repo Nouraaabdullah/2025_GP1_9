@@ -557,9 +557,9 @@ class _ProfileMainPageState extends State<ProfileMainPage> {
                                         ? '—'
                                         : '${c.percent!.clamp(0, 999).toStringAsFixed(0)}%';
                                     return _CategoryCard(
-                                      c.name,
-                                      '${_fmt(c.amount)} SAR',
-                                      pct,
+                                      title: c.name,
+                                      amount: '${_fmt(c.amount)} SAR',
+                                      percent: pct,
                                       icon: c.icon,
                                       color: c.color,
                                     );
@@ -643,7 +643,6 @@ class _ProfileMainPageState extends State<ProfileMainPage> {
   }
 }
 
-// ... (keep the same _DashboardData, _CategoryDash, _CategoryCard, _EmptyCategoryCard classes)
 class _DashboardData {
   final String fullName;
   final double currentBalance;
@@ -678,10 +677,10 @@ class _CategoryDash {
 
 class _CategoryCard extends StatelessWidget {
   final String title, amount, percent, icon, color;
-  const _CategoryCard(
-    this.title,
-    this.amount,
-    this.percent, {
+  const _CategoryCard({
+    required this.title,
+    required this.amount,
+    required this.percent,
     required this.icon,
     required this.color,
   });
@@ -694,30 +693,82 @@ class _CategoryCard extends StatelessWidget {
     return Color(int.parse(hex, radix: 16));
   }
 
-  IconData _getIconFromString(String iconName) {
+  // Icon Data Conversion for IconData(U+0E37B) format
+  IconData _iconDataFromString(String iconString) {
+    try {
+      // Handle IconData(U+0E37B) format
+      if (iconString.startsWith('IconData(U+')) {
+        // Extract the hex code from "IconData(U+0E37B)"
+        final hexCode = iconString.substring(11, iconString.length - 1);
+        final codePoint = int.parse(hexCode, radix: 16);
+        return IconData(codePoint, fontFamily: 'MaterialIcons');
+      }
+
+      // Handle old string format as fallback
+      return _stringToIconData(iconString);
+    } catch (e) {
+      debugPrint('Error converting icon string: $iconString, error: $e');
+      return Icons.category;
+    }
+  }
+
+  // Fallback for old string format
+  IconData _stringToIconData(String iconString) {
+    try {
+      if (iconString.contains('.')) {
+        final iconName = iconString.split('.').last;
+        return _findIconByName(iconName);
+      } else {
+        return _findIconByName(iconString);
+      }
+    } catch (e) {
+      debugPrint('Error converting string to IconData: $e');
+      return Icons.category;
+    }
+  }
+
+  // Find icon by name from available icons
+  IconData _findIconByName(String iconName) {
     final iconMap = {
+      'fastfood': Icons.fastfood,
+      'shopping_bag': Icons.shopping_bag,
+      'home': Icons.home,
+      'airplanemode_active': Icons.airplanemode_active,
+      'movie': Icons.movie,
+      'sports_soccer': Icons.sports_soccer,
+      'work': Icons.work,
+      'pets': Icons.pets,
+      'brush': Icons.brush,
+      'local_cafe': Icons.local_cafe,
+      'computer': Icons.computer,
+      'attach_money': Icons.attach_money,
+      'account_balance_wallet': Icons.account_balance_wallet,
+      'category': Icons.category,
       'shopping_cart': Icons.shopping_cart,
       'restaurant': Icons.restaurant,
       'directions_car': Icons.directions_car,
-      'home': Icons.home,
       'local_hospital': Icons.local_hospital,
       'school': Icons.school,
       'sports_esports': Icons.sports_esports,
-      'attach_money': Icons.attach_money,
-      'savings': Icons.savings,
       'flight': Icons.flight,
+      'local_offer': Icons.local_offer,
       'fitness_center': Icons.fitness_center,
-      'movie': Icons.movie,
       'music_note': Icons.music_note,
       'book': Icons.book,
-      'pets': Icons.pets,
-      'receipt': Icons.receipt,
+      'child_care': Icons.child_care,
+      'spa': Icons.spa,
+      'construction': Icons.construction,
+      'description': Icons.description,
     };
+
     return iconMap[iconName] ?? Icons.category;
   }
 
   @override
   Widget build(BuildContext context) {
+    final iconColor = _hexToColor(color);
+    final iconData = _iconDataFromString(icon);
+
     return Container(
       decoration: BoxDecoration(
         color: AppColors.card,
@@ -728,7 +779,13 @@ class _CategoryCard extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Icon(_getIconFromString(icon), color: _hexToColor(color), size: 32),
+          // UPDATED: Same circular icon styling as EditProfilePage
+          Container(
+            height: 32,
+            width: 32,
+            decoration: BoxDecoration(color: iconColor, shape: BoxShape.circle),
+            child: Icon(iconData, color: Colors.white, size: 18),
+          ),
           const SizedBox(height: 6),
           Text(
             title,
@@ -764,7 +821,6 @@ class _CategoryCard extends StatelessWidget {
               percent == '—' ? 'No limit set' : '$percent budget used',
               textAlign: TextAlign.center,
               maxLines: 1,
-              overflow: TextOverflow.visible,
               style: const TextStyle(
                 color: Colors.white,
                 fontSize: 8,

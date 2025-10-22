@@ -1,7 +1,9 @@
+// /Users/lamee/Documents/GitHub/2025_GP1_9/lib/screens/Log/log_transaction_manually.dart
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../theme/app_colors.dart';
+import '../../utils/auth_helpers.dart';
 
 class LogTransactionManuallyPage extends StatefulWidget {
   const LogTransactionManuallyPage({super.key});
@@ -57,17 +59,11 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
 
   Future<String> _getProfileId() async {
     if (_profileId != null) return _profileId!;
-    final uid = _sb.auth.currentUser?.id;
-    if (uid == null) {
+    final pid = await getProfileId(context);
+    if (pid == null) {
       throw Exception('Sign in required');
     }
-    final dynamic res = await _sb
-        .from('User_Profile')
-        .select('profile_id')
-        .eq('user_id', uid)
-        .single();
-    final map = res as Map<String, dynamic>;
-    _profileId = map['profile_id'] as String;
+    _profileId = pid;
     return _profileId!;
   }
 
@@ -264,7 +260,7 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
     return num.tryParse('$v') ?? 0;
   }
 
-  // color picker helper opened via root navigator with hue/saturation wheel + brightness
+  // color picker helper opened via root navigator with hue and saturation wheel plus brightness
   Future<Color?> _pickWheelColor(Color initial) async {
     Color tempColor = initial;
     double brightness = HSVColor.fromColor(tempColor).value;
@@ -286,7 +282,6 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Color wheel (hue+saturation)
                     GestureDetector(
                       onPanDown: (d) => _updateColor(
                         d.localPosition,
@@ -320,7 +315,6 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
                       ),
                     ),
                     const SizedBox(height: 16),
-                    // Brightness (value) slider
                     Row(
                       children: [
                         const Icon(Icons.brightness_6, color: Colors.white70, size: 20),
@@ -379,7 +373,6 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
     Color chosenColor = const Color(0xFF7959F5);
     IconData? chosenIcon;
 
-    // *** ICONS UPDATED TO MATCH YOUR TEAMMATE'S SET ***
     final availableIcons = <IconData>[
       Icons.category,
       Icons.shopping_cart,
@@ -535,7 +528,7 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
     return createdCategoryName!;
   }
 
-  // color wheel math (hue+saturation with adjustable brightness)
+  // color wheel math hue and saturation with adjustable brightness
   void _updateColor(
     Offset position,
     void Function(void Function()) setStateDialog,
@@ -639,7 +632,7 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
     );
   }
 
-  // === confirmation dialog and zero balance info ===
+  // confirmation dialog and zero balance info
 
   Future<bool> _showConfirmTransactionDialog({
     required double currentBalance,
@@ -844,7 +837,6 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
       }
     }
 
-    // new confirmation flow
     try {
       final isExpense = _type == 'Expense';
       final amount = double.parse(_amountCtrl.text.trim());
@@ -1053,12 +1045,12 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
                           keyboardType:
                               const TextInputType.numberWithOptions(decimal: true),
                           decoration: _inputDecoration().copyWith(
-                            suffixIcon: const Padding(
-                              padding: EdgeInsets.only(right: 12),
-                              child: Icon(Icons.attach_money, size: 18, color: Color(0xFF7A7A8C)),
+                            prefixText: 'SAR  ',
+                            prefixStyle: const TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFF7A7A8C),
+                              fontWeight: FontWeight.w600,
                             ),
-                            suffixIconConstraints:
-                                const BoxConstraints(minHeight: 0, minWidth: 0),
                           ),
                           validator: (v) {
                             final txt = v?.trim() ?? '';
@@ -1256,7 +1248,6 @@ class _ColorWheelPainter extends CustomPainter {
     final center = Offset(size.width / 2, size.height / 2);
     final radius = size.width / 2;
 
-    // Draw hue ring
     for (double i = 0; i < 360; i++) {
       final paint = Paint()
         ..color = HSVColor.fromAHSV(1.0, i, 1.0, 1.0).toColor()
@@ -1271,7 +1262,6 @@ class _ColorWheelPainter extends CustomPainter {
       );
     }
 
-    // Radial white -> transparent (saturation)
     final saturationPaint = Paint()
       ..shader = const RadialGradient(
         colors: [Colors.white, Color.fromARGB(0, 255, 255, 255)],

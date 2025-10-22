@@ -1,8 +1,11 @@
-// lib/pages/Dashboard/savings_chart.dart
+// /Users/lamee/Documents/GitHub/2025_GP1_9/lib/screens/Dashboard/savings_chart.dart
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../theme/app_colors.dart';
+
+// ✅ Auth helper import (redirects to /login if not signed in)
+import '../../utils/auth_helpers.dart';
 
 /// Line sparkline for Savings with tap tooltip next to the point.
 /// - `values` are Y values from DB (no placeholders).
@@ -36,6 +39,16 @@ class _SavingsSparklineState extends State<SavingsSparkline> {
   static const double _topPad    = 14.0;
   static const double _bottomPad = 28.0;
   static const double _edgeFrac  = 0.06; // inner horizontal padding percentage
+
+  @override
+  void initState() {
+    super.initState();
+    // ✅ Lightweight auth check; if signed out, helper will navigate to /login.
+    // Does not alter chart behavior otherwise.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      getProfileId(context);
+    });
+  }
 
   @override
   void dispose() {

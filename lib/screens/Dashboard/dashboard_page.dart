@@ -1,4 +1,4 @@
-// lib/pages/Dashboard/dashboard_page.dart
+// /Users/lamee/Documents/GitHub/2025_GP1_9/lib/screens/Dashboard/dashboard_page.dart
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -11,6 +11,9 @@ import 'income_chart.dart';
 import 'trends_chart.dart';
 import 'savings_chart.dart';
 import 'category_chart.dart'; // exposes CategorySlice + colorFromIconOrSeed
+
+// ✅ Auth helper (redirects to /login if not signed in and returns null)
+import '../../utils/auth_helpers.dart';
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
@@ -85,8 +88,13 @@ class _DashboardPageState extends State<DashboardPage> {
     }
 
     try {
-      //final profileId = await _getProfileId();
-      const profileId = '135dee2a-e3ec-47c3-abf5-8f4ed707c3db';
+      // ✅ Get profileId via shared auth helper (handles redirect if signed out)
+      final profileId = await getProfileId(context);
+      if (profileId == null) {
+        if (!mounted) return;
+        setState(() { _loading = false; });
+        return; // user was redirected to /login
+      }
 
       // 1) balance
       final prof = await _sb
@@ -690,12 +698,7 @@ class _DashboardPageState extends State<DashboardPage> {
   String _iso(DateTime d) => '${d.year.toString().padLeft(4,'0')}-${d.month.toString().padLeft(2,'0')}-${d.day.toString().padLeft(2,'0')}';
   DateTime? _parseOrNull(dynamic s) => (s == null) ? null : DateTime.tryParse(s as String);
 
-  Future<String> _getProfileId() async {
-    final uid = _sb.auth.currentUser?.id;
-    if (uid == null) throw Exception('Not signed in');
-    final row = await _sb.from('User_Profile').select('profile_id').eq('user_id', uid).single();
-    return row['profile_id'] as String;
-  }
+  // ⛔️ Removed the old manual _getProfileId(); using shared helper instead.
 
   List<_Bucket> _buildWeeklyBuckets(DateTime mStart, DateTime mEnd) => [
         _Bucket(null, null, DateTime(mStart.year, mStart.month, 4)),

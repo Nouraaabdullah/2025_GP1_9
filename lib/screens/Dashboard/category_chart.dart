@@ -1,8 +1,11 @@
-// lib/pages/Dashboard/category_chart.dart
+// /Users/lamee/Documents/GitHub/2025_GP1_9/lib/screens/Dashboard/category_chart.dart
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../theme/app_colors.dart';
+
+// ✅ Auth helper import (will redirect to /login if not signed in)
+import '../../utils/auth_helpers.dart';
 
 class CategorySlice {
   final String id;
@@ -77,6 +80,15 @@ class _CategoryDonutState extends State<CategoryDonut> {
   Timer? _hideTimer;
 
   @override
+  void initState() {
+    super.initState();
+    // ✅ Lightweight auth check; if user is signed out this will navigate to /login.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      getProfileId(context);
+    });
+  }
+
+  @override
   void dispose() {
     _hideTimer?.cancel();
     super.dispose();
@@ -105,7 +117,7 @@ class _CategoryDonutState extends State<CategoryDonut> {
     if (sweep <= 0) return false;
     if (start <= end) return angle >= start && angle <= end;
     return angle >= start || angle <= end; // wrapped
-  }
+    }
 
   @override
   Widget build(BuildContext context) {

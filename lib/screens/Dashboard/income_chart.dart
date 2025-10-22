@@ -1,8 +1,11 @@
-// lib/pages/Dashboard/income_chart.dart
+// /Users/lamee/Documents/GitHub/2025_GP1_9/lib/screens/Dashboard/income_chart.dart
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../theme/app_colors.dart';
+
+// ✅ Auth helper import (redirects to /login if not signed in)
+import '../../utils/auth_helpers.dart';
 
 class IncomeSemicircleGauge extends StatefulWidget {
   final double percent;
@@ -61,6 +64,15 @@ class _IncomeSemicircleGaugeState extends State<IncomeSemicircleGauge> {
     }
   }
   // ---------------------------------------------------------------
+
+  @override
+  void initState() {
+    super.initState();
+    // ✅ Lightweight auth check; if user is signed out this will navigate to /login.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      getProfileId(context);
+    });
+  }
 
   @override
   void dispose() {

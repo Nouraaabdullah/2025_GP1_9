@@ -2,6 +2,7 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../theme/app_colors.dart';
+import '../../utils/auth_helpers.dart';
 
 /// Public model used by Dashboard page
 class CategorySlice {
@@ -74,6 +75,15 @@ class _CategoryDonutState extends State<CategoryDonut> {
   static const double _thickness = 18.0;
   static const double _gapRadians = 0.015; // small visual gap between slices
   static const double _startAngle = -math.pi / 2; // start at 12 o'clock, clockwise
+
+  @override
+  void initState() {
+    super.initState();
+    // ✅ Lightweight auth check; if user is signed out this will navigate to /login.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      getProfileId(context);
+    });
+  }
 
   @override
   void didUpdateWidget(covariant CategoryDonut oldWidget) {
@@ -325,7 +335,7 @@ class _CenterLabel extends StatelessWidget {
         ),
       ),
     );
-    }
+  }
 }
 
 class _Bubble extends StatelessWidget {

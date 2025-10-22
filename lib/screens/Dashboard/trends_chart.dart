@@ -1,7 +1,11 @@
+// /Users/lamee/Documents/GitHub/2025_GP1_9/lib/screens/Dashboard/trends_chart.dart
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../theme/app_colors.dart';
+
+// ✅ Auth helper import (redirects to /login if not signed in)
+import '../../utils/auth_helpers.dart';
 
 /// Grouped bars: A=Expenses, B=Earnings, C=Income.
 /// Tap a bar to show a tooltip anchored near that bar; auto-fades after ~2.5s.
@@ -33,6 +37,15 @@ class _TrendsGroupedBarsState extends State<TrendsGroupedBars> {
   Timer? _hideTimer;
 
   @override
+  void initState() {
+    super.initState();
+    // ✅ Lightweight auth check; if user is signed out this will navigate to /login.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      getProfileId(context);
+    });
+  }
+
+  @override
   void dispose() {
     _hideTimer?.cancel();
     super.dispose();
@@ -51,12 +64,16 @@ class _TrendsGroupedBarsState extends State<TrendsGroupedBars> {
 
   @override
   Widget build(BuildContext context) {
-    final n = math.min(widget.labels.length,
-        math.min(widget.seriesA.length, math.min(widget.seriesB.length, widget.seriesC.length)));
+    final n = math.min(
+        widget.labels.length,
+        math.min(
+            widget.seriesA.length,
+            math.min(widget.seriesB.length, widget.seriesC.length)));
     if (n == 0) {
       return SizedBox(
         height: 190,
-        child: Center(child: Text('No data', style: TextStyle(color: AppColors.textGrey))),
+        child: Center(
+            child: Text('No data', style: TextStyle(color: AppColors.textGrey))),
       );
     }
 
@@ -85,14 +102,19 @@ class _TrendsGroupedBarsState extends State<TrendsGroupedBars> {
 
               final group = (dx / groupW).floor().clamp(0, n - 1);
               // bars are centered in group
-              final originX = group * groupW + (groupW - (barW * 3 + gap * 2)) / 2;
+              final originX =
+                  group * groupW + (groupW - (barW * 3 + gap * 2)) / 2;
               final localX = dx - originX;
 
               int? which;
               if (localX >= 0 && localX <= barW * 3 + gap * 2) {
-                if (localX < barW) which = 0;
-                else if (localX < barW + gap + barW) which = 1;
-                else if (localX < barW + gap + barW + gap + barW) which = 2;
+                if (localX < barW) {
+                  which = 0;
+                } else if (localX < barW + gap + barW) {
+                  which = 1;
+                } else if (localX < barW + gap + barW + gap + barW) {
+                  which = 2;
+                }
               }
               if (which == null) return;
 
@@ -100,13 +122,16 @@ class _TrendsGroupedBarsState extends State<TrendsGroupedBars> {
               final b = widget.seriesB[group];
               final c = widget.seriesC[group];
               final val = which == 0 ? a : which == 1 ? b : c;
-              final name = which == 0 ? 'Expenses' : which == 1 ? 'Earnings' : 'Income';
+              final name =
+                  which == 0 ? 'Expenses' : which == 1 ? 'Earnings' : 'Income';
 
               // bar top y
               final barTop = (200 - 40) - h(val); // height: 200, bottom labels ~40px
-              final tip = Offset(originX + which * (barW + gap) + barW / 2, math.max(0, barTop - 8));
+              final tip = Offset(originX + which * (barW + gap) + barW / 2,
+                  math.max(0, barTop - 8));
 
-              _showTip(Offset(tip.dx, tip.dy), '${widget.labels[group]}\n$name: ${val.toStringAsFixed(0)} SAR');
+              _showTip(Offset(tip.dx, tip.dy),
+                  '${widget.labels[group]}\n$name: ${val.toStringAsFixed(0)} SAR');
             },
             child: Stack(
               children: [
@@ -133,7 +158,10 @@ class _TrendsGroupedBarsState extends State<TrendsGroupedBars> {
                           ),
                           const SizedBox(height: 6),
                           Text(widget.labels[i],
-                              style: TextStyle(color: AppColors.textGrey, fontSize: 10, fontWeight: FontWeight.w700)),
+                              style: TextStyle(
+                                  color: AppColors.textGrey,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700)),
                         ],
                       ),
                     );
@@ -188,9 +216,13 @@ class _Bubble extends StatelessWidget {
           color: AppColors.card,
           borderRadius: BorderRadius.circular(10),
           border: Border.all(color: Colors.white.withOpacity(0.08)),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.25), blurRadius: 12)],
+          boxShadow: [
+            BoxShadow(color: Colors.black.withOpacity(0.25), blurRadius: 12)
+          ],
         ),
-        child: Text(text, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 12)),
+        child: Text(text,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.white, fontSize: 12)),
       ),
     );
   }

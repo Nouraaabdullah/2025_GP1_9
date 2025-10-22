@@ -1,12 +1,9 @@
-// /Users/lamee/Documents/GitHub/2025_GP1_9/lib/screens/Dashboard/category_chart.dart
-import 'dart:async';
+// lib/screens/Dashboard/category_chart.dart
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../theme/app_colors.dart';
 
-// ✅ Auth helper import (will redirect to /login if not signed in)
-import '../../utils/auth_helpers.dart';
-
+/// Public model used by Dashboard page
 class CategorySlice {
   final String id;
   final String name;
@@ -20,49 +17,45 @@ class CategorySlice {
   });
 }
 
-/* === utilities kept for DashboardPage === */
+/// Exported helper used by Dashboard to derive a color from DB data
 Color colorFromIconOrSeed({required String categoryId, String? iconHex}) {
-  final parsed = _parseHexColorLoose(iconHex);
-  return parsed ?? _seededCategoryColor(categoryId);
+  if (iconHex != null && iconHex.isNotEmpty) {
+    try {
+      final hex = iconHex.replaceAll('#', '');
+      final v = int.parse(hex, radix: 16);
+      return Color(0xFF000000 | v);
+    } catch (_) {}
+  }
+  // simple deterministic pastel based on id hash
+  final h = categoryId.hashCode;
+  final r = 120 + (h & 0x3F); // 120..183
+  final g = 120 + ((h >> 6) & 0x3F);
+  final b = 120 + ((h >> 12) & 0x3F);
+  return Color.fromARGB(255, r, g, b);
 }
 
-Color? _parseHexColorLoose(String? s) {
-  if (s == null) return null;
-  var t = s.trim();
-  if (t.startsWith('#')) t = t.substring(1);
-  if (t.length == 6) t = 'FF$t';
-  if (t.length != 8) return null;
-  final v = int.tryParse(t, radix: 16);
-  return v == null ? null : Color(v);
-}
-
-Color _seededCategoryColor(String categoryId) {
-  final rnd = math.Random(categoryId.hashCode);
-  final hue = rnd.nextDouble() * 360.0;
-  final sat = 0.65 + rnd.nextDouble() * 0.25;
-  final val = 0.75 + rnd.nextDouble() * 0.20;
-  return HSVColor.fromAHSV(1.0, hue, sat, val).toColor();
-}
-
-/* === Donut (with precise hit-testing) === */
+/// Donut chart with accurate hit-testing for slice taps.
+/// - When [enableTooltip] is true: tapping a slice shows the purple bubble
+///   with that slice's details. Tapping the center ring text calls [onCenterTap].
+/// - When [enableTooltip] is false: any tap calls [onTapAnywhere] (used by weekly tiles).
 class CategoryDonut extends StatefulWidget {
   final List<CategorySlice> slices;
   final String centerLabel;
 
-  // Sizing & style
-  final double size;             // square canvas size
-  final Alignment alignment;
-  final double thickness;        // ring thickness (stroke)
-  final double centerFontSize;   // center label
+  // Interactions
+  final VoidCallback? onCenterTap;
+  final bool enableTooltip;
+  final VoidCallback? onTapAnywhere;
+  final void Function(CategorySlice slice)? onSliceTap;
 
   const CategoryDonut({
     super.key,
     required this.slices,
     required this.centerLabel,
-    this.size = 240,
-    this.alignment = Alignment.center,
-    this.thickness = 14,
-    this.centerFontSize = 14,
+    this.onCenterTap,
+    this.enableTooltip = true,
+    this.onTapAnywhere,
+    this.onSliceTap,
   });
 
   @override
@@ -70,250 +63,318 @@ class CategoryDonut extends StatefulWidget {
 }
 
 class _CategoryDonutState extends State<CategoryDonut> {
-  // Keep geometry constants in one place so painter & hit-test never drift
-  static const double _DEF = 8.0;     // deflate (inset) for the arc rect
-  static const double _GAP = 0.012;   // gap between segments (radians)
-  static const double _HIT = 16.0;    // radial touch tolerance
+  // For purple bubble
+  CategorySlice? _activeSlice;
+  Offset? _bubbleAnchor; // where to place bubble relative to widget
 
-  Offset? _tipPos;
-  String _tipText = '';
-  Timer? _hideTimer;
-
-  @override
-  void initState() {
-    super.initState();
-    // ✅ Lightweight auth check; if user is signed out this will navigate to /login.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      getProfileId(context);
-    });
-  }
+  // geometry cache
+  double _outerR = 0;
+  double _innerR = 0;
+  late List<_Arc> _arcs; // cumulative arcs for hit-testing
+  static const double _thickness = 18.0;
+  static const double _gapRadians = 0.015; // small visual gap between slices
+  static const double _startAngle = -math.pi / 2; // start at 12 o'clock, clockwise
 
   @override
-  void dispose() {
-    _hideTimer?.cancel();
-    super.dispose();
-  }
-
-  void _showTip(Offset local, String text) {
-    _hideTimer?.cancel();
-    setState(() {
-      _tipPos = local;
-      _tipText = text;
-    });
-    _hideTimer = Timer(const Duration(milliseconds: 2500), () {
-      if (mounted) setState(() => _tipPos = null);
-    });
-  }
-
-  double _norm(double a) {
-    while (a < 0) a += 2 * math.pi;
-    while (a >= 2 * math.pi) a -= 2 * math.pi;
-    return a;
-  }
-
-  bool _angleWithin(double angle, double start, double sweep) {
-    final end = _norm(start + sweep);
-    angle = _norm(angle);
-    if (sweep <= 0) return false;
-    if (start <= end) return angle >= start && angle <= end;
-    return angle >= start || angle <= end; // wrapped
+  void didUpdateWidget(covariant CategoryDonut oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // reset bubble if data changed
+    if (oldWidget.slices != widget.slices) {
+      _activeSlice = null;
+      _bubbleAnchor = null;
     }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final slices = widget.slices;
+    // Size: square but let parent control width
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final size = math.min(constraints.maxWidth, 220.0);
+        _outerR = size / 2;
+        _innerR = _outerR - _thickness;
+        _arcs = _computeArcs(widget.slices);
 
-    if (slices.isEmpty) {
-      return SizedBox(
-        height: widget.size,
-        child: Center(
-          child: Text('No category data',
-              style: TextStyle(color: AppColors.textGrey, fontSize: 13)),
-        ),
-      );
-    }
-
-    return Align(
-      alignment: widget.alignment,
-      child: GestureDetector(
-        behavior: HitTestBehavior.translucent,
-        onTapDown: (d) {
-          // === Geometry identical to painter ===
-          final square = Rect.fromLTWH(0, 0, widget.size, widget.size);
-          final diameter = math.min(square.width, square.height);
-          final rect = Rect.fromLTWH(
-            (square.width - diameter) / 2 + _DEF,
-            (square.height - diameter) / 2 + _DEF,
-            diameter - 2 * _DEF,
-            diameter - 2 * _DEF,
-          );
-          final center = rect.center;
-          final R = rect.width / 2; // to arc path center
-          final inner = R - widget.thickness / 2 - _HIT;
-          final outer = R + widget.thickness / 2 + _HIT;
-
-          final box = context.findRenderObject() as RenderBox?;
-          if (box == null) return;
-          final local = box.globalToLocal(d.globalPosition);
-
-          final dx = local.dx - center.dx;
-          final dy = local.dy - center.dy;
-          final r = math.sqrt(dx * dx + dy * dy);
-          if (r < inner || r > outer) return;
-
-          // angle basis: painter starts at -π/2 (top), clockwise
-          final theta = math.atan2(dy, dx);
-          final angle = _norm(theta - (-math.pi / 2));
-
-          final total = slices.fold<double>(0, (a, s) => a + s.value.toDouble());
-          if (total <= 0) return;
-
-          double acc = 0.0;
-          for (final s in slices) {
-            final sweep = (s.value.toDouble() / total) * 2 * math.pi;
-            final segStart = acc + _GAP;
-            final segSweep = math.max(0.0, sweep - 2 * _GAP);
-            if (segSweep > 0 && _angleWithin(angle, segStart, segSweep)) {
-              // tooltip position near the arc mid
-              final mid = segStart + segSweep / 2;
-              final tip = Offset(
-                center.dx + R * math.cos(mid - math.pi / 2),
-                center.dy + R * math.sin(mid - math.pi / 2),
-              );
-              _showTip(
-                Offset(
-                  (tip.dx - 90).clamp(0, widget.size - 180),
-                  (tip.dy - 44).clamp(0, widget.size - 44),
-                ),
-                '${s.name}\nAmount: ${s.value.toStringAsFixed(0)} SAR',
-              );
-              return;
-            }
-            acc += sweep;
-          }
-        },
-        child: SizedBox(
-          height: widget.size,
-          width: widget.size,
+        return SizedBox(
+          width: size,
+          height: size,
           child: Stack(
             alignment: Alignment.center,
+            clipBehavior: Clip.none,
             children: [
-              CustomPaint(
-                size: Size(widget.size, widget.size),
-                painter: _DonutPainter(
-                  slices: slices,
-                  thickness: widget.thickness,
-                  deflate: _DEF,
-                  gap: _GAP,
+              // Donut canvas with gestures
+              GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onTapDown: (d) {
+                  if (!widget.enableTooltip) {
+                    widget.onTapAnywhere?.call();
+                    return;
+                  }
+                  _handleTap(d.localPosition, size);
+                },
+                child: CustomPaint(
+                  painter: _DonutPainter(
+                    slices: widget.slices,
+                    arcs: _arcs,
+                    thickness: _thickness,
+                  ),
+                  size: Size.square(size),
                 ),
               ),
-              Text(
-                widget.centerLabel,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Colors.white.withOpacity(0.9),
-                  fontSize: widget.centerFontSize,
-                  fontWeight: FontWeight.w700,
-                ),
+
+              // Center label and center-tap detection
+              _CenterTapRegion(
+                diameter: _innerR * 2 - 8, // small inset
+                onTap: widget.onCenterTap,
+                child: _CenterLabel(text: widget.centerLabel),
               ),
-              if (_tipPos != null)
+
+              // Purple bubble
+              if (widget.enableTooltip && _activeSlice != null && _bubbleAnchor != null)
                 Positioned(
-                  left: _tipPos!.dx,
-                  top: _tipPos!.dy,
-                  child: _Bubble(text: _tipText),
+                  left: _bubbleAnchor!.dx - 110, // half bubble width
+                  top: _bubbleAnchor!.dy - 48,   // above anchor
+                  child: _Bubble(
+                    title: _activeSlice!.name,
+                    value: '${_activeSlice!.value.toStringAsFixed(0)} SAR',
+                  ),
                 ),
             ],
           ),
-        ),
-      ),
+        );
+      },
     );
+  }
+
+  // Convert value list into arcs with cumulative start/end angles
+  List<_Arc> _computeArcs(List<CategorySlice> slices) {
+    final total = slices.fold<num>(0, (a, s) => a + s.value).toDouble();
+    if (total <= 0) return [];
+    final arcs = <_Arc>[];
+    double a = _startAngle;
+    for (final s in slices) {
+      final frac = s.value.toDouble() / total;
+      final sweep = frac * 2 * math.pi - _gapRadians;
+      final start = a;
+      final end = a + sweep;
+      arcs.add(_Arc(slice: s, start: start, end: end));
+      a = end + _gapRadians;
+    }
+    return arcs;
+  }
+
+  void _handleTap(Offset localPos, double size) {
+    // Convert position to polar relative to center
+    final c = Offset(size / 2, size / 2);
+    final v = localPos - c;
+    final r = v.distance;
+
+    // If tap is in the center hole, treat as center tap
+    if (r <= _innerR) {
+      widget.onCenterTap?.call();
+      // Do not toggle bubble here
+      return;
+    }
+
+    // Ignore taps outside the ring
+    if (r > _outerR) {
+      return;
+    }
+
+    // Compute angle in [0, 2π), same reference as painter
+    double ang = math.atan2(v.dy, v.dx); // [-π, π]
+    // normalize to [0, 2π)
+    while (ang < -math.pi) ang += 2 * math.pi;
+    while (ang > math.pi) ang -= 2 * math.pi;
+
+    // Find which arc contains this angle (clockwise from startAngle)
+    final hit = _findSliceAtAngle(ang);
+    if (hit == null) return;
+
+    // Anchor point roughly at ring middle radius on arc mid-angle
+    final midA = (hit.start + hit.end) / 2;
+    final midR = (_innerR + _outerR) / 2;
+    final anchor = Offset(
+      size / 2 + midR * math.cos(midA),
+      size / 2 + midR * math.sin(midA),
+    );
+
+    setState(() {
+      _activeSlice = hit.slice;
+      _bubbleAnchor = anchor;
+    });
+
+    widget.onSliceTap?.call(hit.slice);
+  }
+
+  _Arc? _findSliceAtAngle(double angle) {
+    if (_arcs.isEmpty) return null;
+
+    // Bring angle to same zone as arcs by mapping to [startAngle, startAngle + 2π)
+    double a = angle;
+    while (a < _startAngle) a += 2 * math.pi;
+    while (a >= _startAngle + 2 * math.pi) a -= 2 * math.pi;
+
+    for (final arc in _arcs) {
+      // For robustness include tiny epsilon at end
+      if (a >= arc.start && a <= arc.end + 1e-6) {
+        return arc;
+      }
+    }
+    return null;
   }
 }
 
+/* ====================== Painters & widgets ====================== */
+
 class _DonutPainter extends CustomPainter {
   final List<CategorySlice> slices;
+  final List<_Arc> arcs;
   final double thickness;
-  final double deflate;
-  final double gap;
-  const _DonutPainter({
+
+  _DonutPainter({
     required this.slices,
+    required this.arcs,
     required this.thickness,
-    required this.deflate,
-    required this.gap,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
-    final total = slices.fold<double>(0, (a, s) => a + s.value.toDouble());
-    if (total <= 0) return;
+    if (slices.isEmpty || arcs.isEmpty) {
+      // Draw faint ring placeholder
+      final c = Offset(size.width / 2, size.height / 2);
+      final r = size.width / 2;
+      final paint = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = thickness
+        ..color = const Color(0x22FFFFFF);
+      canvas.drawCircle(c, r - thickness / 2, paint);
+      return;
+    }
 
-    // perfect circle (avoid ellipse)
-    final diameter = math.min(size.width, size.height);
-    final rect = Rect.fromLTWH(
-      (size.width - diameter) / 2 + deflate,
-      (size.height - diameter) / 2 + deflate,
-      diameter - 2 * deflate,
-      diameter - 2 * deflate,
-    );
-
-    var start = -math.pi / 2;
-
-    // base track
-    final bg = Paint()
-      ..color = const Color(0xFF3A3A5A)
+    final rect = Offset.zero & size;
+    final outerR = math.min(size.width, size.height) / 2;
+    final paint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = thickness
-      ..strokeCap = StrokeCap.round;
-    canvas.drawArc(rect, 0, math.pi * 2, false, bg);
+      ..strokeCap = StrokeCap.butt;
 
-    // segments
-    for (final s in slices) {
-      final sweep = (s.value.toDouble() / total) * math.pi * 2;
-      final segStart = start + gap;
-      final segSweep = math.max(0.0, sweep - 2 * gap);
-      if (segSweep > 0) {
-        final p = Paint()
-          ..color = s.color
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = thickness
-          ..strokeCap = StrokeCap.round;
-        canvas.drawArc(rect, segStart, segSweep, false, p);
-      }
-      start += sweep;
+    for (var i = 0; i < arcs.length; i++) {
+      final arc = arcs[i];
+      paint.color = arc.slice.color;
+      canvas.drawArc(
+        Rect.fromCircle(center: rect.center, radius: outerR - thickness / 2),
+        arc.start,
+        arc.end - arc.start,
+        false,
+        paint,
+      );
     }
   }
 
   @override
-  bool shouldRepaint(covariant _DonutPainter old) =>
-      old.slices != slices ||
-      old.thickness != thickness ||
-      old.deflate != deflate ||
-      old.gap != gap;
+  bool shouldRepaint(covariant _DonutPainter oldDelegate) {
+    return oldDelegate.slices != slices ||
+        oldDelegate.thickness != thickness ||
+        oldDelegate.arcs != arcs;
+  }
 }
 
-class _Bubble extends StatelessWidget {
-  final String text;
-  const _Bubble({required this.text});
+class _CenterTapRegion extends StatelessWidget {
+  final double diameter;
+  final VoidCallback? onTap;
+  final Widget child;
+  const _CenterTapRegion({
+    required this.diameter,
+    required this.child,
+    this.onTap,
+  });
+
   @override
   Widget build(BuildContext context) {
-    return AnimatedOpacity(
-      opacity: 1,
-      duration: const Duration(milliseconds: 120),
-      child: Container(
-        width: 180,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: AppColors.card,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: Colors.white.withOpacity(0.08)),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.25), blurRadius: 12)],
-        ),
-        child: Text(
-          text,
-          textAlign: TextAlign.center,
-          style: const TextStyle(color: Colors.white, fontSize: 12),
+    return SizedBox(
+      width: diameter,
+      height: diameter,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(diameter / 2),
+          onTap: onTap,
+          child: Center(child: child),
         ),
       ),
     );
   }
+}
+
+class _CenterLabel extends StatelessWidget {
+  final String text;
+  const _CenterLabel({required this.text});
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      ignoring: true,
+      child: Text(
+        text,
+        textAlign: TextAlign.center,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 16,
+          fontWeight: FontWeight.w800,
+          height: 1.15,
+        ),
+      ),
+    );
+    }
+}
+
+class _Bubble extends StatelessWidget {
+  final String title;
+  final String value;
+  const _Bubble({required this.title, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 220,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFF2D2553),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withOpacity(0.08)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.35),
+            blurRadius: 16,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(title,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w800,
+                fontSize: 14,
+              )),
+          const SizedBox(height: 4),
+          Text(value,
+              style: TextStyle(
+                color: AppColors.textGrey,
+                fontWeight: FontWeight.w700,
+                fontSize: 12,
+              )),
+        ],
+      ),
+    );
+  }
+}
+
+class _Arc {
+  final CategorySlice slice;
+  final double start;
+  final double end;
+  const _Arc({required this.slice, required this.start, required this.end});
 }

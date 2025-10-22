@@ -23,7 +23,11 @@ class DashboardPage extends StatefulWidget {
 
 class _DashboardPageState extends State<DashboardPage> {
   int _periodIndex = 1; // 0 Weekly, 1 Monthly, 2 Yearly
-  bool _showAllCategories = false;
+  bool _showAllCategories = false; // for monthly/yearly grid
+  bool _showAllWeekly = false;     // for weekly legend grid
+
+  // NEW: controls monthly/yearly expand/collapse when center is tapped
+  bool _donutExpanded = false; // default hidden as requested
 
   // Accent palette
   static const _violet = Color(0xFF8B5CF6);
@@ -318,7 +322,7 @@ class _DashboardPageState extends State<DashboardPage> {
       _seriesEarnings = filtered.earnings;
       _seriesIncome   = filtered.income;
 
-      // 11) category totals (single donut when not weekly)
+      // 11) category totals
       final catTotals = <String, num>{};
 
       Future<void> _loadCategorySlicesMonthly() async {
@@ -468,6 +472,7 @@ class _DashboardPageState extends State<DashboardPage> {
 
       // ===== Weekly four mini charts data =====
       if (_periodIndex == 0) {
+        final now = DateTime.now();
         final y = now.year, m = now.month;
         final lastDay = DateTime(y, m + 1, 0).day;
         final weekRanges = <List<DateTime>>[
@@ -548,7 +553,6 @@ class _DashboardPageState extends State<DashboardPage> {
           _weeklyTotals[i] = weekSum; // 0 for past empty weeks
         }
 
-        // legend (top 6)
         final legendItems = <_LegendItem>[
           for (final e in (combinedTotals.entries.toList()
             ..sort((a, b) => (b.value).compareTo(a.value))))
@@ -558,7 +562,7 @@ class _DashboardPageState extends State<DashboardPage> {
               catColorById[e.key] ?? colorFromIconOrSeed(categoryId: e.key),
             ),
         ];
-        _weeklyLegend = legendItems.take(6).toList();
+        _weeklyLegend = legendItems;
       } else {
         _weeklySlices = [[], [], [], []];
         _weeklyTotals = [0, 0, 0, 0];
@@ -698,8 +702,6 @@ class _DashboardPageState extends State<DashboardPage> {
   String _iso(DateTime d) => '${d.year.toString().padLeft(4,'0')}-${d.month.toString().padLeft(2,'0')}-${d.day.toString().padLeft(2,'0')}';
   DateTime? _parseOrNull(dynamic s) => (s == null) ? null : DateTime.tryParse(s as String);
 
-  // ⛔️ Removed the old manual _getProfileId(); using shared helper instead.
-
   List<_Bucket> _buildWeeklyBuckets(DateTime mStart, DateTime mEnd) => [
         _Bucket(null, null, DateTime(mStart.year, mStart.month, 4)),
         _Bucket(null, null, DateTime(mStart.year, mStart.month, 11)),
@@ -796,11 +798,6 @@ class _DashboardPageState extends State<DashboardPage> {
       _LegendItem('Income',   '${trendsTotalIncome.toStringAsFixed(0)} SAR', _muted),
     ];
 
-    final catItems = [
-      for (final s in _categorySlices.take(_showAllCategories ? _categorySlices.length : 5))
-        _LegendItem(s.name, '${s.value.toStringAsFixed(0)} SAR', s.color),
-    ];
-
     final gaugeKey = ValueKey<String>(
       'gauge_${_periodIndex}_${idx}_${totalExpenses}_${totalEarnings}_${totalIncome}',
     );
@@ -848,7 +845,12 @@ class _DashboardPageState extends State<DashboardPage> {
 
           _HeaderPanel(
             periodIndex: _periodIndex,
-            onPeriodChanged: (i) => setState(() { _periodIndex = i; _loadAll(); }),
+            onPeriodChanged: (i) => setState(() {
+              _periodIndex = i;
+              _donutExpanded = false; // keep details hidden until chart tap
+              _showAllWeekly = false;
+              _loadAll();
+            }),
           ),
           const SizedBox(height: 18),
 
@@ -867,8 +869,8 @@ class _DashboardPageState extends State<DashboardPage> {
                   earnings: totalEarnings.toDouble(),
                   income:   totalIncome.toDouble(),
                 ),
-                const SizedBox(height: 12),
-                _LegendRow(items: incomeLegends),
+                const SizedBox(height: 0),
+                _LegendRow(items: monthlyLegends),
               ],
             ),
           ),
@@ -918,7 +920,7 @@ class _DashboardPageState extends State<DashboardPage> {
           _SectionCard(
             onInfo: () => _showInfo(context, _periodIndex==0
                 ? 'Four mini charts one per week. Future weeks show No data yet. Past weeks with no spending show 0 SAR spent.'
-                : 'Your expenses grouped by category for the selected period.'),
+                : 'Tap inside the donut center text to expand or collapse the full list.'),
             child: Padding(
               padding: const EdgeInsets.only(bottom: 10),
               child: Column(
@@ -935,10 +937,29 @@ class _DashboardPageState extends State<DashboardPage> {
                           weekIsFuture: _weekIsFuture,
                         ),
                         const SizedBox(height: 14),
+
                         if (_weeklyLegend.isEmpty)
                           Center(child: Text('No money spent yet', style: TextStyle(color: AppColors.textGrey)))
-                        else
-                          _LegendRow(items: _weeklyLegend),
+                        else ...[
+                          _CategoryGrid(
+                            items: _weeklyLegend,
+                            showAll: _showAllWeekly,
+                            initialCount: 3,
+                          ),
+                          const SizedBox(height: 8),
+                          if (_weeklyLegend.length > 3)
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: TextButton(
+                                style: TextButton.styleFrom(
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 6),
+                                ),
+                                onPressed: () => setState(() => _showAllWeekly = !_showAllWeekly),
+                                child: Text(_showAllWeekly ? 'Show less' : 'Show more'),
+                              ),
+                            ),
+                        ],
                       ],
                     )
                   else
@@ -950,14 +971,35 @@ class _DashboardPageState extends State<DashboardPage> {
                             final t = _categorySlices.fold<num>(0, (a, s) => a + s.value);
                             return 'Total Expenses\nSAR ${t.toStringAsFixed(0)}';
                           }(),
+                          // expand or shrink details only when tapping inside the chart center
+                          onCenterTap: () {
+                            setState(() => _donutExpanded = !_donutExpanded);
+                          },
                         ),
+                        const SizedBox(height: 12),
+
+                        // Removed the extra selected category pill under the chart as requested
+
+                        // Expandable full list controlled only by chart tap
+                        AnimatedSize(
+                          duration: const Duration(milliseconds: 220),
+                          curve: Curves.easeInOut,
+                          alignment: Alignment.topCenter,
+                          child: (_donutExpanded && _categorySlices.isNotEmpty)
+                              ? Padding(
+                                  padding: const EdgeInsets.only(top: 10),
+                                  child: _PeriodCategoryDetailsList(slices: _categorySlices),
+                                )
+                              : const SizedBox.shrink(),
+                        ),
+
                         const SizedBox(height: 12),
                         if (_categorySlices.isEmpty)
                           Center(child: Text('No money spent', style: TextStyle(color: AppColors.textGrey)))
                         else
                           _CategoryGrid(
                             items: [
-                              for (final s in _categorySlices.take(_showAllCategories ? _categorySlices.length : 5))
+                              for (final s in _categorySlices)
                                 _LegendItem(s.name, '${s.value.toStringAsFixed(0)} SAR', s.color),
                             ],
                             showAll: _showAllCategories,
@@ -965,13 +1007,16 @@ class _DashboardPageState extends State<DashboardPage> {
                           ),
                         const SizedBox(height: 8),
                         if (_categorySlices.length > 3)
-                          TextButton(
-                            style: TextButton.styleFrom(
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 6),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: TextButton(
+                              style: TextButton.styleFrom(
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 6),
+                              ),
+                              onPressed: () => setState(() => _showAllCategories = !_showAllCategories),
+                              child: Text(_showAllCategories ? 'Show less' : 'Show more'),
                             ),
-                            onPressed: () => setState(() => _showAllCategories = !_showAllCategories),
-                            child: Text(_showAllCategories ? 'Show less' : 'Show more'),
                           ),
                       ],
                     ),
@@ -988,23 +1033,6 @@ class _DashboardPageState extends State<DashboardPage> {
         ],
       ),
     );
-  }
-
-  int _monthsActiveInYear(DateTime? st, DateTime? en, int year) {
-    final yearStart = DateTime(year, 1, 1);
-    final yearEnd   = DateTime(year, 12, 31);
-
-    DateTime start = st == null ? yearStart : DateTime(st.year, st.month, 1);
-    DateTime end   = en == null ? yearEnd   : DateTime(en.year, en.month, 1);
-
-    if (start.isBefore(yearStart)) start = yearStart;
-    if (end.isAfter(yearEnd)) end = DateTime(year, 12, 1);
-
-    if (end.isBefore(start)) return 0;
-
-    final startKey = start.year * 12 + start.month;
-    final endKey   = end.year * 12 + end.month;
-    return endKey - startKey + 1;
   }
 
   void _showInfo(BuildContext context, String text) {
@@ -1163,7 +1191,7 @@ class _LegendCard extends StatelessWidget {
                 overflow: TextOverflow.fade,
                 style: TextStyle(
                   color: AppColors.textGrey,
-                  fontSize: 10, // slightly smaller so "Subscriptions" fits one line
+                  fontSize: 10,
                   fontWeight: FontWeight.w600,
                   height: 1.1,
                 ),
@@ -1223,6 +1251,7 @@ class _CategoryGrid extends StatelessWidget {
   }
 }
 
+// Centered header chips
 class _HeaderPanel extends StatelessWidget {
   final int periodIndex;
   final ValueChanged<int> onPeriodChanged;
@@ -1278,6 +1307,7 @@ class _HeaderPanel extends StatelessWidget {
       ),
       padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
       child: Row(
+        mainAxisAlignment: MainAxisAlignment.center, // centered buttons
         children: [
           chip('Weekly', 0),
           const SizedBox(width: 8),
@@ -1335,7 +1365,9 @@ class _MotivationCard extends StatelessWidget {
 }
 
 /* ================= Weekly mini charts UI ================= */
-class _WeeklyMiniCategoryGrid extends StatelessWidget {
+// Same-size tiles when collapsed; expand only the tapped tile.
+// Tapping anywhere on a tile toggles details.
+class _WeeklyMiniCategoryGrid extends StatefulWidget {
   final List<List<CategorySlice>> weeklySlices; // length 4
   final List<num> weeklyTotals; // length 4
   final List<bool> weekIsFuture; // length 4
@@ -1346,39 +1378,36 @@ class _WeeklyMiniCategoryGrid extends StatelessWidget {
   });
 
   @override
+  State<_WeeklyMiniCategoryGrid> createState() => _WeeklyMiniCategoryGridState();
+}
+
+class _WeeklyMiniCategoryGridState extends State<_WeeklyMiniCategoryGrid> {
+  int? _expandedIndex;
+
+  @override
   Widget build(BuildContext context) {
     final wLabels = const ['W1','W2','W3','W4'];
+    const baseMinHeight = 180.0; // ensures all tiles have same collapsed size
 
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: 4,
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        mainAxisSpacing: 12,
-        crossAxisSpacing: 12,
-        childAspectRatio: 1.10, // a touch taller to avoid overflow
-      ),
-      itemBuilder: (_, i) {
-        final isFuture = weekIsFuture[i];
-        final total = weeklyTotals[i];
-        final slices = weeklySlices[i];
+    return LayoutBuilder(
+      builder: (ctx, constraints) {
+        final gap = 12.0;
+        final cardWidth = (constraints.maxWidth - gap) / 2; // 2 per row
+        return Wrap(
+          spacing: gap,
+          runSpacing: gap,
+          children: List.generate(4, (i) {
+            final isFuture = widget.weekIsFuture[i];
+            final total = widget.weeklyTotals[i];
+            final slices = widget.weeklySlices[i];
+            final isExpanded = _expandedIndex == i;
 
-        final emptyPastText = '0 SAR spent';
+            final emptyPastText = '0 SAR spent';
 
-        return Container(
-          decoration: BoxDecoration(
-            color: AppColors.card.withOpacity(0.55),
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: Colors.white.withOpacity(0.06), width: 1),
-            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.18), blurRadius: 10, offset: const Offset(0, 6))],
-          ),
-          padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
-          child: Column(
-            children: [
-              // Force a perfect circle and slightly smaller to avoid overflow.
-              Expanded(
-                child: Center(
+            Widget tileCore = Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
                   child: isFuture
                       ? Text('No data yet', style: TextStyle(color: AppColors.textGrey, fontSize: 10, fontWeight: FontWeight.w700))
                       : (slices.isEmpty && total == 0)
@@ -1388,22 +1417,138 @@ class _WeeklyMiniCategoryGrid extends StatelessWidget {
                               child: Center(
                                 child: CategoryDonut(
                                   slices: slices,
-                                  // SAR instead of Arabic symbol
                                   centerLabel: '${total.toStringAsFixed(0)} SAR',
+                                  enableTooltip: false,
+                                  onTapAnywhere: () {
+                                    if (isFuture || (slices.isEmpty && total == 0)) return;
+                                    setState(() {
+                                      _expandedIndex = isExpanded ? null : i;
+                                    });
+                                  },
                                 ),
                               ),
                             ),
                 ),
+                const SizedBox(height: 6),
+                Center(
+                  child: Text(
+                    wLabels[i],
+                    style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800),
+                  ),
+                ),
+                AnimatedSize(
+                  duration: const Duration(milliseconds: 220),
+                  curve: Curves.easeInOut,
+                  alignment: Alignment.topCenter,
+                  child: (!isFuture && slices.isNotEmpty && isExpanded)
+                      ? Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: _WeeklyMiniDetailsList(slices: slices, total: total),
+                        )
+                      : const SizedBox.shrink(),
+                ),
+              ],
+            );
+
+            return SizedBox(
+              width: cardWidth,
+              child: GestureDetector(
+                onTap: () {
+                  if (isFuture || (slices.isEmpty && total == 0)) return;
+                  setState(() => _expandedIndex = isExpanded ? null : i);
+                },
+                child: Container(
+                  constraints: const BoxConstraints(minHeight: baseMinHeight),
+                  decoration: BoxDecoration(
+                    color: AppColors.card.withOpacity(0.55),
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: Colors.white.withOpacity(0.06), width: 1),
+                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.18), blurRadius: 10, offset: const Offset(0, 6))],
+                  ),
+                  padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
+                  child: tileCore,
+                ),
               ),
-              const SizedBox(height: 6),
-              Text(
-                wLabels[i],
-                style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800),
-              ),
-            ],
-          ),
+            );
+          }),
         );
       },
+    );
+  }
+}
+
+// Two-column detail list + Total row
+class _WeeklyMiniDetailsList extends StatelessWidget {
+  final List<CategorySlice> slices;
+  final num total;
+  const _WeeklyMiniDetailsList({required this.slices, required this.total});
+
+  @override
+  Widget build(BuildContext context) {
+    final visible = slices; // show all; container grows
+    TextStyle left = TextStyle(color: AppColors.textGrey, fontSize: 11, fontWeight: FontWeight.w700);
+    const right = TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800);
+
+    Widget row(String l, String r) => Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Row(
+        children: [
+          Expanded(child: Text(l, maxLines: 1, overflow: TextOverflow.ellipsis, style: left)),
+          const SizedBox(width: 10),
+          Text(r, style: right),
+        ],
+      ),
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final s in visible) row(s.name, '${s.value.toStringAsFixed(0)} SAR'),
+        const SizedBox(height: 6),
+        row('Total', '${total.toStringAsFixed(0)} SAR'),
+      ],
+    );
+  }
+}
+
+/* =============== Monthly/Yearly expandable details list =============== */
+class _PeriodCategoryDetailsList extends StatelessWidget {
+  final List<CategorySlice> slices;
+  const _PeriodCategoryDetailsList({required this.slices});
+
+  @override
+  Widget build(BuildContext context) {
+    final total = slices.fold<num>(0, (a, b) => a + b.value);
+    TextStyle left = TextStyle(color: AppColors.textGrey, fontSize: 12, fontWeight: FontWeight.w700);
+    const right = TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w800);
+
+    Widget row(String l, String r) => Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Row(
+        children: [
+          Expanded(child: Text(l, maxLines: 1, overflow: TextOverflow.ellipsis, style: left)),
+          const SizedBox(width: 10),
+          Text(r, style: right),
+        ],
+      ),
+    );
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      decoration: BoxDecoration(
+        color: AppColors.card.withOpacity(0.6),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withOpacity(0.08)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final s in slices) row(s.name, '${s.value.toStringAsFixed(0)} SAR'),
+          const SizedBox(height: 6),
+          row('Total', '${total.toStringAsFixed(0)} SAR'),
+        ],
+      ),
     );
   }
 }

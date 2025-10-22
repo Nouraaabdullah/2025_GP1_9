@@ -43,18 +43,23 @@ class _AddEditCategoryPageState extends State<AddEditCategoryPage> {
       'name': 'Entertainment',
       'data': Icons.sports_esports,
     },
-    {'icon': 'attach_money', 'name': 'Income', 'data': Icons.attach_money},
-    {'icon': 'savings', 'name': 'Savings', 'data': Icons.savings},
     {'icon': 'flight', 'name': 'Travel', 'data': Icons.flight},
     {'icon': 'local_offer', 'name': 'Offers', 'data': Icons.local_offer},
     {'icon': 'fitness_center', 'name': 'Fitness', 'data': Icons.fitness_center},
     {'icon': 'movie', 'name': 'Movies', 'data': Icons.movie},
     {'icon': 'music_note', 'name': 'Music', 'data': Icons.music_note},
-    {'icon': 'book', 'name': 'Books', 'data': Icons.book},
     {'icon': 'pets', 'name': 'Pets', 'data': Icons.pets},
     {'icon': 'child_care', 'name': 'Kids', 'data': Icons.child_care},
     {'icon': 'spa', 'name': 'Beauty', 'data': Icons.spa},
     {'icon': 'construction', 'name': 'Maintenance', 'data': Icons.construction},
+
+    {
+      'icon': 'account_balance_wallet',
+      'name': 'Wallet',
+      'data': Icons.account_balance_wallet,
+    },
+    {'icon': 'local_cafe', 'name': 'Coffee', 'data': Icons.local_cafe},
+    {'icon': 'description', 'name': 'Documents', 'data': Icons.description},
   ];
 
   @override

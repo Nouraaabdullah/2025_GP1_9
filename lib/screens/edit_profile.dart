@@ -199,6 +199,18 @@ class _EditProfilePageState extends State<EditProfilePage> {
     }
   }
 
+  // Get fixed categories (sorted)
+  List<Map<String, dynamic>> get _fixedCategories {
+    return _categories.where((cat) => cat['type'] == 'Fixed').toList()
+      ..sort((a, b) => (a['name'] as String).compareTo(b['name'] as String));
+  }
+
+  // Get custom categories (sorted)
+  List<Map<String, dynamic>> get _customCategories {
+    return _categories.where((cat) => cat['type'] == 'Custom').toList()
+      ..sort((a, b) => (a['name'] as String).compareTo(b['name'] as String));
+  }
+
   // ---------------- UI ----------------
   @override
   Widget build(BuildContext context) {
@@ -415,28 +427,53 @@ class _EditProfilePageState extends State<EditProfilePage> {
                                 ],
                               ),
                               const SizedBox(height: 12),
-                              ..._categories.map(
-                                (cat) => Padding(
-                                  padding: const EdgeInsets.only(bottom: 8),
-                                  child: _categoryItem(
-                                    name: cat['name'] ?? '',
-                                    limit: _fmtMoney(
-                                      cat['monthly_limit'] ?? 0.0,
+
+                              // Fixed Categories
+                              if (_fixedCategories.isNotEmpty) ...[
+                                ..._fixedCategories.map(
+                                  (cat) => Padding(
+                                    padding: const EdgeInsets.only(bottom: 8),
+                                    child: _categoryItem(
+                                      name: cat['name'] ?? '',
+                                      limit: _fmtMoney(
+                                        cat['monthly_limit'] ?? 0.0,
+                                      ),
+                                      icon: cat['icon'] ?? 'category',
+                                      iconColor: cat['icon_color'] ?? '#7D5EF6',
+                                      type: cat['type'] as String? ?? 'Fixed',
+                                      onEdit: () => _navigateToAddEditCategory(
+                                        category: cat,
+                                      ),
+                                      onDelete:
+                                          null, // No delete for fixed categories
                                     ),
-                                    icon: cat['icon'] ?? 'category',
-                                    iconColor: cat['icon_color'] ?? '#7D5EF6',
-                                    type: cat['type'] as String? ?? 'Custom',
-                                    onEdit: () => _navigateToAddEditCategory(
-                                      category: cat,
-                                    ),
-                                    onDelete: cat['type'] == 'Custom'
-                                        ? () => _confirmDeleteCategory(
-                                            cat['category_id'],
-                                          )
-                                        : null, // No delete for fixed categories
                                   ),
                                 ),
-                              ),
+                              ],
+
+                              // Custom Categories
+                              if (_customCategories.isNotEmpty) ...[
+                                ..._customCategories.map(
+                                  (cat) => Padding(
+                                    padding: const EdgeInsets.only(bottom: 8),
+                                    child: _categoryItem(
+                                      name: cat['name'] ?? '',
+                                      limit: _fmtMoney(
+                                        cat['monthly_limit'] ?? 0.0,
+                                      ),
+                                      icon: cat['icon'] ?? 'category',
+                                      iconColor: cat['icon_color'] ?? '#7D5EF6',
+                                      type: cat['type'] as String? ?? 'Custom',
+                                      onEdit: () => _navigateToAddEditCategory(
+                                        category: cat,
+                                      ),
+                                      onDelete: () => _confirmDeleteCategory(
+                                        cat['category_id'],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
                               const SizedBox(height: 22),
                             ],
                           ),
@@ -569,7 +606,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
     required VoidCallback? onDelete, // Can be null for fixed categories
   }) {
     Color color = _hexToColor(iconColor);
-    IconData iconData = _getIconData(icon);
+    IconData iconData = _iconDataFromString(icon);
 
     return Container(
       height: 56,
@@ -662,6 +699,79 @@ class _EditProfilePageState extends State<EditProfilePage> {
         child: const Icon(Icons.add, size: 20, color: Colors.white),
       ),
     );
+  }
+
+  // ----------------- Icon Data Conversion for IconData(U+0E37B) format -----------------
+  IconData _iconDataFromString(String iconString) {
+    try {
+      // Handle IconData(U+0E37B) format
+      if (iconString.startsWith('IconData(U+')) {
+        // Extract the hex code from "IconData(U+0E37B)"
+        final hexCode = iconString.substring(
+          11,
+          iconString.length - 1,
+        ); // Gets "0E37B"
+        final codePoint = int.parse(hexCode, radix: 16);
+        return IconData(codePoint, fontFamily: 'MaterialIcons');
+      }
+
+      // Handle old string format as fallback
+      return _stringToIconData(iconString);
+    } catch (e) {
+      debugPrint('Error converting icon string: $iconString, error: $e');
+      return Icons.category; // Fallback icon
+    }
+  }
+
+  // Fallback for old string format
+  IconData _stringToIconData(String iconString) {
+    try {
+      if (iconString.contains('.')) {
+        final iconName = iconString.split('.').last;
+        return _findIconByName(iconName);
+      } else {
+        return _findIconByName(iconString);
+      }
+    } catch (e) {
+      debugPrint('Error converting string to IconData: $e');
+      return Icons.category;
+    }
+  }
+
+  // Find icon by name from available icons
+  IconData _findIconByName(String iconName) {
+    final iconMap = {
+      'fastfood': Icons.fastfood,
+      'shopping_bag': Icons.shopping_bag,
+      'home': Icons.home,
+      'airplanemode_active': Icons.airplanemode_active,
+      'movie': Icons.movie,
+      'sports_soccer': Icons.sports_soccer,
+      'work': Icons.work,
+      'pets': Icons.pets,
+      'brush': Icons.brush,
+      'local_cafe': Icons.local_cafe,
+      'computer': Icons.computer,
+      'attach_money': Icons.attach_money,
+      'category': Icons.category,
+      'shopping_cart': Icons.shopping_cart,
+      'restaurant': Icons.restaurant,
+      'directions_car': Icons.directions_car,
+      'local_hospital': Icons.local_hospital,
+      'school': Icons.school,
+      'sports_esports': Icons.sports_esports,
+      'savings': Icons.savings,
+      'flight': Icons.flight,
+      'local_offer': Icons.local_offer,
+      'fitness_center': Icons.fitness_center,
+      'music_note': Icons.music_note,
+      'book': Icons.book,
+      'child_care': Icons.child_care,
+      'spa': Icons.spa,
+      'construction': Icons.construction,
+    };
+
+    return iconMap[iconName] ?? Icons.category;
   }
 
   // ----------------- Unified Delete Confirmation -----------------
@@ -864,31 +974,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
       hex = 'FF$hex';
     }
     return Color(int.parse(hex, radix: 16));
-  }
-
-  IconData _getIconData(String iconName) {
-    switch (iconName) {
-      case 'shopping_cart':
-        return Icons.shopping_cart;
-      case 'restaurant':
-        return Icons.restaurant;
-      case 'directions_car':
-        return Icons.directions_car;
-      case 'home':
-        return Icons.home;
-      case 'local_hospital':
-        return Icons.local_hospital;
-      case 'school':
-        return Icons.school;
-      case 'sports_esports':
-        return Icons.sports_esports;
-      case 'attach_money':
-        return Icons.attach_money;
-      case 'savings':
-        return Icons.savings;
-      default:
-        return Icons.category;
-    }
   }
 
   void _showError(String message) {

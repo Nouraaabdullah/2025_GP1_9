@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../theme/app_colors.dart';
+import '../../utils/auth_helpers.dart'; 
+
 
 class CreateGoalPage extends StatefulWidget {
   const CreateGoalPage({super.key});
@@ -83,14 +85,18 @@ class _CreateGoalPageState extends State<CreateGoalPage> {
     );
 
     try {
+      final profileId = await getProfileId(context);
+      if (profileId == null) return; // not logged in or no profile found
+
       final response = await supabase.from('Goal').insert({
         'name': title.trim(),
         'target_amount': amount,
         'target_date': date.toIso8601String(),
         'status': 'Active',
         'created_at': DateTime.now().toIso8601String(),
-        'profile_id': "14673818-3a31-479a-85dd-f21f28952651",
+        'profile_id': profileId,
       }).select();
+
 
       if (response.isEmpty) throw Exception('Insert failed — no data returned.');
 

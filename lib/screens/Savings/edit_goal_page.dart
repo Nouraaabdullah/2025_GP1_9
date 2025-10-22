@@ -1,9 +1,9 @@
 // edit_goal_page.dart
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../theme/app_colors.dart';
+import '../../utils/auth_helpers.dart'; 
 
 class EditGoalPage extends StatefulWidget {
   final String id;
@@ -53,8 +53,6 @@ class _EditGoalPageState extends State<EditGoalPage> {
 
   Future<void> _pickDate() async {
     final now = DateTime.now();
-
-    // Allow editing even if goal’s target date is old
     final earliest = DateTime(now.year - 5);
     final latest = DateTime(now.year + 5);
 
@@ -67,10 +65,9 @@ class _EditGoalPageState extends State<EditGoalPage> {
 
     final picked = await showDatePicker(
       context: context,
-      firstDate: earliest, // ✅ allows past dates
+      firstDate: earliest,
       lastDate: latest,
       initialDate: adjustedInitialDate,
-      initialEntryMode: DatePickerEntryMode.calendarOnly,
       builder: (ctx, child) => Theme(
         data: Theme.of(ctx).copyWith(
           colorScheme: ColorScheme.dark(
@@ -86,66 +83,93 @@ class _EditGoalPageState extends State<EditGoalPage> {
     if (picked != null) {
       setState(() {
         _targetDate = DateTime(picked.year, picked.month, picked.day);
-        _dateCtrl.text =
-            '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
+        _dateCtrl.text = _formatDate(_targetDate!);
       });
     }
   }
 
-  Future<void> _save() async {
-    if (!(_formKey.currentState?.validate() ?? false)) return;
+Future<void> _save() async {
+  if (!(_formKey.currentState?.validate() ?? false)) return;
 
-    final newTitle = _titleCtrl.text.trim();
-    final newAmount = double.parse(_amountCtrl.text);
+  final newTitle = _titleCtrl.text.trim();
+  final newTarget = double.parse(_amountCtrl.text);
 
-    try {
-      //  Fetch total assigned amount from Goal_Transfer
-      final transfers = await supabase
-          .from('Goal_Transfer')
-          .select('amount, direction')
-          .eq('goal_id', widget.id);
+  try {
+    // 👇 Get current user's profile ID dynamically
+    final profileId = await getProfileId(context);
+    if (profileId == null) return; // user not logged in
 
-      double totalAssigned = 0.0;
-      for (final t in (transfers as List? ?? [])) {
-        final amt = (t['amount'] ?? 0).toDouble();
-        final dir = (t['direction'] ?? '').toString().toLowerCase();
-        if (dir == 'assign') totalAssigned += amt;
-        if (dir == 'unassign') totalAssigned -= amt;
+    // 1️⃣ Fetch all transfers for this goal
+    final transfers = await supabase
+        .from('Goal_Transfer')
+        .select('amount, direction')
+        .eq('goal_id', widget.id);
+
+    double totalAssigned = 0.0;
+    for (final t in (transfers as List? ?? [])) {
+      final amt = (t['amount'] ?? 0).toDouble();
+      final dir = (t['direction'] ?? '').toLowerCase();
+      if (dir == 'assign') totalAssigned += amt;
+      if (dir == 'unassign') totalAssigned -= amt;
+    }
+
+    // 2️⃣ Auto-unassign if over-assigned
+    if (totalAssigned > newTarget) {
+      final excess = totalAssigned - newTarget;
+
+      await supabase.from('Goal_Transfer').insert({
+        'goal_id': widget.id,
+        'amount': excess,
+        'direction': 'Unassign',
+        'created_at': DateTime.now().toIso8601String(),
+      });
+
+      totalAssigned -= excess;
+      debugPrint('💸 Auto-unassigned $excess SAR from goal "${widget.id}"');
+    }
+
+    // 3️⃣ Update goal info (title, amount, date, status)
+    final newStatus = totalAssigned >= newTarget ? 'Completed' : 'Active';
+    await supabase.from('Goal').update({
+      'name': newTitle,
+      'target_amount': newTarget,
+      'target_date': _targetDate?.toIso8601String() ??
+          widget.initialTargetDate?.toIso8601String(),
+      'status': newStatus,
+      'profile_id': profileId, // ✅ ensure correct ownership
+    }).eq('goal_id', widget.id);
+
+    // 4️⃣ Allow backend triggers time to update
+    await Future.delayed(const Duration(milliseconds: 250));
+
+    // 5️⃣ Refresh parent SavingsPage
+    final parent = context.findAncestorStateOfType<State<StatefulWidget>>();
+    if (parent != null) {
+      final dyn = parent as dynamic;
+      try {
+        await dyn._fetchGoals?.call();
+        await dyn._generateMonthlySavings?.call();
+        dyn._recalculateBalances?.call();
+      } catch (e) {
+        debugPrint('⚠️ Parent refresh failed: $e');
       }
+    }
 
-      // Determine new status based on savedAmount vs target
-      final newStatus =
-          totalAssigned >= newAmount ? 'Completed' : 'Active';
-
-      //  Update in database
-      await supabase.from('Goal').update({
-        'name': newTitle,
-        'target_amount': newAmount,
-        'target_date': _targetDate?.toIso8601String() ?? widget.initialTargetDate?.toIso8601String(),
-        'status': newStatus,
-       
-      }).eq('goal_id', widget.id);
-          // If user extended the target date beyond today, mark as Active again
-      if (_targetDate != null &&
-          _targetDate!.isAfter(DateTime.now())) {
-        await supabase
-            .from('Goal')
-            .update({'status': 'Active'})
-            .eq('goal_id', widget.id);
-        debugPrint('🟢 Goal reactivated: $newTitle');
-      }
-
+    // ✅ Close and show confirmation
+    if (mounted) {
+      Navigator.pop(context, true);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Goal updated: $newTitle ($newStatus)')),
-      );
-      Navigator.pop(context);
-    } catch (e) {
-      debugPrint(' Error updating goal: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error updating goal: $e')),
+        const SnackBar(content: Text('✅ Goal updated successfully!')),
       );
     }
+  } catch (e) {
+    debugPrint('❌ Error updating goal: $e');
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Error updating goal: $e')),
+    );
   }
+}
+
 
   @override
   Widget build(BuildContext context) {
@@ -153,7 +177,8 @@ class _EditGoalPageState extends State<EditGoalPage> {
       backgroundColor: AppColors.bg,
       appBar: AppBar(
         backgroundColor: AppColors.bg,
-        title: const Text('Edit Goal', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800)),
+        title: const Text('Edit Goal',
+            style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800)),
         leading: IconButton(
           icon: const Icon(Icons.close, color: Colors.white70),
           onPressed: () => Navigator.of(context).pop(),
@@ -165,7 +190,6 @@ class _EditGoalPageState extends State<EditGoalPage> {
           child: Form(
             key: _formKey,
             child: Column(
-              mainAxisSize: MainAxisSize.min,
               children: [
                 TextFormField(
                   controller: _titleCtrl,
@@ -195,22 +219,6 @@ class _EditGoalPageState extends State<EditGoalPage> {
                   decoration: _fieldDecoration('Target date').copyWith(
                     suffixIcon: const Icon(Icons.calendar_today, color: Colors.white70),
                   ),
-                  validator: (_) {
-                    if (_targetDate == null && widget.initialTargetDate == null) {
-                      return 'Target date is required';
-                    }
-                    final today = DateTime.now();
-                    final d = (_targetDate ?? widget.initialTargetDate)!;
-                    final dd = DateTime(d.year, d.month, d.day);
-                    final t = DateTime(today.year, today.month, today.day);
-                    // Only block saving if the *newly chosen* date is before today
-                    if (_targetDate != null) {
-                      final d = DateTime(_targetDate!.year, _targetDate!.month, _targetDate!.day);
-                      final t = DateTime(today.year, today.month, today.day);
-                      if (d.isBefore(t)) return 'Target date cannot be in the past';
-                    }
-                    return null;
-                  },
                 ),
                 const SizedBox(height: 18),
                 SizedBox(
@@ -223,7 +231,8 @@ class _EditGoalPageState extends State<EditGoalPage> {
                       foregroundColor: Colors.white,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                     ),
-                    child: const Text('Save Changes', style: TextStyle(fontWeight: FontWeight.w700)),
+                    child: const Text('Save Changes',
+                        style: TextStyle(fontWeight: FontWeight.w700)),
                   ),
                 ),
               ],
@@ -238,18 +247,16 @@ class _EditGoalPageState extends State<EditGoalPage> {
         labelText: label,
         labelStyle: const TextStyle(color: Colors.white70),
         filled: true,
-        fillColor: Colors.white.withValues(alpha:0.06),
+        fillColor: Colors.white.withOpacity(0.06),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.white.withValues(alpha:0.10)),
+          borderSide: BorderSide(color: Colors.white.withOpacity(0.10)),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide:
-              BorderSide(color: AppColors.accent.withValues(alpha:0.8), width: 1.5),
+          borderSide: BorderSide(color: AppColors.accent.withOpacity(0.8), width: 1.5),
         ),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       );
 }

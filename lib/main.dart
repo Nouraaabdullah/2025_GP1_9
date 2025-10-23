@@ -21,19 +21,80 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await Supabase.initialize(
-    url: 'https://xvnkuqqzlstzwgeecijn.supabase.co', // Replace this
+    url: 'https://xvnkuqqzlstzwgeecijn.supabase.co',
     anonKey:
-        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh2bmt1cXF6bHN0endnZWVjaWpuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2ODI2NzYsImV4cCI6MjA3NjI1ODY3Nn0.o9qiOIa4WWNMxvF92uyojCPtDS4NGz5qyMBhwki8MDQ', // Replace this
+        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh2bmt1cXF6bHN0endnZWVjaWpuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2ODI2NzYsImV4cCI6MjA3NjI1ODY3Nn0.o9qiOIa4WWNMxvF92uyojCPtDS4NGz5qyMBhwki8MDQ',
   );
 
   runApp(const SurraApp());
 }
 
-class SurraApp extends StatelessWidget {
+class SurraApp extends StatefulWidget {
   const SurraApp({super.key});
 
   @override
+  State<SurraApp> createState() => _SurraAppState();
+}
+
+class _SurraAppState extends State<SurraApp> {
+  final _supabase = Supabase.instance.client;
+
+  // Track auth state
+  User? _user;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+
+    // Get initial auth state
+    _getInitialSession();
+
+    // Listen for auth state changes
+    _supabase.auth.onAuthStateChange.listen((AuthState data) {
+      setState(() {
+        _user = data.session?.user;
+      });
+    });
+  }
+
+  Future<void> _getInitialSession() async {
+    try {
+      // Get the current session
+      final session = _supabase.auth.currentSession;
+
+      setState(() {
+        _user = session?.user;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _user = null;
+        _isLoading = false;
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    // Show loading screen while checking auth state
+    if (_isLoading) {
+      return MaterialApp(
+        home: Scaffold(
+          backgroundColor: const Color(0xFF1D1B32),
+          body: Center(
+            child: CircularProgressIndicator(
+              color: Theme.of(context).colorScheme.primary,
+            ),
+          ),
+        ),
+      );
+    }
+
+    // Determine initial route based on auth state
+    final isLoggedIn = _user != null;
+    final initialRoute = isLoggedIn ? '/dashboard' : '/welcome';
+
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Surra',
@@ -43,7 +104,7 @@ class SurraApp extends StatelessWidget {
         useMaterial3: true,
         fontFamily: 'Poppins',
       ),
-      initialRoute: '/welcome',
+      initialRoute: initialRoute,
       routes: {
         '/welcome': (context) => const WelcomeScreen(),
         '/login': (context) => const LoginScreen(),

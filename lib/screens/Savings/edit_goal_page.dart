@@ -1,9 +1,8 @@
-// edit_goal_page.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../theme/app_colors.dart';
-import '../../utils/auth_helpers.dart'; 
+import '../../utils/auth_helpers.dart';
 
 class EditGoalPage extends StatefulWidget {
   final String id;
@@ -29,6 +28,10 @@ class _EditGoalPageState extends State<EditGoalPage> {
   late TextEditingController _amountCtrl;
   final _dateCtrl = TextEditingController();
   DateTime? _targetDate;
+  bool _submitting = false;
+  String? _titleError;
+  String? _amountError;
+  String? _dateError;
   final supabase = Supabase.instance.client;
 
   String _formatDate(DateTime d) =>
@@ -84,179 +87,351 @@ class _EditGoalPageState extends State<EditGoalPage> {
       setState(() {
         _targetDate = DateTime(picked.year, picked.month, picked.day);
         _dateCtrl.text = _formatDate(_targetDate!);
+        _validateDate(); // Validate date on selection
       });
     }
   }
 
-Future<void> _save() async {
-  if (!(_formKey.currentState?.validate() ?? false)) return;
+  void _validateForm() {
+    setState(() {
+      _titleError = _titleCtrl.text.trim().isEmpty ? 'Name required' : null;
+      _amountError = _amountCtrl.text.trim().isEmpty
+          ? 'Amount is required'
+          : double.tryParse(_amountCtrl.text) == null || double.parse(_amountCtrl.text) <= 0
+              ? 'Enter a valid amount'
+              : null;
+      _dateError = _validateDate();
+    });
+  }
 
-  final newTitle = _titleCtrl.text.trim();
-  final newTarget = double.parse(_amountCtrl.text);
+  String? _validateDate() {
+    if (_targetDate == null) return 'Target date is required';
+    final today = DateTime.now();
+    final d = DateTime(_targetDate!.year, _targetDate!.month, _targetDate!.day);
+    final t = DateTime(today.year, today.month, today.day);
+    return d.isBefore(t) ? 'Target date cannot be in the past' : null;
+  }
 
-  try {
-    // 👇 Get current user's profile ID dynamically
-    final profileId = await getProfileId(context);
-    if (profileId == null) return; // user not logged in
+  Future<void> _save() async {
+    _validateForm();
+    if (_titleError != null || _amountError != null || _dateError != null) return;
 
-    // 1️⃣ Fetch all transfers for this goal
-    final transfers = await supabase
-        .from('Goal_Transfer')
-        .select('amount, direction')
-        .eq('goal_id', widget.id);
+    final newTitle = _titleCtrl.text.trim();
+    final newTarget = double.parse(_amountCtrl.text);
 
-    double totalAssigned = 0.0;
-    for (final t in (transfers as List? ?? [])) {
-      final amt = (t['amount'] ?? 0).toDouble();
-      final dir = (t['direction'] ?? '').toLowerCase();
-      if (dir == 'assign') totalAssigned += amt;
-      if (dir == 'unassign') totalAssigned -= amt;
-    }
+    try {
+      final profileId = await getProfileId(context);
+      if (profileId == null) return;
 
-    // 2️⃣ Auto-unassign if over-assigned
-    if (totalAssigned > newTarget) {
-      final excess = totalAssigned - newTarget;
+      final transfers = await supabase
+          .from('Goal_Transfer')
+          .select('amount, direction')
+          .eq('goal_id', widget.id);
 
-      await supabase.from('Goal_Transfer').insert({
-        'goal_id': widget.id,
-        'amount': excess,
-        'direction': 'Unassign',
-        'created_at': DateTime.now().toIso8601String(),
-      });
-
-      totalAssigned -= excess;
-      debugPrint('💸 Auto-unassigned $excess SAR from goal "${widget.id}"');
-    }
-
-    // 3️⃣ Update goal info (title, amount, date, status)
-    final newStatus = totalAssigned >= newTarget ? 'Completed' : 'Active';
-    await supabase.from('Goal').update({
-      'name': newTitle,
-      'target_amount': newTarget,
-      'target_date': _targetDate?.toIso8601String() ??
-          widget.initialTargetDate?.toIso8601String(),
-      'status': newStatus,
-      'profile_id': profileId, // ✅ ensure correct ownership
-    }).eq('goal_id', widget.id);
-
-    // 4️⃣ Allow backend triggers time to update
-    await Future.delayed(const Duration(milliseconds: 250));
-
-    // 5️⃣ Refresh parent SavingsPage
-    final parent = context.findAncestorStateOfType<State<StatefulWidget>>();
-    if (parent != null) {
-      final dyn = parent as dynamic;
-      try {
-        await dyn._fetchGoals?.call();
-        await dyn._generateMonthlySavings?.call();
-        dyn._recalculateBalances?.call();
-      } catch (e) {
-        debugPrint('⚠️ Parent refresh failed: $e');
+      double totalAssigned = 0.0;
+      for (final t in (transfers as List? ?? [])) {
+        final amt = (t['amount'] ?? 0).toDouble();
+        final dir = (t['direction'] ?? '').toLowerCase();
+        if (dir == 'assign') totalAssigned += amt;
+        if (dir == 'unassign') totalAssigned -= amt;
       }
-    }
 
-    // ✅ Close and show confirmation
-    if (mounted) {
-      Navigator.pop(context, true);
+      if (totalAssigned > newTarget) {
+        final excess = totalAssigned - newTarget;
+
+        await supabase.from('Goal_Transfer').insert({
+          'goal_id': widget.id,
+          'amount': excess,
+          'direction': 'Unassign',
+          'created_at': DateTime.now().toIso8601String(),
+        });
+
+        totalAssigned -= excess;
+        debugPrint('💸 Auto-unassigned $excess SAR from goal "${widget.id}"');
+      }
+
+      final newStatus = totalAssigned >= newTarget ? 'Completed' : 'Active';
+      await supabase.from('Goal').update({
+        'name': newTitle,
+        'target_amount': newTarget,
+        'target_date': _targetDate?.toIso8601String() ??
+            widget.initialTargetDate?.toIso8601String(),
+        'status': newStatus,
+        'profile_id': profileId,
+      }).eq('goal_id', widget.id);
+
+      await Future.delayed(const Duration(milliseconds: 250));
+
+      final parent = context.findAncestorStateOfType<State<StatefulWidget>>();
+      if (parent != null) {
+        final dyn = parent as dynamic;
+        try {
+          await dyn._fetchGoals?.call();
+          await dyn._generateMonthlySavings?.call();
+          dyn._recalculateBalances?.call();
+        } catch (e) {
+          debugPrint('⚠️ Parent refresh failed: $e');
+        }
+      }
+
+      if (mounted) {
+        Navigator.pop(context, true);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('✅ Goal updated successfully!')),
+        );
+      }
+    } catch (e) {
+      debugPrint('❌ Error updating goal: $e');
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('✅ Goal updated successfully!')),
+        SnackBar(content: Text('Error updating goal: $e')),
       );
     }
-  } catch (e) {
-    debugPrint('❌ Error updating goal: $e');
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Error updating goal: $e')),
-    );
   }
-}
-
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.bg,
-      appBar: AppBar(
-        backgroundColor: AppColors.bg,
-        title: const Text('Edit Goal',
-            style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800)),
-        leading: IconButton(
-          icon: const Icon(Icons.close, color: Colors.white70),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-      ),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              children: [
-                TextFormField(
-                  controller: _titleCtrl,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: _fieldDecoration('Goal name'),
-                  validator: (v) => v == null || v.trim().isEmpty ? 'Name required' : null,
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: _amountCtrl,
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  style: const TextStyle(color: Colors.white),
-                  decoration: _fieldDecoration('Target amount (SAR)'),
-                  validator: (v) {
-                    final n = double.tryParse(v ?? '');
-                    if (n == null || n <= 0) return 'Enter a valid amount';
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: _dateCtrl,
-                  readOnly: true,
-                  onTap: _pickDate,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: _fieldDecoration('Target date').copyWith(
-                    suffixIcon: const Icon(Icons.calendar_today, color: Colors.white70),
-                  ),
-                ),
-                const SizedBox(height: 18),
-                SizedBox(
-                  width: double.infinity,
-                  height: 48,
-                  child: ElevatedButton(
-                    onPressed: _save,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.accent,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      backgroundColor: const Color(0xFF1F1F33),
+      body: Stack(
+        children: [
+          Container(
+            height: 230,
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: AppColors.accent,
+              borderRadius: const BorderRadius.only(
+                bottomLeft: Radius.circular(40),
+                bottomRight: Radius.circular(40),
+              ),
+            ),
+            child: SafeArea(
+              bottom: false,
+              child: Column(
+                children: [
+                  const SizedBox(height: 8),
+                  GestureDetector(
+                    onTap: () => Navigator.pop(context),
+                    child: Column(
+                      children: const [
+                        Text(
+                          'Back',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 22,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        SizedBox(height: 6),
+                        Icon(Icons.expand_more, color: Colors.white),
+                      ],
                     ),
-                    child: const Text('Save Changes',
-                        style: TextStyle(fontWeight: FontWeight.w700)),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
-        ),
+          SafeArea(
+            child: Align(
+              alignment: Alignment.topLeft,
+              child: IconButton(
+                icon: const Icon(Icons.arrow_back_ios_new, color: Color(0xFF704EF4)),
+                onPressed: () => Navigator.of(context).pop(),
+                tooltip: '',
+              ),
+            ),
+          ),
+          Positioned(
+            top: 150,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Container(
+                width: MediaQuery.of(context).size.width,
+                decoration: BoxDecoration(
+                  color: AppColors.card,
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                padding: const EdgeInsets.fromLTRB(24, 28, 24, 32),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Edit Goal',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 22,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      const _FieldLabel('Goal Name'),
+                      const SizedBox(height: 8),
+                      _rounded(
+                        child: TextFormField(
+                          controller: _titleCtrl,
+                          style: const TextStyle(color: Colors.black),
+                          decoration: _inputDecoration(),
+                          onChanged: (_) => setState(() => _titleError = null),
+                        ),
+                      ),
+                      if (_titleError != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4, left: 12),
+                          child: Text(
+                            _titleError!,
+                            style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+                          ),
+                        ),
+                      const SizedBox(height: 18),
+                      const _FieldLabel('Target Amount'),
+                      const SizedBox(height: 8),
+                      _rounded(
+                        child: TextFormField(
+                          controller: _amountCtrl,
+                          keyboardType: TextInputType.number,
+                          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                          style: const TextStyle(color: Colors.black),
+                          decoration: _inputDecoration().copyWith(
+                            suffixIcon: const Padding(
+                              padding: EdgeInsets.only(right: 12),
+                              child: Icon(Icons.attach_money, size: 18, color: Color(0xFF7A7A8C)),
+                            ),
+                            suffixIconConstraints: const BoxConstraints(minHeight: 24, minWidth: 24),
+                          ),
+                          onChanged: (_) => setState(() => _amountError = null),
+                        ),
+                      ),
+                      if (_amountError != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4, left: 12),
+                          child: Text(
+                            _amountError!,
+                            style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+                          ),
+                        ),
+                      const SizedBox(height: 18),
+                      const _FieldLabel('Target Date'),
+                      const SizedBox(height: 8),
+                      _rounded(
+                        child: InkWell(
+                          onTap: _pickDate,
+                          borderRadius: BorderRadius.circular(18),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    _dateCtrl.text.isEmpty
+                                        ? 'Select date'
+                                        : _dateCtrl.text,
+                                    style: TextStyle(
+                                      color: _dateCtrl.text.isEmpty
+                                          ? const Color(0xFF989898)
+                                          : Colors.black,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                                Container(
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF393A65),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  padding: const EdgeInsets.all(8),
+                                  child: const Icon(Icons.calendar_month, color: Colors.white, size: 18),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      if (_dateError != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4, left: 12),
+                          child: Text(
+                            _dateError!,
+                            style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+                          ),
+                        ),
+                      const SizedBox(height: 28),
+                      Center(
+                        child: SizedBox(
+                          width: 150,
+                          height: 48,
+                          child: ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.accent,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(72),
+                              ),
+                              elevation: 10,
+                              shadowColor: AppColors.accent,
+                            ),
+                            onPressed: _submitting ? null : _save,
+                            child: const Text(
+                              'Save',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 18,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  InputDecoration _fieldDecoration(String label) => InputDecoration(
-        labelText: label,
-        labelStyle: const TextStyle(color: Colors.white70),
-        filled: true,
-        fillColor: Colors.white.withOpacity(0.06),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.white.withOpacity(0.10)),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: AppColors.accent.withOpacity(0.8), width: 1.5),
-        ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      );
+  InputDecoration _inputDecoration() {
+    return const InputDecoration(
+      contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      filled: true,
+      fillColor: Colors.white,
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.all(Radius.circular(18)),
+        borderSide: BorderSide.none,
+      ),
+    );
+  }
+
+  Widget _rounded({required Widget child}) {
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(18),
+        color: Colors.white,
+      ),
+      child: child,
+    );
+  }
+}
+
+class _FieldLabel extends StatelessWidget {
+  final String text;
+  const _FieldLabel(this.text, {super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      text,
+      style: const TextStyle(
+        color: Colors.white,
+        fontSize: 15,
+        fontWeight: FontWeight.w400,
+      ),
+    );
+  }
 }

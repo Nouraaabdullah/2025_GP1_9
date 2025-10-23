@@ -98,7 +98,6 @@ class _TrendsGroupedBarsState extends State<TrendsGroupedBars> {
             behavior: HitTestBehavior.opaque,
             onTapDown: (d) {
               final dx = d.localPosition.dx;
-              final dy = d.localPosition.dy;
 
               final group = (dx / groupW).floor().clamp(0, n - 1);
               // bars are centered in group
@@ -130,8 +129,10 @@ class _TrendsGroupedBarsState extends State<TrendsGroupedBars> {
               final tip = Offset(originX + which * (barW + gap) + barW / 2,
                   math.max(0, barTop - 8));
 
-              _showTip(Offset(tip.dx, tip.dy),
-                  '${widget.labels[group]}\n$name: ${val.toStringAsFixed(0)} SAR');
+              _showTip(
+                Offset(tip.dx, tip.dy),
+                '${widget.labels[group]}\n$name: ${val.toStringAsFixed(0)} SAR',
+              );
             },
             child: Stack(
               children: [
@@ -169,14 +170,8 @@ class _TrendsGroupedBarsState extends State<TrendsGroupedBars> {
                 ),
                 if (_tipPos != null)
                   Positioned(
-                    left: (_tipPos!.dx - 90).clamp(0, totalW - 180),
-                    top: (_tipPos!.dy).clamp(0, 200 - 48),
-                    child: const _Bubble(),
-                  ),
-                if (_tipPos != null)
-                  Positioned(
-                    left: (_tipPos!.dx - 90).clamp(0, totalW - 180),
-                    top: (_tipPos!.dy).clamp(0, 200 - 48),
+                    left: (_tipPos!.dx - 110).clamp(0, totalW - 220),
+                    top: (_tipPos!.dy).clamp(0, 200 - 68),
                     child: _Bubble(text: _tipText),
                   ),
               ],
@@ -203,26 +198,37 @@ class _TrendsGroupedBarsState extends State<TrendsGroupedBars> {
 
 class _Bubble extends StatelessWidget {
   final String text;
-  const _Bubble({this.text = ''});
+  const _Bubble({required this.text});
   @override
   Widget build(BuildContext context) {
+    // Purple bubble (unified style)
     return AnimatedOpacity(
       opacity: 1,
       duration: const Duration(milliseconds: 120),
       child: Container(
-        width: 180,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        width: 220,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
-          color: AppColors.card,
-          borderRadius: BorderRadius.circular(10),
+          color: const Color(0xFF2D2553),
+          borderRadius: BorderRadius.circular(16),
           border: Border.all(color: Colors.white.withOpacity(0.08)),
           boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.25), blurRadius: 12)
+            BoxShadow(
+              color: Colors.black.withOpacity(0.35),
+              blurRadius: 16,
+              offset: const Offset(0, 8),
+            ),
           ],
         ),
-        child: Text(text,
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.white, fontSize: 12)),
+        child: Text(
+          text,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: AppColors.textGrey,
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
       ),
     );
   }

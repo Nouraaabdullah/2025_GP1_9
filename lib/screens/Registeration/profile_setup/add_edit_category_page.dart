@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:math' as math;
-import 'package:surra_application/utils/auth_helpers.dart'; // Utility for profileId
 
 class AddEditCategoryPage extends StatefulWidget {
   final Map<String, dynamic>? category;
+  final List<String> usedColors; // 🟣 colors already used
 
-  const AddEditCategoryPage({super.key, this.category});
+  const AddEditCategoryPage({
+    super.key,
+    this.category,
+    this.usedColors = const [],
+  });
 
   @override
   State<AddEditCategoryPage> createState() => _AddEditCategoryPageState();
@@ -15,10 +18,10 @@ class AddEditCategoryPage extends StatefulWidget {
 class _AddEditCategoryPageState extends State<AddEditCategoryPage> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
+
+  bool _loading = false;
   String _selectedIcon = 'category';
   String _selectedColor = '#7D5EF6';
-  final _sb = Supabase.instance.client;
-  bool _loading = false;
 
   final List<String> _iconNames = [
     'fastfood',
@@ -67,106 +70,52 @@ class _AddEditCategoryPageState extends State<AddEditCategoryPage> {
     super.dispose();
   }
 
-  Future<String> _getProfileId() async {
-    final profileId = await getProfileId(context);
-    if (profileId == null) throw Exception('User not authenticated');
-    return profileId;
-  }
-
-  Future<bool> _isCategoryNameDuplicate(String name) async {
-    try {
-      final profileId = await _getProfileId();
-      final existing = await _sb
-          .from('Category')
-          .select('name, category_id')
-          .eq('profile_id', profileId)
-          .eq('is_archived', false);
-
-      for (final c in existing) {
-        if (widget.category != null &&
-            c['category_id'] == widget.category!['category_id']) continue;
-        if (c['name'].toString().toLowerCase() == name.toLowerCase()) {
-          return true;
-        }
-      }
-      return false;
-    } catch (e) {
-      debugPrint('Error checking duplicate name: $e');
-      return false;
-    }
-  }
-
-  Future<bool> _isColorDuplicate(String color) async {
-    try {
-      final profileId = await _getProfileId();
-      final existing = await _sb
-          .from('Category')
-          .select('icon_color, category_id')
-          .eq('profile_id', profileId)
-          .eq('is_archived', false);
-
-      for (final c in existing) {
-        if (widget.category != null &&
-            c['category_id'] == widget.category!['category_id']) continue;
-        if (c['icon_color'] == color) return true;
-      }
-      return false;
-    } catch (e) {
-      debugPrint('Error checking duplicate color: $e');
-      return false;
-    }
-  }
-
+  // ✅ Save category locally and return to previous screen
+  
   Future<void> _saveCategory() async {
-    if (!_formKey.currentState!.validate()) return;
-    final name = _nameController.text.trim();
+  if (!_formKey.currentState!.validate()) return;
+  setState(() => _loading = true);
 
-    if (await _isCategoryNameDuplicate(name)) {
-      _showError('A category with this name already exists.');
+  try {
+    // Normalize color hex for consistent comparison
+    final normalizedSelectedColor = _selectedColor.toUpperCase().replaceAll('#', '');
+    final normalizedUsedColors = widget.usedColors
+        .map((c) => c.toUpperCase().replaceAll('#', ''))
+        .toList();
+
+    // 🔴 Check if color already used (case-insensitive + normalized)
+    if (normalizedUsedColors.contains(normalizedSelectedColor)) {
+      _showError(
+          "This color is already used for another category. Please choose a unique color.");
+      setState(() => _loading = false);
       return;
     }
-    if (await _isColorDuplicate(_selectedColor)) {
-      _showError('This color is already used by another category.');
-      return;
-    }
 
-    setState(() => _loading = true);
-    try {
-      final profileId = await _getProfileId();
+    final newCategory = {
+      'name': _nameController.text.trim(),
+      'icon': _findIconByName(_selectedIcon),
+      'icon_name': _selectedIcon,
+      'color': _hexToColor(_selectedColor),
+      'icon_color': _selectedColor,
+      'type': 'Custom',
+    };
 
-      final payload = {
-        'name': name,
-        'type': widget.category?['type'] ?? 'Custom',
-        'icon': _selectedIcon,
-        'icon_color': _selectedColor,
-        'is_archived': false,
-        'profile_id': profileId,
-      };
-
-      if (widget.category == null) {
-        await _sb.from('Category').insert(payload);
-      } else {
-        await _sb
-            .from('Category')
-            .update(payload)
-            .eq('category_id', widget.category!['category_id']);
-      }
-
-      if (mounted) Navigator.pop(context, true);
-    } catch (e) {
-      _showError('Error saving category: $e');
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
+    if (mounted) Navigator.pop(context, newCategory);
+  } catch (e) {
+    _showError('Error saving category: $e');
+  } finally {
+    setState(() => _loading = false);
   }
+}
+
 
   void _showError(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), backgroundColor: Colors.red),
+      SnackBar(content: Text(msg), backgroundColor: Colors.redAccent),
     );
   }
 
-  // 🎨 Color Picker (same as Edit Profile)
+  // 🎨 Color picker dialog with wheel + brightness
   void _showColorPicker(BuildContext context) {
     Color tempColor = _hexToColor(_selectedColor);
     double brightness = HSVColor.fromColor(tempColor).value;
@@ -182,7 +131,7 @@ class _AddEditCategoryPageState extends State<AddEditCategoryPage> {
             ),
             title: const Text(
               'Pick a Color',
-              style: TextStyle(color: Colors.white),
+              style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
             ),
             content: SingleChildScrollView(
               child: Column(
@@ -220,10 +169,11 @@ class _AddEditCategoryPageState extends State<AddEditCategoryPage> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 16),
                   Row(
                     children: [
-                      const Icon(Icons.brightness_6, color: Colors.white70, size: 20),
+                      const Icon(Icons.brightness_6,
+                          color: Colors.white70, size: 20),
                       const SizedBox(width: 8),
                       Expanded(
                         child: SliderTheme(
@@ -231,7 +181,8 @@ class _AddEditCategoryPageState extends State<AddEditCategoryPage> {
                             activeTrackColor: const Color(0xFF5E52E6),
                             inactiveTrackColor: Colors.white24,
                             thumbColor: const Color(0xFF5E52E6),
-                            overlayColor: const Color(0xFF5E52E6).withOpacity(0.3),
+                            overlayColor:
+                                const Color(0xFF5E52E6).withOpacity(0.25),
                             trackHeight: 4,
                           ),
                           child: Slider(
@@ -256,7 +207,8 @@ class _AddEditCategoryPageState extends State<AddEditCategoryPage> {
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx),
-                child: const Text('Cancel', style: TextStyle(color: Colors.white70)),
+                child: const Text('Cancel',
+                    style: TextStyle(color: Colors.white70)),
               ),
               TextButton(
                 onPressed: () {
@@ -297,6 +249,7 @@ class _AddEditCategoryPageState extends State<AddEditCategoryPage> {
     }
   }
 
+  // color helpers
   Color _hexToColor(String hex) {
     hex = hex.replaceAll('#', '');
     if (hex.length == 6) hex = 'FF$hex';
@@ -306,7 +259,7 @@ class _AddEditCategoryPageState extends State<AddEditCategoryPage> {
   String _colorToHex(Color c) =>
       '#${c.red.toRadixString(16).padLeft(2, '0')}${c.green.toRadixString(16).padLeft(2, '0')}${c.blue.toRadixString(16).padLeft(2, '0')}'.toUpperCase();
 
-  // ✅ Same icon lookup logic as EditProfilePage
+  // icon lookup
   IconData _findIconByName(String iconName) {
     final iconMap = {
       'fastfood': Icons.fastfood,
@@ -360,11 +313,12 @@ class _AddEditCategoryPageState extends State<AddEditCategoryPage> {
         padding: const EdgeInsets.all(20),
         child: Form(
           key: _formKey,
-          child: ListView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text('Category Name',
-                  style:
-                      TextStyle(color: Colors.white, fontWeight: FontWeight.w500)),
+                  style: TextStyle(
+                      color: Colors.white, fontWeight: FontWeight.w500)),
               const SizedBox(height: 8),
               Container(
                 decoration: BoxDecoration(
@@ -379,87 +333,91 @@ class _AddEditCategoryPageState extends State<AddEditCategoryPage> {
                     contentPadding:
                         EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                   ),
-                  validator: (v) =>
-                      v == null || v.isEmpty ? 'Please enter category name' : null,
+                  validator: (v) => v == null || v.isEmpty
+                      ? 'Please enter category name'
+                      : null,
                 ),
               ),
               const SizedBox(height: 20),
 
-              const Text('Icon',
-                  style:
-                      TextStyle(color: Colors.white, fontWeight: FontWeight.w500)),
-              const SizedBox(height: 8),
-              SizedBox(
-                height: 120,
-                child: GridView.builder(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 5,
-                    crossAxisSpacing: 8,
-                    mainAxisSpacing: 8,
-                  ),
-                  itemCount: _iconNames.length,
-                  itemBuilder: (context, index) {
-                    final iconName = _iconNames[index];
-                    final isSelected = _selectedIcon == iconName;
-                    return GestureDetector(
-                      onTap: () {
-                        setState(() => _selectedIcon = iconName);
-                      },
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: isSelected
-                              ? const Color(0xFF5E52E6)
-                              : Colors.white.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Icon(
-                          _findIconByName(iconName),
-                          color: isSelected ? Colors.white : Colors.white70,
-                          size: 24,
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-              const SizedBox(height: 20),
-
+              // ===== COLOR PICKER =====
               const Text('Color',
-                  style:
-                      TextStyle(color: Colors.white, fontWeight: FontWeight.w500)),
+                  style: TextStyle(
+                      color: Colors.white, fontWeight: FontWeight.w500)),
               const SizedBox(height: 8),
               GestureDetector(
                 onTap: () => _showColorPicker(context),
                 child: Container(
-                  height: 50,
+                  height: 55,
                   decoration: BoxDecoration(
                     color: _hexToColor(_selectedColor),
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(color: Colors.white24, width: 2),
                   ),
                   child: const Center(
-                    child: Text('Tap to choose color',
-                        style: TextStyle(
-                            color: Colors.white, fontWeight: FontWeight.w500)),
+                    child: Text(
+                      'Tap to choose color',
+                      style: TextStyle(
+                          color: Colors.white, fontWeight: FontWeight.w600),
+                    ),
                   ),
                 ),
               ),
-              const SizedBox(height: 40),
+              const SizedBox(height: 24),
+
+              // ===== ICONS =====
+              const Text('Icon',
+                  style: TextStyle(
+                      color: Colors.white, fontWeight: FontWeight.w500)),
+              const SizedBox(height: 8),
+              Expanded(
+                child: SingleChildScrollView(
+                  child: Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    alignment: WrapAlignment.start,
+                    children: _iconNames.map((iconName) {
+                      final isSelected = _selectedIcon == iconName;
+                      return GestureDetector(
+                        onTap: () => setState(() => _selectedIcon = iconName),
+                        child: Container(
+                          width: 55,
+                          height: 55,
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? const Color(0xFF5E52E6)
+                                : Colors.white.withOpacity(0.08),
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: Icon(
+                            _findIconByName(iconName),
+                            color: isSelected ? Colors.white : Colors.white70,
+                            size: 28,
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 24),
 
               Center(
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF5E52E6),
                     shape: const StadiumBorder(),
-                    padding:
-                        const EdgeInsets.symmetric(vertical: 16, horizontal: 40),
+                    padding: const EdgeInsets.symmetric(
+                        vertical: 16, horizontal: 40),
                   ),
                   onPressed: _loading ? null : _saveCategory,
                   child: Text(
                     widget.category == null ? 'Add Category' : 'Save Changes',
                     style: const TextStyle(
-                        color: Colors.white, fontWeight: FontWeight.w600),
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 16),
                   ),
                 ),
               ),
@@ -471,7 +429,7 @@ class _AddEditCategoryPageState extends State<AddEditCategoryPage> {
   }
 }
 
-// 🎨 Color Wheel Painter
+// 🎨 Custom color wheel painter
 class _ColorWheelPainter extends CustomPainter {
   final Color selectedColor;
   _ColorWheelPainter({required this.selectedColor});
@@ -490,11 +448,6 @@ class _ColorWheelPainter extends CustomPainter {
       canvas.drawArc(Rect.fromCircle(center: center, radius: radius), sweep,
           math.pi / 180, false, paint);
     }
-
-    final overlay = Paint()
-      ..shader = const RadialGradient(colors: [Colors.white, Colors.transparent])
-          .createShader(Rect.fromCircle(center: center, radius: radius));
-    canvas.drawCircle(center, radius, overlay);
   }
 
   @override

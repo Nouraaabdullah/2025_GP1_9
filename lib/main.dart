@@ -14,8 +14,11 @@ import 'screens/Registeration/profile_setup/setup_income_screen.dart';
 import 'screens/Registeration/profile_setup/setup_expenses_screen.dart';
 import 'screens/Registeration/profile_setup/setup_balance_screen.dart';
 import 'screens/Registeration/profile_setup/setup_complete_screen.dart';
-import 'screens/Registeration/profile_setup/fixed_categories.dart';
-import 'screens/Registeration/profile_setup/custom_categories.dart';
+//import 'screens/Registeration/profile_setup/fixed_categories.dart';
+//import 'screens/Registeration/profile_setup/custom_categories.dart';
+import 'screens/Registeration/profile_setup/setup_categories_screen.dart';
+import 'screens/Registeration/profile_setup/add_edit_category_page.dart';
+//import 'screens/Registeration/profile_setup/setup_category_limits.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -118,8 +121,14 @@ class _SurraAppState extends State<SurraApp> {
         '/setupExpenses': (context) => const SetupExpensesScreen(),
         '/setupBalance': (context) => const SetupBalanceScreen(),
         '/setupComplete': (context) => const SetupCompleteScreen(),
-        '/setupFixedCategory': (context) => const SetupFixedCategoryScreen(),
-        '/setupCustomCategory': (context) => const SetupCustomCategoryScreen(),
+       // '/setupFixedCategory': (context) => const SetupFixedCategoryScreen(),
+       // '/setupCustomCategory': (context) => const SetupCustomCategoryScreen(),
+       // '/setupCustomCategory': (context) => const SetupCustomCategoryScreen(),
+'/setupCategories': (context) =>  SetupCategoriesScreen(),
+'/addEditCategory': (context) => const AddEditCategoryPage(),
+//'/setupCategoryLimits': (context) =>  SetupCategoryLimitsScreen(),
+
+
       },
     );
   }

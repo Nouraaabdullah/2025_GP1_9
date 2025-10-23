@@ -103,7 +103,8 @@ class _SetupIncomeScreenState extends State<SetupIncomeScreen> {
       await supabase.from('Fixed_Income').insert(incomeRecords);
       ProfileData.incomes = incomeRecords;
 
-      Navigator.pushNamed(context, '/setupFixedCategory');
+Navigator.pushNamed(context, '/setupCategories');
+
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Error saving incomes: $e")),

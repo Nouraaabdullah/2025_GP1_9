@@ -382,18 +382,18 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
       Icons.local_hospital,
       Icons.school,
       Icons.sports_esports,
-      Icons.attach_money,
-      Icons.savings,
       Icons.flight,
       Icons.local_offer,
       Icons.fitness_center,
       Icons.movie,
       Icons.music_note,
-      Icons.book,
       Icons.pets,
       Icons.child_care,
       Icons.spa,
       Icons.construction,
+      Icons.account_balance_wallet,
+      Icons.local_cafe,
+      Icons.description,
     ];
 
     String? createdCategoryName;
@@ -452,22 +452,25 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
                         ],
                       ),
                       const SizedBox(height: 12),
-                      Align(
-                        alignment: Alignment.centerLeft,
+                      SizedBox(
+                        width: 5 * 50 + 4 * 8, // 5 icons per row (tile width + spacing)
                         child: Wrap(
-                          spacing: 8,
+                          spacing: 6,
                           runSpacing: 8,
                           children: availableIcons.map((icon) {
                             final isSelected = chosenIcon == icon;
-                            return GestureDetector(
-                              onTap: () => setDialog(() => chosenIcon = icon),
-                              child: Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  color: isSelected ? AppColors.accent : const Color(0xFF2A2550),
-                                  borderRadius: BorderRadius.circular(8),
+                            return SizedBox(
+                              width: 50,
+                              child: GestureDetector(
+                                onTap: () => setDialog(() => chosenIcon = icon),
+                                child: Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: isSelected ? AppColors.accent : const Color(0xFF2A2550),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Icon(icon, color: Colors.white, size: 20),
                                 ),
-                                child: Icon(icon, color: Colors.white, size: 22),
                               ),
                             );
                           }).toList(),

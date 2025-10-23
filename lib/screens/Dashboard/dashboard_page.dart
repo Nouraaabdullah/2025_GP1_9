@@ -763,7 +763,7 @@ class _DashboardPageState extends State<DashboardPage> {
       body: SafeArea(child: content),
       bottomNavigationBar: SurraBottomBar(
         onTapDashboard: () => Navigator.pushReplacementNamed(context, '/dashboard'),
-        onTapSavings:   () {},
+        onTapSavings:   () => Navigator.pushReplacementNamed(context, '/savings'),
         onTapProfile:   () => Navigator.pushReplacementNamed(context, '/profile'),
       ),
     );
@@ -869,8 +869,8 @@ class _DashboardPageState extends State<DashboardPage> {
                   earnings: totalEarnings.toDouble(),
                   income:   totalIncome.toDouble(),
                 ),
-                const SizedBox(height: 0),
-                _LegendRow(items: monthlyLegends),
+                const SizedBox(height: 1),
+                _LegendRow(items: incomeLegends),
               ],
             ),
           ),

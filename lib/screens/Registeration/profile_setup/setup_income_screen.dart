@@ -23,6 +23,13 @@ class _SetupIncomeScreenState extends State<SetupIncomeScreen> {
     });
   }
 
+  void deleteIncomeField(int index) {
+    if (index == 0) return; // can't delete primary income
+    setState(() {
+      incomes.removeAt(index);
+    });
+  }
+
   void selectDate(int index) async {
     DateTime? picked = await showDatePicker(
       context: context,
@@ -43,7 +50,6 @@ class _SetupIncomeScreenState extends State<SetupIncomeScreen> {
         );
       },
     );
-
     if (picked != null) {
       setState(() => incomes[index]['date'] = picked);
     }
@@ -56,7 +62,18 @@ class _SetupIncomeScreenState extends State<SetupIncomeScreen> {
       final user = supabase.auth.currentUser;
       if (user == null) throw Exception("No logged-in user found");
 
-      // ✅ Get the user's profile_id
+      // ✅ Require primary income
+      if (incomes[0]['source'].text.isEmpty ||
+          incomes[0]['amount'].text.isEmpty ||
+          incomes[0]['date'] == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Please fill in your primary income details.")),
+        );
+        setState(() => loading = false);
+        return;
+      }
+
+      // ✅ Get profile ID
       final profileResponse = await supabase
           .from('User_Profile')
           .select('profile_id')
@@ -66,34 +83,128 @@ class _SetupIncomeScreenState extends State<SetupIncomeScreen> {
       if (profileResponse == null) throw Exception("User profile not found.");
       final profileId = profileResponse['profile_id'];
 
-      // ✅ Prepare income records to match your Supabase table
-      final incomeRecords = incomes.map((e) {
+      // ✅ Prepare records
+      final incomeRecords = incomes
+          .where((e) =>
+              e['source'].text.isNotEmpty &&
+              e['amount'].text.isNotEmpty &&
+              e['date'] != null)
+          .map((e) {
         return {
           'profile_id': profileId,
-          'name': e['source'].text, // ✅ matches Supabase column name
-          'monthly_income': double.tryParse(e['amount'].text) ?? 0.0, // ✅ matches Supabase
+          'name': e['source'].text,
+          'monthly_income': double.tryParse(e['amount'].text) ?? 0.0,
           'payday': e['date']?.day,
           'start_time': e['date']?.toIso8601String(),
+          'is_primary': incomes.indexOf(e) == 0, // ✅ mark first as primary
         };
       }).toList();
 
-      // ✅ Insert into Fixed_Income table
-      final insertResponse = await supabase.from('Fixed_Income').insert(incomeRecords);
-      debugPrint("✅ Incomes inserted: $insertResponse");
-
-      // ✅ Save locally
+      await supabase.from('Fixed_Income').insert(incomeRecords);
       ProfileData.incomes = incomeRecords;
 
-      // ✅ Move to next setup screen
       Navigator.pushNamed(context, '/setupFixedCategory');
     } catch (e) {
-      debugPrint("❌ Error saving incomes: $e");
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Error saving incomes: $e")),
       );
     } finally {
       setState(() => loading = false);
     }
+  }
+
+  Widget buildIncomeCard(int index) {
+    final income = incomes[index];
+    final isPrimary = index == 0;
+
+    return Card(
+      color: const Color(0xFF2A2550),
+      margin: const EdgeInsets.only(bottom: 20),
+      elevation: 6,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: isPrimary ? const Color(0xFF7959F5) : Colors.white.withOpacity(0.1),
+          width: isPrimary ? 2 : 1,
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text(
+                  isPrimary ? "Primary Income (Required)" : "Additional Income ${index}",
+                  style: TextStyle(
+                    color: isPrimary ? const Color(0xFFB8A8FF) : Colors.white70,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const Spacer(),
+                if (!isPrimary)
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                    onPressed: () => deleteIncomeField(index),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: income['source'],
+              style: const TextStyle(color: Colors.white),
+              decoration: const InputDecoration(
+                hintText: 'Income source (e.g., Salary)',
+                hintStyle: TextStyle(color: Color(0xFFB0AFC5)),
+                filled: true,
+                fillColor: Color(0xFF1F1B3A),
+                border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12))),
+              ),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: income['amount'],
+              keyboardType: TextInputType.number,
+              style: const TextStyle(color: Colors.white),
+              decoration: const InputDecoration(
+                hintText: 'Amount (SAR)',
+                hintStyle: TextStyle(color: Color(0xFFB0AFC5)),
+                filled: true,
+                fillColor: Color(0xFF1F1B3A),
+                border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12))),
+              ),
+            ),
+            const SizedBox(height: 10),
+            GestureDetector(
+              onTap: () => selectDate(index),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1F1B3A),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.white.withOpacity(0.2)),
+                ),
+                child: Row(
+                  children: [
+                    Text(
+                      income['date'] != null
+                          ? income['date'].toString().split(' ')[0]
+                          : 'Select payday',
+                      style: const TextStyle(color: Colors.white70),
+                    ),
+                    const Spacer(),
+                    const Icon(Icons.calendar_today, color: Color(0xFFB8A8FF), size: 18),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -106,7 +217,7 @@ class _SetupIncomeScreenState extends State<SetupIncomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Progress bar
+              // ====== PROGRESS BAR ======
               Stack(
                 children: [
                   Container(height: 4, width: double.infinity, color: Colors.white.withOpacity(0.1)),
@@ -121,7 +232,7 @@ class _SetupIncomeScreenState extends State<SetupIncomeScreen> {
               ),
               const SizedBox(height: 30),
 
-              // Step indicator
+              // ====== STEP INDICATOR ======
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
                 decoration: BoxDecoration(
@@ -139,124 +250,40 @@ class _SetupIncomeScreenState extends State<SetupIncomeScreen> {
               ),
               const SizedBox(height: 16),
 
+              // ====== TITLE ======
               const Text(
                 "Monthly Income",
                 style: TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
               const Text(
-                "Add one or more sources of income and your payday for each",
+                "Start with your primary income, then add any other sources if you have them.",
                 style: TextStyle(color: Color(0xFFB3B3C7), fontSize: 16),
               ),
               const SizedBox(height: 20),
 
-              // Income fields
+              // ====== INCOME LIST ======
               Expanded(
                 child: ListView.builder(
                   itemCount: incomes.length,
-                  itemBuilder: (context, index) {
-                    final income = incomes[index];
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Expanded(
-                                flex: 2,
-                                child: TextField(
-                                  controller: income['source'],
-                                  style: const TextStyle(color: Colors.white),
-                                  decoration: InputDecoration(
-                                    hintText: 'Income source (e.g., Salary)',
-                                    hintStyle: const TextStyle(color: Color(0xFFB0AFC5)),
-                                    filled: true,
-                                    fillColor: const Color(0xFF2A2550),
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                      borderSide: BorderSide(color: Colors.white.withOpacity(0.2)),
-                                    ),
-                                    focusedBorder: const OutlineInputBorder(
-                                      borderRadius: BorderRadius.all(Radius.circular(12)),
-                                      borderSide: BorderSide(color: Color(0xFF7959F5), width: 2),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                flex: 1,
-                                child: TextField(
-                                  controller: income['amount'],
-                                  keyboardType: TextInputType.number,
-                                  style: const TextStyle(color: Colors.white),
-                                  decoration: InputDecoration(
-                                    hintText: 'SAR',
-                                    hintStyle: const TextStyle(color: Color(0xFFB0AFC5)),
-                                    filled: true,
-                                    fillColor: const Color(0xFF2A2550),
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                      borderSide: BorderSide(color: Colors.white.withOpacity(0.2)),
-                                    ),
-                                    focusedBorder: const OutlineInputBorder(
-                                      borderRadius: BorderRadius.all(Radius.circular(12)),
-                                      borderSide: BorderSide(color: Color(0xFF7959F5), width: 2),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 10),
-
-                          // Date picker
-                          GestureDetector(
-                            onTap: () => selectDate(index),
-                            child: Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF2A2550),
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: Colors.white.withOpacity(0.2)),
-                              ),
-                              child: Row(
-                                children: [
-                                  Text(
-                                    income['date'] != null
-                                        ? income['date'].toString().split(' ')[0]
-                                        : 'Select payday',
-                                    style: const TextStyle(color: Colors.white70),
-                                  ),
-                                  const Spacer(),
-                                  const Icon(Icons.calendar_today, color: Color(0xFFB8A8FF), size: 18),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
+                  itemBuilder: (context, index) => buildIncomeCard(index),
                 ),
               ),
 
-              const SizedBox(height: 12),
+              // ====== ADD BUTTON ======
               Align(
                 alignment: Alignment.centerLeft,
                 child: TextButton.icon(
                   onPressed: addIncomeField,
                   icon: const Icon(Icons.add_circle_outline, color: Color(0xFFB8A8FF)),
-                  label: const Text(
-                    "Add another income",
-                    style: TextStyle(color: Color(0xFFB8A8FF)),
-                  ),
+                  label: const Text("Add another income",
+                      style: TextStyle(color: Color(0xFFB8A8FF))),
                 ),
               ),
 
               const SizedBox(height: 20),
+
+              // ====== BUTTONS ======
               Row(
                 children: [
                   Expanded(

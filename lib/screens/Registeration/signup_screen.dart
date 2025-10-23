@@ -195,27 +195,27 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 ),
                 const SizedBox(height: 20),
 
-                // === Google Sign-In Placeholder ===
-                SizedBox(
-                  width: double.infinity,
-                  height: 50,
-                  child: OutlinedButton.icon(
-                    onPressed: () {},
-                    icon: const FaIcon(FontAwesomeIcons.google,
-                        color: Colors.white, size: 18),
-                    label: const Text(
-                      'Continue with Google',
-                      style: TextStyle(color: Colors.white, fontSize: 16),
-                    ),
-                    style: OutlinedButton.styleFrom(
-                      side: const BorderSide(color: Colors.white54),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(33),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 24),
+                // // === Google Sign-In Placeholder ===
+                // SizedBox(
+                //   width: double.infinity,
+                //   height: 50,
+                //   child: OutlinedButton.icon(
+                //     onPressed: () {},
+                //     icon: const FaIcon(FontAwesomeIcons.google,
+                //         color: Colors.white, size: 18),
+                //     label: const Text(
+                //       'Continue with Google',
+                //       style: TextStyle(color: Colors.white, fontSize: 16),
+                //     ),
+                //     style: OutlinedButton.styleFrom(
+                //       side: const BorderSide(color: Colors.white54),
+                //       shape: RoundedRectangleBorder(
+                //         borderRadius: BorderRadius.circular(33),
+                //       ),
+                //     ),
+                //   ),
+                // ),
+                // const SizedBox(height: 24),
 
                 // === Redirect to Login ===
                 GestureDetector(

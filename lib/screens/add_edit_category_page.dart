@@ -25,6 +25,7 @@ class _AddEditCategoryPageState extends State<AddEditCategoryPage> {
   final _sb = Supabase.instance.client;
 
   bool _loading = false;
+  bool _showFixedMessage = false;
 
   final List<Map<String, dynamic>> _availableIcons = [
     {'icon': 'category', 'name': 'Category', 'data': Icons.category},
@@ -43,19 +44,26 @@ class _AddEditCategoryPageState extends State<AddEditCategoryPage> {
       'name': 'Entertainment',
       'data': Icons.sports_esports,
     },
-    {'icon': 'attach_money', 'name': 'Income', 'data': Icons.attach_money},
-    {'icon': 'savings', 'name': 'Savings', 'data': Icons.savings},
     {'icon': 'flight', 'name': 'Travel', 'data': Icons.flight},
     {'icon': 'local_offer', 'name': 'Offers', 'data': Icons.local_offer},
     {'icon': 'fitness_center', 'name': 'Fitness', 'data': Icons.fitness_center},
     {'icon': 'movie', 'name': 'Movies', 'data': Icons.movie},
     {'icon': 'music_note', 'name': 'Music', 'data': Icons.music_note},
-    {'icon': 'book', 'name': 'Books', 'data': Icons.book},
     {'icon': 'pets', 'name': 'Pets', 'data': Icons.pets},
     {'icon': 'child_care', 'name': 'Kids', 'data': Icons.child_care},
     {'icon': 'spa', 'name': 'Beauty', 'data': Icons.spa},
     {'icon': 'construction', 'name': 'Maintenance', 'data': Icons.construction},
+    {
+      'icon': 'account_balance_wallet',
+      'name': 'Wallet',
+      'data': Icons.account_balance_wallet,
+    },
+    {'icon': 'local_cafe', 'name': 'Coffee', 'data': Icons.local_cafe},
+    {'icon': 'description', 'name': 'Documents', 'data': Icons.description},
   ];
+
+  bool get _isEditingFixedCategory =>
+      widget.category != null && widget.category!['type'] == 'Fixed';
 
   @override
   void initState() {
@@ -77,20 +85,91 @@ class _AddEditCategoryPageState extends State<AddEditCategoryPage> {
     super.dispose();
   }
 
+  // Check if category name already exists (case insensitive)
+  Future<bool> _isCategoryNameDuplicate(String name) async {
+    try {
+      final existingCategories = await _sb
+          .from('Category')
+          .select('name, category_id')
+          .eq('profile_id', widget.profileId)
+          .eq('is_archived', false);
+
+      for (final category in existingCategories) {
+        // If editing, exclude the current category from duplicate check
+        if (widget.category != null &&
+            category['category_id'] == widget.category!['category_id']) {
+          continue;
+        }
+
+        if (category['name'].toString().toLowerCase() == name.toLowerCase()) {
+          return true;
+        }
+      }
+      return false;
+    } catch (e) {
+      debugPrint('Error checking duplicate category name: $e');
+      return false;
+    }
+  }
+
+  // Check if color is already used by another category
+  Future<bool> _isColorDuplicate(String color) async {
+    try {
+      final existingCategories = await _sb
+          .from('Category')
+          .select('icon_color, category_id')
+          .eq('profile_id', widget.profileId)
+          .eq('is_archived', false);
+
+      for (final category in existingCategories) {
+        // If editing, exclude the current category from duplicate check
+        if (widget.category != null &&
+            category['category_id'] == widget.category!['category_id']) {
+          continue;
+        }
+
+        if (category['icon_color'] == color) {
+          return true;
+        }
+      }
+      return false;
+    } catch (e) {
+      debugPrint('Error checking duplicate color: $e');
+      return false;
+    }
+  }
+
   Future<void> _saveCategory() async {
     if (!_formKey.currentState!.validate()) return;
+
+    final name = _nameController.text.trim();
+
+    // Check for duplicate category name
+    final isNameDuplicate = await _isCategoryNameDuplicate(name);
+    if (isNameDuplicate) {
+      _showError('A category with this name already exists');
+      return;
+    }
+
+    // Check for duplicate color
+    final isColorDuplicate = await _isColorDuplicate(_selectedColor);
+    if (isColorDuplicate) {
+      _showError(
+        'This color is already used by another category. Each category must have a unique color.',
+      );
+      return;
+    }
 
     setState(() => _loading = true);
 
     try {
-      final name = _nameController.text.trim();
       final limit = _limitController.text.trim().isEmpty
           ? null
           : double.tryParse(_limitController.text.trim());
 
       final payload = {
         'name': name,
-        'type': 'Custom',
+        'type': _isEditingFixedCategory ? 'Fixed' : 'Custom',
         'monthly_limit': limit,
         'icon': _selectedIcon,
         'icon_color': _selectedColor,
@@ -102,10 +181,18 @@ class _AddEditCategoryPageState extends State<AddEditCategoryPage> {
         // Add new category
         await _sb.from('Category').insert(payload);
       } else {
-        // Update existing category
+        // Update existing category - for fixed categories, don't update name
+        final updatePayload = _isEditingFixedCategory
+            ? {
+                'monthly_limit': limit,
+                'icon': _selectedIcon,
+                'icon_color': _selectedColor,
+              }
+            : payload;
+
         await _sb
             .from('Category')
-            .update(payload)
+            .update(updatePayload)
             .eq('category_id', widget.category!['category_id']);
       }
 
@@ -114,12 +201,7 @@ class _AddEditCategoryPageState extends State<AddEditCategoryPage> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error saving category: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        _showError('Error saving category: $e');
       }
     } finally {
       if (mounted) {
@@ -141,6 +223,12 @@ class _AddEditCategoryPageState extends State<AddEditCategoryPage> {
             '${color.green.toRadixString(16).padLeft(2, '0')}'
             '${color.blue.toRadixString(16).padLeft(2, '0')}'
         .toUpperCase();
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: Colors.red),
+    );
   }
 
   void _showColorPicker(BuildContext context) {
@@ -321,15 +409,31 @@ class _AddEditCategoryPageState extends State<AddEditCategoryPage> {
             children: [
               _buildSheetLabel('Category Name'),
               const SizedBox(height: 8),
-              _buildSheetWhiteField(
-                controller: _nameController,
-                hintText: 'Enter category name',
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter category name';
-                  }
-                  return null;
-                },
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Use IgnorePointer instead of read-only to prevent context menu error
+                  IgnorePointer(
+                    ignoring: _isEditingFixedCategory,
+                    child: _buildSheetWhiteField(
+                      controller: _nameController,
+                      hintText: 'Enter category name',
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Please enter category name';
+                        }
+                        return null;
+                      },
+                    ),
+                  ),
+                  if (_showFixedMessage) ...[
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Fixed category names cannot be changed',
+                      style: TextStyle(color: Colors.orange, fontSize: 12),
+                    ),
+                  ],
+                ],
               ),
               const SizedBox(height: 20),
 
@@ -354,10 +458,9 @@ class _AddEditCategoryPageState extends State<AddEditCategoryPage> {
               _buildSheetLabel('Icon'),
               const SizedBox(height: 8),
               SizedBox(
-                height: 120, // Increased height to show more icons
+                height: 120,
                 child: GridView.builder(
-                  physics:
-                      const AlwaysScrollableScrollPhysics(), // Made scrollable
+                  physics: const AlwaysScrollableScrollPhysics(),
                   gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: 5,
                     crossAxisSpacing: 8,
@@ -440,26 +543,38 @@ class _AddEditCategoryPageState extends State<AddEditCategoryPage> {
     TextInputType? keyboardType,
     String? Function(String?)? validator,
   }) {
-    return Container(
-      height: 50,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: TextFormField(
-        controller: controller,
-        keyboardType: keyboardType,
-        validator: validator,
-        decoration: InputDecoration(
-          border: InputBorder.none,
-          hintText: hintText,
-          hintStyle: const TextStyle(color: Color(0xFF7A7A7A)),
+    return GestureDetector(
+      onTap: () {
+        if (_isEditingFixedCategory && !_showFixedMessage) {
+          setState(() {
+            _showFixedMessage = true;
+          });
+        }
+      },
+      child: Container(
+        height: 50,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
         ),
-        style: const TextStyle(
-          color: Color(0xFF1E1E1E),
-          fontSize: 16,
-          fontWeight: FontWeight.w500,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: TextFormField(
+          controller: controller,
+          keyboardType: keyboardType,
+          validator: validator,
+          enabled: !_isEditingFixedCategory, // Use enabled instead of readOnly
+          decoration: InputDecoration(
+            border: InputBorder.none,
+            hintText: hintText,
+            hintStyle: const TextStyle(color: Color(0xFF7A7A7A)),
+          ),
+          style: TextStyle(
+            color: _isEditingFixedCategory
+                ? const Color(0xFF7A7A7A) // Gray out text for fixed categories
+                : const Color(0xFF1E1E1E),
+            fontSize: 16,
+            fontWeight: FontWeight.w500,
+          ),
         ),
       ),
     );

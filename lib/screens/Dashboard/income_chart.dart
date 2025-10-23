@@ -1,8 +1,11 @@
-// lib/pages/Dashboard/income_chart.dart
+// /Users/lamee/Documents/GitHub/2025_GP1_9/lib/screens/Dashboard/income_chart.dart
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../theme/app_colors.dart';
+
+// ✅ Auth helper import (redirects to /login if not signed in)
+import '../../utils/auth_helpers.dart';
 
 class IncomeSemicircleGauge extends StatefulWidget {
   final double percent;
@@ -26,7 +29,8 @@ class IncomeSemicircleGauge extends StatefulWidget {
 
 class _IncomeSemicircleGaugeState extends State<IncomeSemicircleGauge> {
   Offset? _tipPos;
-  String _tipText = '';
+  String _tipTitle = '';
+  String _tipValue = '';
   Timer? _hideTimer;
 
   // Geometry (kept in one place so painter + hit-test always match)
@@ -61,6 +65,15 @@ class _IncomeSemicircleGaugeState extends State<IncomeSemicircleGauge> {
     }
   }
   // ---------------------------------------------------------------
+
+  @override
+  void initState() {
+    super.initState();
+    // ✅ Lightweight auth check; if user is signed out this will navigate to /login.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      getProfileId(context);
+    });
+  }
 
   @override
   void dispose() {
@@ -150,23 +163,28 @@ class _IncomeSemicircleGaugeState extends State<IncomeSemicircleGauge> {
           // Convert our local semicircle angle (0..π) to the painter's absolute space (π..2π)
           final absAngle = semi + math.pi;
 
-          String? text;
+          String? title;
+          String? value;
           if (_angleWithin(absAngle, startExp, expSweep)) {
-            text = 'Expenses: ${expVal.toStringAsFixed(0)} SAR';
+            title = 'Expenses';
+            value = '${expVal.toStringAsFixed(0)} SAR';
           } else if (_angleWithin(absAngle, startErn, ernSweep)) {
-            text = 'Earnings: ${ernVal.toStringAsFixed(0)} SAR';
+            title = 'Earnings';
+            value = '${ernVal.toStringAsFixed(0)} SAR';
           } else if (_angleWithin(absAngle, startInc, incSweep)) {
-            text = 'Income: ${incVal.toStringAsFixed(0)} SAR';
+            title = 'Income';
+            value = '${incVal.toStringAsFixed(0)} SAR';
           } else {
             return;
           }
 
           setState(() {
-            _tipPos = Offset(
-              (local.dx - 90).clamp(0, _size.width - 180),
-              (local.dy - 56).clamp(0, _size.height - 48),
-            );
-            _tipText = text!;
+            // Anchor bubble near tap, with some clamping inside widget
+            final left = (local.dx - 110).clamp(0.0, _size.width - 220.0);
+            final top  = (local.dy - 56).clamp(0.0, _size.height - 68.0);
+            _tipPos = Offset(left, top);
+            _tipTitle = title!;
+            _tipValue = value!;
           });
           _hideTimer?.cancel();
           _hideTimer = Timer(const Duration(milliseconds: 2200), () {
@@ -224,23 +242,35 @@ class _IncomeSemicircleGaugeState extends State<IncomeSemicircleGauge> {
                   ),
                 ),
               Positioned.fill(
-                child: Center(
+                child: Align(
+                alignment: const Alignment(0, -0.2), // move up (negative Y = higher)
                   child: Text(
                     widget.label,
                     textAlign: TextAlign.center,
                     style: const TextStyle(
                       color: Colors.white,
-                      fontSize: 22,
-                      fontWeight: FontWeight.w400,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ),
               ),
+             
+
               if (_tipPos != null)
                 Positioned(
                   left: _tipPos!.dx,
                   top: _tipPos!.dy,
-                  child: _Bubble(text: _tipText),
+                  child: const SizedBox(), // placeholder to keep layout stable
+                ),
+              if (_tipPos != null)
+                Positioned(
+                  left: _tipPos!.dx,
+                  top: _tipPos!.dy,
+                  child: _PurpleBubble(
+                    title: _tipTitle,
+                    value: _tipValue,
+                  ),
                 ),
             ],
           ),
@@ -289,27 +319,55 @@ class _ArcPainter extends CustomPainter {
       old.deflate != deflate;
 }
 
-class _Bubble extends StatelessWidget {
-  final String text;
-  const _Bubble({required this.text});
+/// Purple bubble styled like CategoryDonut tooltip
+class _PurpleBubble extends StatelessWidget {
+  final String title;
+  final String value;
+  const _PurpleBubble({required this.title, required this.value});
+
   @override
   Widget build(BuildContext context) {
     return AnimatedOpacity(
       opacity: 1,
-      duration: const Duration(milliseconds: 150),
+      duration: const Duration(milliseconds: 120),
       child: Container(
-        width: 180,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        width: 220,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
-          color: AppColors.card,
-          borderRadius: BorderRadius.circular(10),
+          color: const Color(0xFF2D2553), // deep purple card
+          borderRadius: BorderRadius.circular(16),
           border: Border.all(color: Colors.white.withOpacity(0.08)),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.25), blurRadius: 12)],
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.35),
+              blurRadius: 16,
+              offset: const Offset(0, 8),
+            ),
+          ],
         ),
-        child: Text(
-          text,
-          textAlign: TextAlign.center,
-          style: const TextStyle(color: Colors.white, fontSize: 12),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w800,
+                fontSize: 14,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              value,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: AppColors.textGrey,
+                fontWeight: FontWeight.w700,
+                fontSize: 10,
+              ),
+            ),
+          ],
         ),
       ),
     );

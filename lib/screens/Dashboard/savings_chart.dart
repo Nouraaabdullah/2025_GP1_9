@@ -1,8 +1,11 @@
-// lib/pages/Dashboard/savings_chart.dart
+// /Users/lamee/Documents/GitHub/2025_GP1_9/lib/screens/Dashboard/savings_chart.dart
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../theme/app_colors.dart';
+
+// ✅ Auth helper import (redirects to /login if not signed in)
+import '../../utils/auth_helpers.dart';
 
 /// Line sparkline for Savings with tap tooltip next to the point.
 /// - `values` are Y values from DB (no placeholders).
@@ -36,6 +39,16 @@ class _SavingsSparklineState extends State<SavingsSparkline> {
   static const double _topPad    = 14.0;
   static const double _bottomPad = 28.0;
   static const double _edgeFrac  = 0.06; // inner horizontal padding percentage
+
+  @override
+  void initState() {
+    super.initState();
+    // ✅ Lightweight auth check; if signed out, helper will navigate to /login.
+    // Does not alter chart behavior otherwise.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      getProfileId(context);
+    });
+  }
 
   @override
   void dispose() {
@@ -141,8 +154,8 @@ class _SavingsSparklineState extends State<SavingsSparkline> {
                 ),
                 if (_tipPos != null)
                   Positioned(
-                    left: (_tipPos!.dx - 90).clamp(0, c.maxWidth - 180),
-                    top: (_tipPos!.dy - 44).clamp(0, 220 - 44),
+                    left: (_tipPos!.dx - 110).clamp(0, c.maxWidth - 220),
+                    top: (_tipPos!.dy - 48).clamp(0, 220 - 68),
                     child: _Bubble(text: _tipText),
                   ),
               ],
@@ -277,19 +290,34 @@ class _Bubble extends StatelessWidget {
   const _Bubble({required this.text});
   @override
   Widget build(BuildContext context) {
+    // Purple bubble (unified style)
     return AnimatedOpacity(
       opacity: 1,
       duration: const Duration(milliseconds: 120),
       child: Container(
-        width: 180,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        width: 220,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
-          color: AppColors.card,
-          borderRadius: BorderRadius.circular(10),
+          color: const Color(0xFF2D2553),
+          borderRadius: BorderRadius.circular(16),
           border: Border.all(color: Colors.white.withOpacity(0.08)),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.25), blurRadius: 12)],
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.35),
+              blurRadius: 16,
+              offset: const Offset(0, 8),
+            ),
+          ],
         ),
-        child: Text(text, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 12)),
+        child: Text(
+          text,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: AppColors.textGrey,
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
       ),
     );
   }

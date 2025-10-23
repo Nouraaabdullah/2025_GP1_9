@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../theme/app_colors.dart';
-import '../widgets/top_gradient.dart';
-import '../widgets/bottom_nav_bar.dart';
+import 'package:surra_application/theme/app_colors.dart';
+import 'package:surra_application/widgets/top_gradient.dart';
+import 'package:surra_application/widgets/bottom_nav_bar.dart';
+import 'package:surra_application/utils/auth_helpers.dart'; // Import the utility
 import 'add_edit_income_page.dart';
 import 'add_edit_expense_page.dart';
 import 'add_edit_category_page.dart';
@@ -32,16 +33,14 @@ class _EditProfilePageState extends State<EditProfilePage> {
     _loadAll();
   }
 
-  // ======= GET PROFILE ID =======
+  // ======= GET PROFILE ID USING UTILITY FUNCTION =======
   Future<String> _getProfileId() async {
-    final uid = _sb.auth.currentUser?.id;
-    if (uid == null) throw Exception('Not signed in');
-    final row = await _sb
-        .from('User_Profile')
-        .select('profile_id')
-        .eq('user_id', uid)
-        .single();
-    return row['profile_id'] as String;
+    final profileId = await getProfileId(context);
+    if (profileId == null) {
+      // The utility function already handles navigation to login
+      throw Exception('User not authenticated');
+    }
+    return profileId;
   }
 
   Future<void> _loadAll() async {
@@ -113,14 +112,11 @@ class _EditProfilePageState extends State<EditProfilePage> {
   // ---------------- Navigation Methods ----------------
   void _navigateToEditBalance() async {
     try {
-      final profileId = await _getProfileId();
       final result = await Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) => EditBalancePage(
-            currentBalance: _currentBalance,
-            profileId: profileId,
-          ),
+          builder: (context) =>
+              EditBalancePage(currentBalance: _currentBalance),
         ),
       );
 
@@ -135,12 +131,10 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
   void _navigateToAddEditIncome({Map<String, dynamic>? income}) async {
     try {
-      final profileId = await _getProfileId();
       final result = await Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) =>
-              AddEditIncomePage(income: income, profileId: profileId),
+          builder: (context) => AddEditIncomePage(income: income),
         ),
       );
 
@@ -160,15 +154,11 @@ class _EditProfilePageState extends State<EditProfilePage> {
     }
 
     try {
-      final profileId = await _getProfileId();
       final result = await Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) => AddEditExpensePage(
-            expense: expense,
-            profileId: profileId,
-            categories: _categories,
-          ),
+          builder: (context) =>
+              AddEditExpensePage(expense: expense, categories: _categories),
         ),
       );
 
@@ -183,12 +173,10 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
   void _navigateToAddEditCategory({Map<String, dynamic>? category}) async {
     try {
-      final profileId = await _getProfileId();
       final result = await Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) =>
-              AddEditCategoryPage(category: category, profileId: profileId),
+          builder: (context) => AddEditCategoryPage(category: category),
         ),
       );
 

@@ -1,17 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:surra_application/utils/auth_helpers.dart'; // Import the utility
 
 class AddEditExpensePage extends StatefulWidget {
   final Map<String, dynamic>? expense;
-  final String profileId;
   final List<Map<String, dynamic>> categories;
 
-  const AddEditExpensePage({
-    super.key,
-    this.expense,
-    required this.profileId,
-    required this.categories,
-  });
+  const AddEditExpensePage({super.key, this.expense, required this.categories});
 
   @override
   State<AddEditExpensePage> createState() => _AddEditExpensePageState();
@@ -28,6 +23,15 @@ class _AddEditExpensePageState extends State<AddEditExpensePage> {
   bool _loading = false;
   late List<Map<String, dynamic>> _uniqueCategories;
   List<Map<String, dynamic>> _existingExpenses = [];
+
+  // ======= GET PROFILE ID USING UTILITY FUNCTION =======
+  Future<String> _getProfileId() async {
+    final profileId = await getProfileId(context);
+    if (profileId == null) {
+      throw Exception('User not authenticated');
+    }
+    return profileId;
+  }
 
   @override
   void initState() {
@@ -72,10 +76,11 @@ class _AddEditExpensePageState extends State<AddEditExpensePage> {
 
   Future<void> _loadExistingExpenses() async {
     try {
+      final profileId = await _getProfileId();
       final expensesData = await _sb
           .from('Fixed_Expense')
           .select('name, expense_id')
-          .eq('profile_id', widget.profileId)
+          .eq('profile_id', profileId)
           .isFilter('end_time', null);
 
       if (mounted) {
@@ -315,6 +320,7 @@ class _AddEditExpensePageState extends State<AddEditExpensePage> {
     setState(() => _loading = true);
 
     try {
+      final profileId = await _getProfileId();
       final now = DateTime.now();
 
       if (widget.expense == null) {
@@ -324,7 +330,7 @@ class _AddEditExpensePageState extends State<AddEditExpensePage> {
           'amount': amount,
           'due_date': _selectedDueDay,
           'category_id': _selectedCategoryId,
-          'profile_id': widget.profileId,
+          'profile_id': profileId,
           'start_time': _iso(now),
           'end_time': null,
         });
@@ -345,7 +351,7 @@ class _AddEditExpensePageState extends State<AddEditExpensePage> {
             'amount': amount,
             'due_date': _selectedDueDay,
             'category_id': _selectedCategoryId,
-            'profile_id': widget.profileId,
+            'profile_id': profileId,
             'start_time': _iso(now),
             'end_time': null,
           });

@@ -1,15 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:surra_application/utils/auth_helpers.dart'; // Import the utility
 
 class EditBalancePage extends StatefulWidget {
   final double currentBalance;
-  final String profileId;
 
-  const EditBalancePage({
-    super.key,
-    required this.currentBalance,
-    required this.profileId,
-  });
+  const EditBalancePage({super.key, required this.currentBalance});
 
   @override
   State<EditBalancePage> createState() => _EditBalancePageState();
@@ -21,6 +17,15 @@ class _EditBalancePageState extends State<EditBalancePage> {
   final _sb = Supabase.instance.client;
 
   bool _loading = false;
+
+  // ======= GET PROFILE ID USING UTILITY FUNCTION =======
+  Future<String> _getProfileId() async {
+    final profileId = await getProfileId(context);
+    if (profileId == null) {
+      throw Exception('User not authenticated');
+    }
+    return profileId;
+  }
 
   @override
   void initState() {
@@ -153,6 +158,7 @@ class _EditBalancePageState extends State<EditBalancePage> {
     setState(() => _loading = true);
 
     try {
+      final profileId = await _getProfileId();
       final newBalance = double.tryParse(_balanceController.text.trim());
 
       if (newBalance == null) {
@@ -170,7 +176,7 @@ class _EditBalancePageState extends State<EditBalancePage> {
       await _sb
           .from('User_Profile')
           .update({'current_balance': newBalance})
-          .eq('profile_id', widget.profileId);
+          .eq('profile_id', profileId);
 
       // Record transaction only if there's a difference
       if (difference > 0) {
@@ -178,7 +184,7 @@ class _EditBalancePageState extends State<EditBalancePage> {
           'type': transactionType,
           'amount': difference,
           'date': _iso(DateTime.now()),
-          'profile_id': widget.profileId,
+          'profile_id': profileId,
           'category_id': null, // No category for balance adjustments
         });
       }

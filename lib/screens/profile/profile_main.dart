@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:surra_application/theme/app_colors.dart';
 import 'package:surra_application/widgets/top_gradient.dart';
 import 'package:surra_application/widgets/curved_dark_section.dart';
 import 'package:surra_application/widgets/bottom_nav_bar.dart';
-import 'package:surra_application/screens/spending_insight.dart';
-import 'package:surra_application/screens/edit_profile.dart';
+import 'package:surra_application/screens/profile/spending_insight.dart';
+import 'package:surra_application/screens/profile/edit_profile/edit_profile.dart';
+import 'package:surra_application/utils/auth_helpers.dart'; // Import the utility
 
 class ProfileMainPage extends StatefulWidget {
   const ProfileMainPage({super.key});
@@ -32,16 +35,14 @@ class _ProfileMainPageState extends State<ProfileMainPage> {
     _refreshData();
   }
 
-  // ======= GET PROFILE ID =======
+  // ======= GET PROFILE ID USING UTILITY FUNCTION =======
   Future<String> _getProfileId() async {
-    final uid = _sb.auth.currentUser?.id;
-    if (uid == null) throw Exception('Not signed in');
-    final row = await _sb
-        .from('User_Profile')
-        .select('profile_id')
-        .eq('user_id', uid)
-        .single();
-    return row['profile_id'] as String;
+    final profileId = await getProfileId(context);
+    if (profileId == null) {
+      // The utility function already handles navigation to login
+      throw Exception('User not authenticated');
+    }
+    return profileId;
   }
 
   // ======= REFRESH DATA =======
@@ -98,7 +99,7 @@ class _ProfileMainPageState extends State<ProfileMainPage> {
 
       if (shouldLogout == true) {
         await _sb.auth.signOut();
-        // Navigate to login page - adjust the route name as needed
+        // The utility function will handle navigation when profile ID is requested
         if (mounted) {
           Navigator.pushNamedAndRemoveUntil(
             context,
@@ -113,24 +114,6 @@ class _ProfileMainPageState extends State<ProfileMainPage> {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('Logout failed: $e')));
-      }
-    }
-  }
-
-  Future<void> _recoverFromError() async {
-    try {
-      // Sign out and back in if there's an auth issue
-      await _sb.auth.signOut();
-      // Navigate to login page - you'll need to adjust this based on your app structure
-      if (mounted) {
-        Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
-      }
-    } catch (e) {
-      print('Recovery failed: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Recovery failed: $e')));
       }
     }
   }

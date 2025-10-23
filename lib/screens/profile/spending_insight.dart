@@ -2,9 +2,10 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../theme/app_colors.dart';
-import '../widgets/top_gradient.dart';
-import '../widgets/bottom_nav_bar.dart';
+import 'package:surra_application/theme/app_colors.dart';
+import 'package:surra_application/widgets/top_gradient.dart';
+import 'package:surra_application/widgets/bottom_nav_bar.dart';
+import 'package:surra_application/utils/auth_helpers.dart'; // Import the utility
 
 class SpendingInsightPage extends StatefulWidget {
   const SpendingInsightPage({super.key});
@@ -23,16 +24,14 @@ class _SpendingInsightPageState extends State<SpendingInsightPage> {
     _future = _fetchSpendingData();
   }
 
-  // ======= GET PROFILE ID =======
+  // ======= GET PROFILE ID USING UTILITY FUNCTION =======
   Future<String> _getProfileId() async {
-    final uid = _sb.auth.currentUser?.id;
-    if (uid == null) throw Exception('Not signed in');
-    final row = await _sb
-        .from('User_Profile')
-        .select('profile_id')
-        .eq('user_id', uid)
-        .single();
-    return row['profile_id'] as String;
+    final profileId = await getProfileId(context);
+    if (profileId == null) {
+      // The utility function already handles navigation to login
+      throw Exception('User not authenticated');
+    }
+    return profileId;
   }
 
   // ======= FETCH DATA =======

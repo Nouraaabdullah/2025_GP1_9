@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:surra_application/utils/auth_helpers.dart'; // Import the utility
 
 class AddEditIncomePage extends StatefulWidget {
   final Map<String, dynamic>? income;
-  final String profileId;
 
-  const AddEditIncomePage({super.key, this.income, required this.profileId});
+  const AddEditIncomePage({super.key, this.income});
 
   @override
   State<AddEditIncomePage> createState() => _AddEditIncomePageState();
@@ -20,6 +20,15 @@ class _AddEditIncomePageState extends State<AddEditIncomePage> {
 
   bool _loading = false;
   List<Map<String, dynamic>> _existingIncomes = [];
+
+  // ======= GET PROFILE ID USING UTILITY FUNCTION =======
+  Future<String> _getProfileId() async {
+    final profileId = await getProfileId(context);
+    if (profileId == null) {
+      throw Exception('User not authenticated');
+    }
+    return profileId;
+  }
 
   @override
   void initState() {
@@ -36,10 +45,11 @@ class _AddEditIncomePageState extends State<AddEditIncomePage> {
 
   Future<void> _loadExistingIncomes() async {
     try {
+      final profileId = await _getProfileId();
       final incomesData = await _sb
           .from('Fixed_Income')
           .select('name, income_id')
-          .eq('profile_id', widget.profileId)
+          .eq('profile_id', profileId)
           .isFilter('end_time', null);
 
       if (mounted) {
@@ -80,11 +90,12 @@ class _AddEditIncomePageState extends State<AddEditIncomePage> {
 
   // Get current monthly record ID
   Future<String?> _getCurrentMonthlyRecordId() async {
+    final profileId = await _getProfileId();
     final now = DateTime.now();
     final monthlyRecords = await _sb
         .from('Monthly_Financial_Record')
         .select('record_id, period_start, period_end')
-        .eq('profile_id', widget.profileId)
+        .eq('profile_id', profileId)
         .order('period_start', ascending: false);
 
     for (final record in monthlyRecords) {
@@ -156,6 +167,7 @@ class _AddEditIncomePageState extends State<AddEditIncomePage> {
     setState(() => _loading = true);
 
     try {
+      final profileId = await _getProfileId();
       final name = _nameController.text.trim();
       final amount = double.tryParse(_amountController.text.trim()) ?? 0.0;
       final now = DateTime.now();
@@ -166,7 +178,7 @@ class _AddEditIncomePageState extends State<AddEditIncomePage> {
           'name': name,
           'monthly_income': amount,
           'payday': _selectedPayDay,
-          'profile_id': widget.profileId,
+          'profile_id': profileId,
           'start_time': _iso(now),
           'end_time': null,
         });
@@ -190,7 +202,7 @@ class _AddEditIncomePageState extends State<AddEditIncomePage> {
             'name': name,
             'monthly_income': amount,
             'payday': _selectedPayDay,
-            'profile_id': widget.profileId,
+            'profile_id': profileId,
             'start_time': _iso(now),
             'end_time': null,
           });

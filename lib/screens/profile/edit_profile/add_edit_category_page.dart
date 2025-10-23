@@ -1,16 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:math' as math;
+import 'package:surra_application/utils/auth_helpers.dart'; // Import the utility
 
 class AddEditCategoryPage extends StatefulWidget {
   final Map<String, dynamic>? category;
-  final String profileId;
 
-  const AddEditCategoryPage({
-    super.key,
-    this.category,
-    required this.profileId,
-  });
+  const AddEditCategoryPage({super.key, this.category});
 
   @override
   State<AddEditCategoryPage> createState() => _AddEditCategoryPageState();
@@ -62,6 +58,16 @@ class _AddEditCategoryPageState extends State<AddEditCategoryPage> {
     {'icon': 'description', 'name': 'Documents', 'data': Icons.description},
   ];
 
+  // ======= GET PROFILE ID USING UTILITY FUNCTION =======
+  Future<String> _getProfileId() async {
+    final profileId = await getProfileId(context);
+    if (profileId == null) {
+      // The utility function already handles navigation to login
+      throw Exception('User not authenticated');
+    }
+    return profileId;
+  }
+
   bool get _isEditingFixedCategory =>
       widget.category != null && widget.category!['type'] == 'Fixed';
 
@@ -88,10 +94,11 @@ class _AddEditCategoryPageState extends State<AddEditCategoryPage> {
   // Check if category name already exists (case insensitive)
   Future<bool> _isCategoryNameDuplicate(String name) async {
     try {
+      final profileId = await _getProfileId();
       final existingCategories = await _sb
           .from('Category')
           .select('name, category_id')
-          .eq('profile_id', widget.profileId)
+          .eq('profile_id', profileId)
           .eq('is_archived', false);
 
       for (final category in existingCategories) {
@@ -115,10 +122,11 @@ class _AddEditCategoryPageState extends State<AddEditCategoryPage> {
   // Check if color is already used by another category
   Future<bool> _isColorDuplicate(String color) async {
     try {
+      final profileId = await _getProfileId();
       final existingCategories = await _sb
           .from('Category')
           .select('icon_color, category_id')
-          .eq('profile_id', widget.profileId)
+          .eq('profile_id', profileId)
           .eq('is_archived', false);
 
       for (final category in existingCategories) {
@@ -163,6 +171,7 @@ class _AddEditCategoryPageState extends State<AddEditCategoryPage> {
     setState(() => _loading = true);
 
     try {
+      final profileId = await _getProfileId();
       final limit = _limitController.text.trim().isEmpty
           ? null
           : double.tryParse(_limitController.text.trim());
@@ -174,7 +183,7 @@ class _AddEditCategoryPageState extends State<AddEditCategoryPage> {
         'icon': _selectedIcon,
         'icon_color': _selectedColor,
         'is_archived': false,
-        'profile_id': widget.profileId,
+        'profile_id': profileId,
       };
 
       if (widget.category == null) {

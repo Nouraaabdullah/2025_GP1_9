@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
-import '../screens/Log/log_transaction_manually.dart';
+import '../screens/log/log_transaction_manually.dart';
 
 class SurraBottomBar extends StatelessWidget {
   final VoidCallback onTapDashboard;

@@ -1,4 +1,3 @@
-// /Users/lamee/Documents/GitHub/2025_GP1_9/lib/screens/Dashboard/dashboard_page.dart
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -10,9 +9,9 @@ import '../../widgets/bottom_nav_bar.dart';
 import 'income_chart.dart';
 import 'trends_chart.dart';
 import 'savings_chart.dart';
-import 'category_chart.dart'; // exposes CategorySlice + colorFromIconOrSeed
+import 'category_chart.dart'; 
 
-// ✅ Auth helper (redirects to /login if not signed in and returns null)
+// Auth helper (redirects to /login if not signed in and returns null)
 import '../../utils/auth_helpers.dart';
 
 class DashboardPage extends StatefulWidget {
@@ -25,9 +24,8 @@ class _DashboardPageState extends State<DashboardPage> {
   int _periodIndex = 1; // 0 Weekly, 1 Monthly, 2 Yearly
   bool _showAllCategories = false; // for monthly/yearly grid
   bool _showAllWeekly = false;     // for weekly legend grid
-
-  // NEW: controls monthly/yearly expand/collapse when center is tapped
-  bool _donutExpanded = false; // default hidden as requested
+  bool _isRefreshing = false;
+  bool _donutExpanded = false; 
 
   // Accent palette
   static const _violet = Color(0xFF8B5CF6);
@@ -71,6 +69,19 @@ class _DashboardPageState extends State<DashboardPage> {
     _loadAll();
   }
 
+  Future<void> _refreshData() async {
+    if (_isRefreshing) return;
+    setState(() { _isRefreshing = true; });
+    try {
+      await _loadAll(); 
+    } catch (e) {
+      debugPrint('Error refreshing data: $e');
+    } finally {
+      if (!mounted) return;
+      setState(() { _isRefreshing = false; });
+    }
+  }
+
   Future<void> _loadAll() async {
     setState(() { _loading = true; _error = null; });
 
@@ -92,7 +103,7 @@ class _DashboardPageState extends State<DashboardPage> {
     }
 
     try {
-      // ✅ Get profileId via shared auth helper (handles redirect if signed out)
+      // Get profileId via shared auth helper (handles redirect if signed out)
       final profileId = await getProfileId(context);
       if (profileId == null) {
         if (!mounted) return;
@@ -805,12 +816,16 @@ class _DashboardPageState extends State<DashboardPage> {
     final String savingsYAxisTitle =
         _periodIndex == 0 ? 'Weekly savings' : _periodIndex == 1 ? 'Monthly savings' : 'Yearly savings';
 
-    return SingleChildScrollView(
-      physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, kBottomNavigationBarHeight + 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+return RefreshIndicator(
+  color: AppColors.accent,
+  backgroundColor: AppColors.card,
+  onRefresh: _refreshData,
+  child: SingleChildScrollView(
+    physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+    padding: const EdgeInsets.fromLTRB(20, 16, 20, kBottomNavigationBarHeight + 24),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
           Stack(
             children: [
               Positioned(
@@ -977,9 +992,7 @@ class _DashboardPageState extends State<DashboardPage> {
                           },
                         ),
                         const SizedBox(height: 12),
-
-                        // Removed the extra selected category pill under the chart as requested
-
+                        
                         // Expandable full list controlled only by chart tap
                         AnimatedSize(
                           duration: const Duration(milliseconds: 220),
@@ -1032,6 +1045,7 @@ class _DashboardPageState extends State<DashboardPage> {
           ),
         ],
       ),
+     ),
     );
   }
 

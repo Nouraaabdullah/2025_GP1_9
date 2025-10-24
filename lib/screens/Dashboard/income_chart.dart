@@ -1,10 +1,9 @@
-// /Users/lamee/Documents/GitHub/2025_GP1_9/lib/screens/Dashboard/income_chart.dart
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../theme/app_colors.dart';
 
-// ✅ Auth helper import (redirects to /login if not signed in)
+// Auth helper import (redirects to /login if not signed in)
 import '../../utils/auth_helpers.dart';
 
 class IncomeSemicircleGauge extends StatefulWidget {
@@ -69,7 +68,7 @@ class _IncomeSemicircleGaugeState extends State<IncomeSemicircleGauge> {
   @override
   void initState() {
     super.initState();
-    // ✅ Lightweight auth check; if user is signed out this will navigate to /login.
+    // Lightweight auth check; if user is signed out this will navigate to /login.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       getProfileId(context);
     });
@@ -354,7 +353,7 @@ class _PurpleBubble extends StatelessWidget {
               style: const TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.w800,
-                fontSize: 14,
+                fontSize: 12,
               ),
             ),
             const SizedBox(height: 4),

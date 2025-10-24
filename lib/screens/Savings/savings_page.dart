@@ -488,82 +488,56 @@ Future<void> _fetchGoals() async {
     }
   }
 
-  Future<Goal?> _fetchGoalById(String goalId) async {
-    try {
-      final res = await supabase
-          .from('Goal')
-          .select()
-          .eq('goal_id', goalId)
-          .single();
-      if (res == null) return null;
-      return Goal(
-        id: res['goal_id'],
-        title: res['name'] ?? '',
-        targetAmount: (res['target_amount'] ?? 0).toDouble(),
-        savedAmount: (res['saved_amount'] ?? 0).toDouble(),
-        createdAt: DateTime.parse(res['created_at']),
-        targetDate: res['target_date'] != null ? DateTime.parse(res['target_date']) : null,
-        type: _statusToType(res['status']),
-        status: res['status'],
-      );
-    } catch (e) {
-      debugPrint('❌ Error fetching goal by ID: $e');
-      return null;
-    }
-  }
+
 Future<void> _autoAdjustOverAssignedGoals() async {
   try {
-    // 🧮 Get total assigned amount across all goals
-    final transfers = await supabase.from('Goal_Transfer').select('amount, direction');
+    // 1️⃣ Compute total assigned (only Active or Achieved goals)
+    final activeGoals = _goals.where((g) => g.status != 'Archived').toList();
+    final totalAssigned = activeGoals.fold<double>(0.0, (sum, g) => sum + g.savedAmount);
 
-    double totalAssigned = 0;
-    for (final t in (transfers as List? ?? [])) {
-      final amount = (t['amount'] ?? 0).toDouble();
-      final dir = (t['direction'] ?? '').toLowerCase();
-      if (dir == 'assign') totalAssigned += amount;
-      if (dir == 'unassign') totalAssigned -= amount;
-    }
-
+    // 2️⃣ Check if correction is needed
     if (totalAssigned <= _totalSaving) return;
 
-    final difference = totalAssigned - _totalSaving;
-    debugPrint('⚠️ Assigned exceeds total by $difference SAR. Adjusting goals...');
+    final excess = totalAssigned - _totalSaving;
+    debugPrint('⚠️ Over-assigned detected. Need to deduct $excess SAR.');
 
-    final goals = await supabase
-        .from('Goal')
-        .select('goal_id, name, status, target_amount')
-        .inFilter('status', ['Active', 'Completed']);
+    // 3️⃣ Proportional deduction (weighted by savedAmount)
+    final ratioList = activeGoals.map((g) {
+      final ratio = g.savedAmount / totalAssigned;
+      final deduction = ratio * excess;
+      return {'goal': g, 'deduct': deduction};
+    }).toList();
 
-    if (goals == null || (goals as List).isEmpty) {
-      debugPrint('No goals to adjust.');
-      return;
+    // 4️⃣ Apply deductions safely (never below zero)
+    for (final item in ratioList) {
+      final g = item['goal'] as Goal;
+      final newAmount = (g.savedAmount - (item['deduct'] as double)).clamp(0.0, double.infinity);
+
+final updatedGoal = g.copyWith(savedAmount: newAmount);
+final idx = _goals.indexWhere((x) => x.id == g.id);
+if (idx != -1) _goals[idx] = updatedGoal;
+
+
+      // Reflect change in Supabase (insert unassign record)
+      await supabase.from('Goal_Transfer').insert({
+        'goal_id': g.id,
+        'amount': (item['deduct'] as double),
+        'direction': 'Unassign',
+        'created_at': DateTime.now().toIso8601String(),
+      });
     }
 
-    final goalList = goals as List;
-    final count = goalList.length;
-    final double deductPerGoal = difference / count;
-
-    for (final goal in goalList) {
-      final id = goal['goal_id'];
-      final name = goal['name'];
-      final target = (goal['target_amount'] ?? 0).toDouble();
-      final newTarget = (target - deductPerGoal).clamp(0, double.infinity);
-
-      await supabase.from('Goal').update({
-        'target_amount': newTarget,
-        if (newTarget > 0) 'status': 'Active',
-      }).eq('goal_id', id);
-
-      debugPrint('🔻 Deducted $deductPerGoal from "$name" (new target: $newTarget)');
-    }
-
-    await Future.delayed(const Duration(milliseconds: 300));
+    // 5️⃣ Refresh display
+    await _fetchGoals();
     _recalculateBalances();
-    setState(() {});
+
+    debugPrint('✅ Adjusted all over-assigned goals proportionally.');
   } catch (e) {
     debugPrint('❌ Error in _autoAdjustOverAssignedGoals: $e');
   }
 }
+
+
 
 void _recalculateBalances() {
   // 1️⃣ Compute total assigned from all goals (Active + Achieved)
@@ -2288,10 +2262,6 @@ class _EnhancedIconButton extends StatelessWidget {
     );
   }
 }
-
-
-
-
 
 class AddGoalFab extends StatelessWidget {
   final VoidCallback? onPressed;

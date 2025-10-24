@@ -209,7 +209,25 @@ class _Bubble extends StatelessWidget {
     // line 1 -> white bold title (Expenses or Earnings or Income)
     // line 2 -> gray value (e.g., 122 SAR)
     final parts = text.split('\n');
-    final label = parts.isNotEmpty ? parts[0] : '';
+
+    // 🔤 Expand short month names to full names
+    final months = {
+      'Jan': 'January',
+      'Feb': 'February',
+      'Mar': 'March',
+      'Apr': 'April',
+      'May': 'May',
+      'Jun': 'June',
+      'Jul': 'July',
+      'Aug': 'August',
+      'Sep': 'September',
+      'Oct': 'October',
+      'Nov': 'November',
+      'Dec': 'December',
+    };
+
+    final rawLabel = parts.isNotEmpty ? parts[0].trim() : '';
+    final label = months[rawLabel] ?? rawLabel;
     final title = parts.length > 1 ? parts[1] : '';
     final value = parts.length > 2 ? parts[2] : '';
 
@@ -240,7 +258,7 @@ class _Bubble extends StatelessWidget {
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: AppColors.textGrey,
-                  fontSize: 12,
+                  fontSize: 10,
                   fontWeight: FontWeight.w700,
                 ),
               ),

@@ -1,14 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:surra_application/theme/app_colors.dart';
 import 'package:surra_application/widgets/top_gradient.dart';
 import 'package:surra_application/widgets/curved_dark_section.dart';
 import 'package:surra_application/widgets/bottom_nav_bar.dart';
 import 'package:surra_application/screens/profile/spending_insight.dart';
 import 'package:surra_application/screens/profile/edit_profile/edit_profile.dart';
-import 'package:surra_application/utils/auth_helpers.dart'; // Import the utility
+import 'package:surra_application/utils/auth_helpers.dart';
 
 class ProfileMainPage extends StatefulWidget {
   const ProfileMainPage({super.key});
@@ -31,21 +29,17 @@ class _ProfileMainPageState extends State<ProfileMainPage> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Refresh when returning to this page
     _refreshData();
   }
 
-  // ======= GET PROFILE ID USING UTILITY FUNCTION =======
   Future<String> _getProfileId() async {
     final profileId = await getProfileId(context);
     if (profileId == null) {
-      // The utility function already handles navigation to login
       throw Exception('User not authenticated');
     }
     return profileId;
   }
 
-  // ======= REFRESH DATA =======
   Future<void> _refreshData() async {
     if (_isRefreshing) return;
 
@@ -59,18 +53,18 @@ class _ProfileMainPageState extends State<ProfileMainPage> {
         _future = Future.value(newData);
       });
     } catch (e) {
-      print('Error refreshing data: $e');
+      debugPrint('Error refreshing data: $e');
     } finally {
-      setState(() {
-        _isRefreshing = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isRefreshing = false;
+        });
+      }
     }
   }
 
-  // ======= LOGOUT METHOD =======
   Future<void> _logout() async {
     try {
-      // Show confirmation dialog
       final shouldLogout = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
@@ -99,7 +93,6 @@ class _ProfileMainPageState extends State<ProfileMainPage> {
 
       if (shouldLogout == true) {
         await _sb.auth.signOut();
-        // The utility function will handle navigation when profile ID is requested
         if (mounted) {
           Navigator.pushNamedAndRemoveUntil(
             context,
@@ -109,7 +102,7 @@ class _ProfileMainPageState extends State<ProfileMainPage> {
         }
       }
     } catch (e) {
-      print('Logout error: $e');
+      debugPrint('Logout error: $e');
       if (mounted) {
         ScaffoldMessenger.of(
           context,
@@ -118,12 +111,10 @@ class _ProfileMainPageState extends State<ProfileMainPage> {
     }
   }
 
-  // ======= FETCH DATA =======
   Future<_DashboardData> _fetchDashboard() async {
     try {
       final profileId = await _getProfileId();
 
-      // --- helper for date formatting
       String _isoDate(DateTime d) =>
           '${d.year.toString().padLeft(4, '0')}-'
           '${d.month.toString().padLeft(2, '0')}-'
@@ -134,7 +125,7 @@ class _ProfileMainPageState extends State<ProfileMainPage> {
       final todayIso = _isoDate(now);
       final firstIso = _isoDate(firstOfMonth);
 
-      // 1) PROFILE INFO - from User_Profile table
+      // 1) PROFILE INFO
       final prof = await _sb
           .from('User_Profile')
           .select('full_name,current_balance')
@@ -144,10 +135,10 @@ class _ProfileMainPageState extends State<ProfileMainPage> {
       final fullName = (prof?['full_name'] as String?) ?? 'User';
       final currentBalance = _toDouble(prof?['current_balance']) ?? 0.0;
 
-      // 2) MONTHLY FINANCIAL RECORD - get active month record
+      // 2) MONTHLY FINANCIAL RECORD (earnings from total_earning)
       final monthlyRecord = await _sb
           .from('Monthly_Financial_Record')
-          .select('total_income, total_expense, monthly_saving')
+          .select('total_income, total_expense, total_earning')
           .eq('profile_id', profileId)
           .lte('period_start', todayIso)
           .gte('period_end', todayIso)
@@ -155,13 +146,10 @@ class _ProfileMainPageState extends State<ProfileMainPage> {
 
       double totalIncome = _toDouble(monthlyRecord?['total_income']) ?? 0.0;
       double totalExpense = _toDouble(monthlyRecord?['total_expense']) ?? 0.0;
-      double monthlySaving = _toDouble(monthlyRecord?['monthly_saving']) ?? 0.0;
+      double totalEarnings = _toDouble(monthlyRecord?['total_earning']) ?? 0.0;
 
-      // If no active monthly record found, use fallback calculation
+      // Fallback if no active monthly record: compute from transactions
       if (monthlyRecord == null) {
-        print('No active monthly record found, using transaction fallback');
-
-        // Fallback: Calculate from transactions for current month
         final expenses = await _sb
             .from('Transaction')
             .select('amount,date,type')
@@ -187,11 +175,9 @@ class _ProfileMainPageState extends State<ProfileMainPage> {
         for (final r in incomes) {
           totalIncome += _toDouble(r['amount']) ?? 0.0;
         }
-
-        monthlySaving = totalIncome - totalExpense;
       }
 
-      // 3) CATEGORY CARDS - get all categories
+      // 3) CATEGORIES
       final cats = await _sb
           .from('Category')
           .select('category_id,name,monthly_limit,icon,icon_color')
@@ -199,7 +185,6 @@ class _ProfileMainPageState extends State<ProfileMainPage> {
           .eq('is_archived', false)
           .order('name');
 
-      // Get transactions for this month to calculate category spending
       final trxThisMonth = await _sb
           .from('Transaction')
           .select('category_id,amount,type,date')
@@ -220,12 +205,13 @@ class _ProfileMainPageState extends State<ProfileMainPage> {
       for (final c in cats) {
         final id = c['category_id'] as String;
         final name = (c['name'] as String?) ?? 'Category';
-        final limitRaw = c['monthly_limit'];
-        final limit = _toDouble(limitRaw);
+        final limit = _toDouble(c['monthly_limit']);
         final spent = totalByCat[id] ?? 0.0;
+
         final pct = (limit != null && limit > 0)
-            ? (spent / limit) * 100.0
+            ? ((spent / limit) * 100.0).clamp(0.0, 100.0)
             : null;
+
         final icon = c['icon'] as String? ?? 'category';
         final color = c['icon_color'] as String? ?? '#7D5EF6';
 
@@ -245,37 +231,35 @@ class _ProfileMainPageState extends State<ProfileMainPage> {
         currentBalance: currentBalance,
         totalIncome: totalIncome,
         totalExpense: totalExpense,
-        monthlySaving: monthlySaving,
+        totalEarnings: totalEarnings,
         categories: items,
       );
     } catch (e) {
-      print('Error fetching dashboard data: $e');
-      // Return default data in case of error
+      debugPrint('Error fetching dashboard data: $e');
       return _DashboardData(
         fullName: 'User',
         currentBalance: 0.0,
         totalIncome: 0.0,
         totalExpense: 0.0,
-        monthlySaving: 0.0,
-        categories: [],
+        totalEarnings: 0.0,
+        categories: const [],
       );
     }
   }
 
-  // ======= HELPERS =======
-  double? _toDouble(dynamic v) {
-    if (v == null) return null;
+  double _toDouble(dynamic v) {
+    if (v == null) return 0.0;
     if (v is num) return v.toDouble();
     if (v is String) {
-      if (v.isEmpty) return null;
-      return double.tryParse(v);
+      if (v.isEmpty) return 0.0;
+      return double.tryParse(v) ?? 0.0;
     }
-    return null;
+    return 0.0;
   }
 
-  String _fmt(double v) => v.toStringAsFixed(0);
+  // Show two decimals everywhere for currency values
+  String _fmt2(double v) => v.toStringAsFixed(2);
 
-  // ======= UI =======
   @override
   Widget build(BuildContext context) {
     final double bottomPad =
@@ -338,12 +322,15 @@ class _ProfileMainPageState extends State<ProfileMainPage> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text(
-                              'Welcome ${data.fullName}',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 28,
-                                fontWeight: FontWeight.w600,
+                            Expanded(
+                              child: Text(
+                                'Welcome ${data.fullName}',
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 28,
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
                             ),
                             Row(
@@ -360,7 +347,19 @@ class _ProfileMainPageState extends State<ProfileMainPage> {
                                       ),
                                     ),
                                   ),
-                                // Logout button
+                                IconButton(
+                                  icon: const Icon(
+                                    Icons.edit,
+                                    color: Colors.white,
+                                  ),
+                                  onPressed: () => Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) =>
+                                          const EditProfilePage(),
+                                    ),
+                                  ).then((_) => _refreshData()),
+                                ),
                                 IconButton(
                                   icon: const Icon(
                                     Icons.logout,
@@ -368,24 +367,6 @@ class _ProfileMainPageState extends State<ProfileMainPage> {
                                   ),
                                   onPressed: _logout,
                                   tooltip: 'Logout',
-                                ),
-                                // Edit button
-                                IconButton(
-                                  icon: const Icon(
-                                    Icons.edit,
-                                    color: Colors.white,
-                                  ),
-                                  onPressed: () =>
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (context) =>
-                                              const EditProfilePage(),
-                                        ),
-                                      ).then((_) {
-                                        // Refresh data when returning from edit page
-                                        _refreshData();
-                                      }),
                                 ),
                               ],
                             ),
@@ -409,46 +390,51 @@ class _ProfileMainPageState extends State<ProfileMainPage> {
                                   color: Color(0xFFD9D9D9),
                                   fontSize: 16,
                                   fontWeight: FontWeight.w500,
+                                  height: 1.1,
                                 ),
                               ),
-                              const SizedBox(height: 8),
+                              const SizedBox(height: 6),
                               Text(
-                                '${_fmt(data.currentBalance)} SAR',
+                                '${_fmt2(data.currentBalance)} SAR',
                                 style: const TextStyle(
                                   color: Color(0xFFD9D9D9),
                                   fontSize: 28,
                                   fontWeight: FontWeight.w700,
+                                  height: 1.1,
                                 ),
                               ),
                             ],
                           ),
                         ),
-                        const SizedBox(height: 18),
+                        const SizedBox(height: 16),
 
-                        // Expense / Income / Savings
+                        // Expense / Income / Earnings
                         Row(
                           children: [
                             Expanded(
                               child: _mini(
                                 'Expense',
-                                '${_fmt(data.totalExpense)} SAR',
-                                true,
+                                '${_fmt2(data.totalExpense)} SAR',
+                                Icons.arrow_downward,
+                                const Color(0xFFFF6B9D),
                               ),
                             ),
                             const SizedBox(width: 8),
                             Expanded(
                               child: _mini(
                                 'Income',
-                                '${_fmt(data.totalIncome)} SAR',
-                                false,
+                                '${_fmt2(data.totalIncome)} SAR',
+                                Icons.arrow_upward,
+                                const Color(0xFF4ECDC4),
                               ),
                             ),
                             const SizedBox(width: 8),
                             Expanded(
                               child: _mini(
-                                'Savings',
-                                '${_fmt(data.monthlySaving)} SAR',
-                                data.monthlySaving >= 0,
+                                'Earnings',
+                                '${_fmt2(data.totalEarnings)} SAR',
+                                Icons.arrow_upward,
+                                const Color(0xFFFFD93D),
                               ),
                             ),
                           ],
@@ -474,6 +460,7 @@ class _ProfileMainPageState extends State<ProfileMainPage> {
                                   color: Colors.white,
                                   fontSize: 15,
                                   fontWeight: FontWeight.w500,
+                                  height: 1.1,
                                 ),
                               ),
                             ),
@@ -495,16 +482,14 @@ class _ProfileMainPageState extends State<ProfileMainPage> {
                                             const SpendingInsightPage(),
                                       ),
                                     )
-                                    .then((_) {
-                                      // Refresh data when returning from insights page
-                                      _refreshData();
-                                    });
+                                    .then((_) => _refreshData());
                               },
                               child: const Text(
                                 'View Details',
                                 style: TextStyle(
                                   fontSize: 13,
                                   fontWeight: FontWeight.w400,
+                                  height: 1.1,
                                 ),
                               ),
                             ),
@@ -518,7 +503,7 @@ class _ProfileMainPageState extends State<ProfileMainPage> {
                                   crossAxisCount: 3,
                                   mainAxisSpacing: 12,
                                   crossAxisSpacing: 12,
-                                  childAspectRatio: 0.9,
+                                  childAspectRatio: 0.82,
                                   children: const [
                                     _EmptyCategoryCard(),
                                     _EmptyCategoryCard(),
@@ -531,17 +516,17 @@ class _ProfileMainPageState extends State<ProfileMainPage> {
                                         crossAxisCount: 3,
                                         mainAxisSpacing: 12,
                                         crossAxisSpacing: 12,
-                                        childAspectRatio: 0.9,
+                                        childAspectRatio: 0.82,
                                       ),
                                   itemCount: data.categories.length,
                                   itemBuilder: (context, i) {
                                     final c = data.categories[i];
                                     final pct = c.percent == null
                                         ? '—'
-                                        : '${c.percent!.clamp(0, 999).toStringAsFixed(0)}%';
+                                        : '${c.percent!.clamp(0, 100).toStringAsFixed(0)}%';
                                     return _CategoryCard(
                                       title: c.name,
-                                      amount: '${_fmt(c.amount)} SAR',
+                                      amount: '${_fmt2(c.amount)} SAR',
                                       percent: pct,
                                       icon: c.icon,
                                       color: c.color,
@@ -567,27 +552,7 @@ class _ProfileMainPageState extends State<ProfileMainPage> {
     );
   }
 
-  Widget _mini(String label, String value, bool isPositive) {
-    Color iconColor;
-    if (label == 'Expense') {
-      iconColor = const Color(0xFFFF6B9D);
-    } else if (label == 'Income') {
-      iconColor = const Color(0xFF4ECDC4);
-    } else {
-      iconColor = isPositive
-          ? const Color(0xFF4ECDC4)
-          : const Color(0xFFFF6B9D);
-    }
-
-    IconData icon;
-    if (label == 'Expense') {
-      icon = Icons.arrow_downward;
-    } else if (label == 'Income') {
-      icon = Icons.arrow_upward;
-    } else {
-      icon = isPositive ? Icons.trending_up : Icons.trending_down;
-    }
-
+  Widget _mini(String label, String value, IconData icon, Color iconColor) {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
       decoration: BoxDecoration(
@@ -595,6 +560,7 @@ class _ProfileMainPageState extends State<ProfileMainPage> {
         borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -607,6 +573,7 @@ class _ProfileMainPageState extends State<ProfileMainPage> {
                   color: Color(0xFFD9D9D9),
                   fontSize: 12,
                   fontWeight: FontWeight.w500,
+                  height: 1.1,
                 ),
               ),
             ],
@@ -614,10 +581,12 @@ class _ProfileMainPageState extends State<ProfileMainPage> {
           const SizedBox(height: 4),
           Text(
             value,
+            textAlign: TextAlign.center,
             style: const TextStyle(
               color: Color(0xFFD9D9D9),
               fontSize: 12,
               fontWeight: FontWeight.w600,
+              height: 1.1,
             ),
           ),
         ],
@@ -631,14 +600,14 @@ class _DashboardData {
   final double currentBalance;
   final double totalIncome;
   final double totalExpense;
-  final double monthlySaving;
+  final double totalEarnings;
   final List<_CategoryDash> categories;
   _DashboardData({
     required this.fullName,
     required this.currentBalance,
     required this.totalIncome,
     required this.totalExpense,
-    required this.monthlySaving,
+    required this.totalEarnings,
     required this.categories,
   });
 }
@@ -649,7 +618,7 @@ class _CategoryDash {
   final double? percent;
   final String icon;
   final String color;
-  _CategoryDash({
+  const _CategoryDash({
     required this.name,
     required this.amount,
     required this.percent,
@@ -661,6 +630,7 @@ class _CategoryDash {
 class _CategoryCard extends StatelessWidget {
   final String title, amount, percent, icon, color;
   const _CategoryCard({
+    super.key,
     required this.title,
     required this.amount,
     required this.percent,
@@ -670,24 +640,17 @@ class _CategoryCard extends StatelessWidget {
 
   Color _hexToColor(String hex) {
     hex = hex.replaceAll('#', '');
-    if (hex.length == 6) {
-      hex = 'FF$hex';
-    }
+    if (hex.length == 6) hex = 'FF$hex';
     return Color(int.parse(hex, radix: 16));
   }
 
-  // Icon Data Conversion for IconData(U+0E37B) format
   IconData _iconDataFromString(String iconString) {
     try {
-      // Handle IconData(U+0E37B) format
       if (iconString.startsWith('IconData(U+')) {
-        // Extract the hex code from "IconData(U+0E37B)"
         final hexCode = iconString.substring(11, iconString.length - 1);
         final codePoint = int.parse(hexCode, radix: 16);
         return IconData(codePoint, fontFamily: 'MaterialIcons');
       }
-
-      // Handle old string format as fallback
       return _stringToIconData(iconString);
     } catch (e) {
       debugPrint('Error converting icon string: $iconString, error: $e');
@@ -695,7 +658,6 @@ class _CategoryCard extends StatelessWidget {
     }
   }
 
-  // Fallback for old string format
   IconData _stringToIconData(String iconString) {
     try {
       if (iconString.contains('.')) {
@@ -710,7 +672,6 @@ class _CategoryCard extends StatelessWidget {
     }
   }
 
-  // Find icon by name from available icons
   IconData _findIconByName(String iconName) {
     final iconMap = {
       'fastfood': Icons.fastfood,
@@ -743,7 +704,6 @@ class _CategoryCard extends StatelessWidget {
       'construction': Icons.construction,
       'description': Icons.description,
     };
-
     return iconMap[iconName] ?? Icons.category;
   }
 
@@ -757,61 +717,118 @@ class _CategoryCard extends StatelessWidget {
         color: AppColors.card,
         borderRadius: BorderRadius.circular(18),
       ),
-      padding: const EdgeInsets.all(10),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+      clipBehavior: Clip.hardEdge,
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // UPDATED: Same circular icon styling as EditProfilePage
+          // Icon
           Container(
-            height: 32,
-            width: 32,
-            decoration: BoxDecoration(color: iconColor, shape: BoxShape.circle),
-            child: Icon(iconData, color: Colors.white, size: 18),
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: iconColor.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: Icon(iconData, color: iconColor, size: 20),
           ),
+
           const SizedBox(height: 6),
-          Text(
-            title,
-            textAlign: TextAlign.center,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 10,
-              fontWeight: FontWeight.w500,
+
+          // Title
+          Flexible(
+            child: Text(
+              title,
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              textHeightBehavior: const TextHeightBehavior(
+                applyHeightToFirstAscent: false,
+                applyHeightToLastDescent: false,
+              ),
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 10,
+                fontWeight: FontWeight.w500,
+                height: 1.1,
+              ),
             ),
           ),
+
           const SizedBox(height: 4),
+
+          // Amount (2 decimals)
           Text(
             amount,
             textAlign: TextAlign.center,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
+            textHeightBehavior: const TextHeightBehavior(
+              applyHeightToFirstAscent: false,
+              applyHeightToLastDescent: false,
+            ),
             style: const TextStyle(
               color: Colors.white,
               fontSize: 11,
               fontWeight: FontWeight.w600,
+              height: 1.1,
             ),
           ),
+
           const SizedBox(height: 6),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-            decoration: BoxDecoration(
-              color: AppColors.bg,
-              borderRadius: BorderRadius.circular(10),
+
+          // Percent badge (kept integer to reduce overflow risk)
+          const _PercentBadgeSpacer(),
+          _PercentBadge(
+            text: percent == '—' ? 'No limit set' : '$percent budget used',
+          ),
+          const _PercentBadgeSpacer(height: 2),
+        ],
+      ),
+    );
+  }
+}
+
+class _PercentBadgeSpacer extends StatelessWidget {
+  final double height;
+  const _PercentBadgeSpacer({this.height = 0});
+  @override
+  Widget build(BuildContext context) => SizedBox(height: height);
+}
+
+class _PercentBadge extends StatelessWidget {
+  final String text;
+  const _PercentBadge({super.key, required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 20,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6),
+        decoration: BoxDecoration(
+          color: AppColors.bg,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        alignment: Alignment.center,
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            text,
+            maxLines: 1,
+            textAlign: TextAlign.center,
+            textHeightBehavior: const TextHeightBehavior(
+              applyHeightToFirstAscent: false,
+              applyHeightToLastDescent: false,
             ),
-            child: Text(
-              percent == '—' ? 'No limit set' : '$percent budget used',
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 8,
-                fontWeight: FontWeight.w500,
-              ),
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 9,
+              fontWeight: FontWeight.w500,
+              height: 1.05,
             ),
           ),
-        ],
+        ),
       ),
     );
   }

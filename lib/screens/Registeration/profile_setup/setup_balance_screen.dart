@@ -13,22 +13,22 @@ class _SetupBalanceScreenState extends State<SetupBalanceScreen> {
   final supabase = Supabase.instance.client;
   final balanceController = TextEditingController();
   bool loading = false;
+  String? errorText; // ✅ Added for inline validation
+
+  // ✅ Inline grey error style
+  Widget _errorTextWidget(String text) => Padding(
+        padding: const EdgeInsets.only(top: 6, left: 4),
+        child:
+            Text(text, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+      );
 
   @override
   Widget build(BuildContext context) {
-    // 🔹 Sum of all income entries
     double totalIncome = ProfileData.incomes.fold(
       0.0,
       (sum, income) => sum + (income['amount'] ?? 0.0),
     );
 
-    // 🔹 Sum of all fixed expenses
-    double totalExpenses = ProfileData.fixedExpenses.fold(
-      0.0,
-      (sum, e) => sum + (e['amount'] ?? 0.0),
-    );
-
-    // 🔹 Sum of all category monthly limits
     double totalCategoryLimits = ProfileData.categories.fold(
       0.0,
       (sum, c) => sum + (c['limit'] ?? 0.0),
@@ -40,8 +40,6 @@ class _SetupBalanceScreenState extends State<SetupBalanceScreen> {
         child: Column(
           children: [
             const SizedBox(height: 24),
-
-            // 🟣 Progress bar
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: Stack(
@@ -63,17 +61,17 @@ class _SetupBalanceScreenState extends State<SetupBalanceScreen> {
                 ],
               ),
             ),
-
             Expanded(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Spacer(flex: 1),
-
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 6),
                       decoration: BoxDecoration(
                         color: const Color(0xFF7959F5).withOpacity(0.15),
                         borderRadius: BorderRadius.circular(20),
@@ -88,7 +86,6 @@ class _SetupBalanceScreenState extends State<SetupBalanceScreen> {
                       ),
                     ),
                     const SizedBox(height: 16),
-
                     const Text(
                       "Current Balance",
                       style: TextStyle(
@@ -106,7 +103,6 @@ class _SetupBalanceScreenState extends State<SetupBalanceScreen> {
                       ),
                     ),
                     const SizedBox(height: 48),
-
                     const Text(
                       "Balance Amount",
                       style: TextStyle(
@@ -117,27 +113,34 @@ class _SetupBalanceScreenState extends State<SetupBalanceScreen> {
                     ),
                     const SizedBox(height: 12),
 
+                    // ✅ BALANCE FIELD
                     TextField(
                       controller: balanceController,
                       keyboardType: TextInputType.number,
-                      style: const TextStyle(color: Colors.white, fontSize: 16),
+                      style:
+                          const TextStyle(color: Colors.white, fontSize: 16),
                       decoration: InputDecoration(
                         hintText: 'Enter amount in SAR',
-                        hintStyle: const TextStyle(color: Color(0xFFB0AFC5)),
+                        hintStyle:
+                            const TextStyle(color: Color(0xFFB0AFC5)),
                         filled: true,
                         fillColor: const Color(0xFF2A2550),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: Colors.white.withOpacity(0.2)),
+                          borderSide: BorderSide(
+                              color: Colors.white.withOpacity(0.2)),
                         ),
                         focusedBorder: const OutlineInputBorder(
-                          borderRadius: BorderRadius.all(Radius.circular(12)),
-                          borderSide: BorderSide(color: Color(0xFF7959F5), width: 2),
+                          borderRadius:
+                              BorderRadius.all(Radius.circular(12)),
+                          borderSide: BorderSide(
+                              color: Color(0xFF7959F5), width: 2),
                         ),
                       ),
                     ),
-
+                    if (errorText != null) _errorTextWidget(errorText!),
                     const SizedBox(height: 48),
+
                     Container(
                       height: 3,
                       decoration: const BoxDecoration(
@@ -157,10 +160,13 @@ class _SetupBalanceScreenState extends State<SetupBalanceScreen> {
                         Expanded(
                           child: OutlinedButton(
                             style: OutlinedButton.styleFrom(
-                              side: BorderSide(color: Colors.white.withOpacity(0.3)),
+                              side: BorderSide(
+                                  color: Colors.white.withOpacity(0.3)),
                               foregroundColor: Colors.white,
-                              backgroundColor: const Color(0xFF2E2C4A).withOpacity(0.5),
-                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              backgroundColor:
+                                  const Color(0xFF2E2C4A).withOpacity(0.5),
+                              padding:
+                                  const EdgeInsets.symmetric(vertical: 14),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(12),
                               ),
@@ -175,16 +181,22 @@ class _SetupBalanceScreenState extends State<SetupBalanceScreen> {
                           child: ElevatedButton(
                             style: ElevatedButton.styleFrom(
                               backgroundColor: const Color(0xFF7959F5),
-                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              padding:
+                                  const EdgeInsets.symmetric(vertical: 14),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               elevation: 6,
-                              shadowColor: const Color(0xFF7959F5).withOpacity(0.4),
+                              shadowColor: const Color(0xFF7959F5)
+                                  .withOpacity(0.4),
                             ),
-                            onPressed: loading ? null : () => saveBalance(context, totalIncome, totalCategoryLimits),
+                            onPressed: loading
+                                ? null
+                                : () => saveBalance(context, totalIncome,
+                                    totalCategoryLimits),
                             child: loading
-                                ? const CircularProgressIndicator(color: Colors.white)
+                                ? const CircularProgressIndicator(
+                                    color: Colors.white)
                                 : const Text(
                                     "Finish Setup",
                                     style: TextStyle(
@@ -208,14 +220,19 @@ class _SetupBalanceScreenState extends State<SetupBalanceScreen> {
     );
   }
 
-  Future<void> saveBalance(BuildContext context, double totalIncome, double totalCategoryLimits) async {
+  Future<void> saveBalance(BuildContext context, double totalIncome,
+      double totalCategoryLimits) async {
     final balanceText = balanceController.text.trim();
 
+    // ✅ Inline validation
     if (balanceText.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter your current balance')),
-      );
+      setState(() => errorText = "Required");
       return;
+    } else if (double.tryParse(balanceText) == null) {
+      setState(() => errorText = "Enter numbers only");
+      return;
+    } else {
+      setState(() => errorText = null);
     }
 
     setState(() => loading = true);
@@ -225,7 +242,6 @@ class _SetupBalanceScreenState extends State<SetupBalanceScreen> {
       final user = supabase.auth.currentUser;
       if (user == null) throw Exception("No user found.");
 
-      // ✅ Get profile_id from User_Profile
       final profileResponse = await supabase
           .from('User_Profile')
           .select('profile_id')
@@ -235,7 +251,6 @@ class _SetupBalanceScreenState extends State<SetupBalanceScreen> {
       if (profileResponse == null) throw Exception("User profile not found.");
       final profileId = profileResponse['profile_id'];
 
-      // ✅ Update balance in User_Profile
       await supabase
           .from('User_Profile')
           .update({'current_balance': balanceValue})
@@ -247,23 +262,25 @@ class _SetupBalanceScreenState extends State<SetupBalanceScreen> {
         const SnackBar(content: Text('✅ Balance saved successfully!')),
       );
 
-      // ⚠ Check if total category limits exceed income
+      // ⚠ Category limit vs income warning
       if (totalIncome > 0 && totalCategoryLimits > totalIncome) {
         final exceeded = totalCategoryLimits - totalIncome;
-
         showDialog(
           context: context,
           builder: (context) => AlertDialog(
             backgroundColor: const Color(0xFF2A2550),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16)),
             title: const Text("⚠ Budget Exceeded",
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                style: TextStyle(
+                    color: Colors.white, fontWeight: FontWeight.bold)),
             content: Text(
               "Your total category limits (SAR ${totalCategoryLimits.toStringAsFixed(2)}) "
               "exceed your total income (SAR ${totalIncome.toStringAsFixed(2)}).\n\n"
               "You’ve exceeded by SAR ${exceeded.toStringAsFixed(2)}.\n\n"
               "Would you like to adjust your limits or continue?",
-              style: const TextStyle(color: Color(0xFFB0AFC5), fontSize: 14),
+              style:
+                  const TextStyle(color: Color(0xFFB0AFC5), fontSize: 14),
             ),
             actions: [
               TextButton(
@@ -271,14 +288,16 @@ class _SetupBalanceScreenState extends State<SetupBalanceScreen> {
                   Navigator.pop(context);
                   Navigator.pushNamed(context, '/setupFixedCategory');
                 },
-                child: const Text("Adjust Limits", style: TextStyle(color: Colors.white)),
+                child: const Text("Adjust Limits",
+                    style: TextStyle(color: Colors.white)),
               ),
               TextButton(
                 onPressed: () {
                   Navigator.pop(context);
                   Navigator.pushNamed(context, '/setupComplete');
                 },
-                child: const Text("Continue", style: TextStyle(color: Color(0xFFB8A8FF))),
+                child: const Text("Continue",
+                    style: TextStyle(color: Color(0xFFB8A8FF))),
               ),
             ],
           ),

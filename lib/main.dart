@@ -11,7 +11,7 @@ import 'screens/Registeration/signup_screen.dart';
 import 'screens/profile/profile_main.dart';
 import 'screens/profile/edit_profile/edit_profile.dart';
 import 'screens/Savings/savings_page.dart';
-import 'screens/Dashboard/dashboard_page.dart';
+import 'screens/dashboard/dashboard_page.dart';
 import 'screens/Registeration/profile_setup/setup_name_screen.dart';
 import 'screens/Registeration/profile_setup/setup_income_screen.dart';
 import 'screens/Registeration/profile_setup/setup_expenses_screen.dart';

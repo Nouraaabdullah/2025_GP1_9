@@ -1,4 +1,4 @@
-// lib/screens/Dashboard/category_chart.dart
+import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../theme/app_colors.dart';
@@ -67,6 +67,7 @@ class _CategoryDonutState extends State<CategoryDonut> {
   // For purple bubble
   CategorySlice? _activeSlice;
   Offset? _bubbleAnchor; // where to place bubble relative to widget
+  Timer? _hideTimer;
 
   // geometry cache
   double _outerR = 0;
@@ -79,7 +80,7 @@ class _CategoryDonutState extends State<CategoryDonut> {
   @override
   void initState() {
     super.initState();
-    // ✅ Lightweight auth check; if user is signed out this will navigate to /login.
+    // Auth check: if user is signed out this will navigate to /login.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       getProfileId(context);
     });
@@ -92,7 +93,15 @@ class _CategoryDonutState extends State<CategoryDonut> {
     if (oldWidget.slices != widget.slices) {
       _activeSlice = null;
       _bubbleAnchor = null;
+      _hideTimer?.cancel();
+      _hideTimer = null;
     }
+  }
+
+  @override
+  void dispose() {
+    _hideTimer?.cancel();
+    super.dispose();
   }
 
   @override
@@ -212,6 +221,16 @@ class _CategoryDonutState extends State<CategoryDonut> {
     setState(() {
       _activeSlice = hit.slice;
       _bubbleAnchor = anchor;
+    });
+
+    // Auto hide after 2 seconds
+    _hideTimer?.cancel();
+    _hideTimer = Timer(const Duration(seconds: 2), () {
+      if (!mounted) return;
+      setState(() {
+        _activeSlice = null;
+        _bubbleAnchor = null;
+      });
     });
 
     widget.onSliceTap?.call(hit.slice);
@@ -367,14 +386,14 @@ class _Bubble extends StatelessWidget {
               style: const TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.w800,
-                fontSize: 14,
+                fontSize: 12,
               )),
           const SizedBox(height: 4),
           Text(value,
               style: TextStyle(
                 color: AppColors.textGrey,
                 fontWeight: FontWeight.w700,
-                fontSize: 12,
+                fontSize: 10,
               )),
         ],
       ),

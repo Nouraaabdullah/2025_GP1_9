@@ -1,4 +1,3 @@
-// /Users/lamee/Documents/GitHub/2025_GP1_9/lib/screens/Log/log_transaction_manually.dart
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -619,7 +618,7 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
 
       if (currentBalance <= 0) {
         _showOverspendNote(
-          'Alert: your balance $currentBalance is at 0 or less.',
+          'Overspending Alert: your balance is now at $currentBalance ',
         );
       }
     }
@@ -630,7 +629,7 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
       SnackBar(
         content: Text(msg),
         behavior: SnackBarBehavior.floating,
-        backgroundColor: const Color.fromARGB(255, 93, 73, 148),
+        backgroundColor: const Color.fromRGBO(49, 47, 55, 1),
       ),
     );
   }

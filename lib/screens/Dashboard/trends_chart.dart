@@ -129,12 +129,15 @@ class _TrendsGroupedBarsState extends State<TrendsGroupedBars> {
               final tip = Offset(originX + which * (barW + gap) + barW / 2,
                   math.max(0, barTop - 8));
 
+              // Three-line payload for bubble:
+              // 1) label gray, 2) name white bold, 3) value gray
               _showTip(
                 Offset(tip.dx, tip.dy),
-                '${widget.labels[group]}\n$name: ${val.toStringAsFixed(0)} SAR',
+                '${widget.labels[group]}\n$name\n${val.toStringAsFixed(0)} SAR',
               );
             },
             child: Stack(
+              clipBehavior: Clip.none, // add this
               children: [
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.end,
@@ -201,7 +204,15 @@ class _Bubble extends StatelessWidget {
   const _Bubble({required this.text});
   @override
   Widget build(BuildContext context) {
-    // Purple bubble (unified style)
+    // Expecting text formatted as:
+    // line 0 -> gray label (e.g., 2025 or Week 3)
+    // line 1 -> white bold title (Expenses or Earnings or Income)
+    // line 2 -> gray value (e.g., 122 SAR)
+    final parts = text.split('\n');
+    final label = parts.isNotEmpty ? parts[0] : '';
+    final title = parts.length > 1 ? parts[1] : '';
+    final value = parts.length > 2 ? parts[2] : '';
+
     return AnimatedOpacity(
       opacity: 1,
       duration: const Duration(milliseconds: 120),
@@ -220,14 +231,42 @@ class _Bubble extends StatelessWidget {
             ),
           ],
         ),
-        child: Text(
-          text,
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            color: AppColors.textGrey,
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
-          ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (label.isNotEmpty)
+              Text(
+                label,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: AppColors.textGrey,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            if (title.isNotEmpty) const SizedBox(height: 4),
+            if (title.isNotEmpty)
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            if (value.isNotEmpty) const SizedBox(height: 4),
+            if (value.isNotEmpty)
+              Text(
+                value,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: AppColors.textGrey,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+          ],
         ),
       ),
     );

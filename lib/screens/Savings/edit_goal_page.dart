@@ -384,7 +384,7 @@ class _EditGoalPageState extends State<EditGoalPage> {
     );
   }
 
-  // Shared UI Helpers
+  
   InputDecoration _inputDecoration() {
     return const InputDecoration(
       contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),

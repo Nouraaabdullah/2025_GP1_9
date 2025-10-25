@@ -138,14 +138,14 @@ class _SavingsPageState extends State<SavingsPage> with WidgetsBindingObserver {
           .maybeSingle();
 
       if (currentRecord == null) {
-        debugPrint('⚠️ No Monthly_Financial_Record found for current month');
+        debugPrint(' No Monthly_Financial_Record found for current month');
         return;
       }
 
       final currentSaving = (currentRecord['monthly_saving'] ?? 0).toDouble();
       final currentLabel = '${now.year}-${now.month.toString().padLeft(2, '0')}';
       
-      debugPrint('✅ Refreshed current month saving from DB: $currentSaving');
+      debugPrint(' Refreshed current month saving from DB: $currentSaving');
 
       if (mounted) {
         setState(() {
@@ -153,7 +153,7 @@ class _SavingsPageState extends State<SavingsPage> with WidgetsBindingObserver {
         });
       }
     } catch (e) {
-      debugPrint('❌ Error refreshing current saving: $e');
+      debugPrint(' Error refreshing current saving: $e');
     }
   }
 
@@ -328,7 +328,7 @@ Future<void> _logCompletedGoalExpense(Goal goal) async {
             onPressed: () {
               if (selectedCategory != null) Navigator.pop(ctx, true);
             },
-            child: const Text('Confirm', style: TextStyle(color: Colors.white70)),
+            child: const Text('Confirm', style: TextStyle(color: Color.fromARGB(214, 255, 255, 255))),
           ),
         ],
       ),
@@ -336,11 +336,11 @@ Future<void> _logCompletedGoalExpense(Goal goal) async {
 
     if (confirm != true || selectedCategory == null) return;
 
-    // ✅ Step 1.5 — Check Category Limit Before Logging
+    // Check Category Limit Before Logging
     final now = DateTime.now();
     final monthStart = DateTime(now.year, now.month, 1);
 
-    // 1️⃣ Get current monthly record
+    //  Get current monthly record
     final mfr = await supabase
         .from('Monthly_Financial_Record')
         .select('record_id')
@@ -351,7 +351,7 @@ Future<void> _logCompletedGoalExpense(Goal goal) async {
     if (mfr != null) {
       final recordId = mfr['record_id'];
 
-      // 2️⃣ Get total spent in this category this month
+      //  Get total spent in this category this month
       final summary = await supabase
           .from('Category_Summary')
           .select('total_expense')
@@ -361,7 +361,7 @@ Future<void> _logCompletedGoalExpense(Goal goal) async {
 
       final double currentExpense = (summary?['total_expense'] ?? 0).toDouble();
 
-      // 3️⃣ Get the category’s monthly limit
+      //  Get the category’s monthly limit
       final cat = categories.firstWhere(
         (c) => c['category_id'] == selectedCategory,
         orElse: () => {},
@@ -370,7 +370,7 @@ Future<void> _logCompletedGoalExpense(Goal goal) async {
 
       final double newTotal = currentExpense + amount;
 
-      // 4️⃣ Compare with limit
+      //  Compare with limit
       if (limit > 0 && newTotal > limit) {
         await showDialog(
           context: context,
@@ -395,13 +395,12 @@ Future<void> _logCompletedGoalExpense(Goal goal) async {
             ],
           ),
         );
-        return; // ❌ Stop here
+        return; 
       }
     }
 
-    // Step 2️⃣ — Start safe DB sequence
     try {
-      // 1. Insert expense transaction (this will work even with negative balance)
+      // Insert expense transaction 
       await supabase.from('Transaction').insert({
         'profile_id': profileId,
         'category_id': selectedCategory,
@@ -410,7 +409,7 @@ Future<void> _logCompletedGoalExpense(Goal goal) async {
         'date': DateTime.now().toIso8601String(),
       });
   await UpdateCategorySummaryService.start(context);
-      // 2. Get current balance and deduct the amount (can go negative)
+      //  Get current balance and deduct the amount 
       final user = await supabase
           .from('User_Profile')
           .select('current_balance')
@@ -425,31 +424,32 @@ Future<void> _logCompletedGoalExpense(Goal goal) async {
           .update({'current_balance': newBalance})
           .eq('profile_id', profileId);
 
-      // 3️⃣ Keep assigned amount as historical
+      // Keep assigned amount as historical
       await supabase
           .from('Goal')
           .update({'status': 'Achieved'})
           .eq('goal_id', goal.id);
 
-      // 4️⃣ Refresh savings and goals
+  
       await _generateMonthlySavings();
       await _fetchGoals();
       _recalculateBalances();
 
-      // 5️⃣ Move to achieved tab
+      //  Move to achieved tab
+      if (!mounted) return;
       setState(() => _selected = GoalType.achieved);
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Goal "${goal.title}" logged successfully as expense!')),
       );
     } catch (dbError) {
-      debugPrint('❌ Rolled back due to: $dbError');
+      debugPrint(' Rolled back due to: $dbError');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error logging expense: $dbError')),
       );
     }
   } catch (e) {
-    debugPrint('❌ Unexpected error logging goal as expense: $e');
+    debugPrint(' Unexpected error logging goal as expense: $e');
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Error logging expense: $e')),
     );
@@ -467,13 +467,13 @@ Future<void> _logCompletedGoalExpense(Goal goal) async {
                 .from('Goal')
                 .update({'status': 'Uncompleted'})
                 .eq('goal_id', goal.id);
-            debugPrint('⚠️ Goal "${goal.title}" marked as Uncompleted');
+            debugPrint(' Goal "${goal.title}" marked as Uncompleted');
           }
         }
       }
       await _fetchGoals();
     } catch (e) {
-      debugPrint('❌ Error marking expired goals: $e');
+      debugPrint('Error marking expired goals: $e');
     }
   }
 
@@ -496,7 +496,7 @@ Future<void> _fetchGoals() async {
 
     final data = response as List;
 
-    // 🕒 Give time for last insert (important after Unassign)
+    
     await Future.delayed(const Duration(milliseconds: 250));
 
     final transferResponse = await supabase
@@ -506,7 +506,7 @@ Future<void> _fetchGoals() async {
           'goal_id',
           data.map((g) => g['goal_id']).whereType<String>().toList(),
         )
-        // ✅ process oldest → newest
+        // process oldest → newest
         .order('created_at', ascending: true);
 
     final Map<String, double> goalSaved = {};
@@ -560,14 +560,14 @@ Future<void> _fetchGoals() async {
       });
     }
 
-    // ✅ recalc after short pause to allow state to sync
+   
     await Future.delayed(const Duration(milliseconds: 100));
     if (mounted) {
       _recalculateBalances();
       await _markExpiredGoalsAsUncompleted();
     }
 
-    debugPrint('✅ Goals fetched successfully: ${_goals.length}');
+    debugPrint('Goals fetched successfully: ${_goals.length}');
   } catch (e) {
     debugPrint('Error fetching goals: $e');
   }
@@ -608,24 +608,24 @@ Future<void> _fetchGoals() async {
 
 Future<void> _autoAdjustOverAssignedGoals() async {
   try {
-    // 1️⃣ Compute total assigned (only Active or Achieved goals)
+    //  Compute total assigned (only Active or Achieved goals)
     final activeGoals = _goals.where((g) => g.status != 'Archived').toList();
     final totalAssigned = activeGoals.fold<double>(0.0, (sum, g) => sum + g.savedAmount);
 
-    // 2️⃣ Check if correction is needed
+    
     if (totalAssigned <= _totalSaving) return;
 
     final excess = totalAssigned - _totalSaving;
-    debugPrint('⚠️ Over-assigned detected. Need to deduct $excess SAR.');
+    debugPrint(' Over-assigned detected. Need to deduct $excess SAR.');
 
-    // 3️⃣ Proportional deduction (weighted by savedAmount)
+    //  Proportional deduction 
     final ratioList = activeGoals.map((g) {
       final ratio = g.savedAmount / totalAssigned;
       final deduction = ratio * excess;
       return {'goal': g, 'deduct': deduction};
     }).toList();
 
-    // 4️⃣ Apply deductions safely (never below zero)
+    //  Apply deductions safely (never below zero)
     for (final item in ratioList) {
       final g = item['goal'] as Goal;
       final newAmount = (g.savedAmount - (item['deduct'] as double)).clamp(0.0, double.infinity);
@@ -635,7 +635,7 @@ final idx = _goals.indexWhere((x) => x.id == g.id);
 if (idx != -1) _goals[idx] = updatedGoal;
 
 
-      // Reflect change in Supabase (insert unassign record)
+      
       await supabase.from('Goal_Transfer').insert({
         'goal_id': g.id,
         'amount': (item['deduct'] as double),
@@ -644,45 +644,39 @@ if (idx != -1) _goals[idx] = updatedGoal;
       });
     }
 
-    // 5️⃣ Refresh display
+  
     await _fetchGoals();
     _recalculateBalances();
 
-    debugPrint('✅ Adjusted all over-assigned goals proportionally.');
+    debugPrint('Adjusted all over-assigned goals proportionally.');
   } catch (e) {
-    debugPrint('❌ Error in _autoAdjustOverAssignedGoals: $e');
+    debugPrint('Error in _autoAdjustOverAssignedGoals: $e');
   }
 }
 
 
 
 void _recalculateBalances() {
-  // 1️⃣ Compute total assigned from all goals (Active + Achieved)
+  //  Compute total assigned from all goals (Active + Achieved)
   final rawAssigned = _goals.fold(0.0, (sum, g) => sum + g.savedAmount);
 
-  // 2️⃣ Make sure total saving is never negative
+  //  Make sure total saving is never negative
   _totalSaving = _totalSaving.clamp(0.0, double.infinity);
 
-  // 3️⃣ If total < assigned, cap assigned to total
+  //  If total < assigned, cap assigned to total
   // (so that it never exceeds available savings)
   final effectiveAssigned = min(rawAssigned, _totalSaving);
 
-  // 4️⃣ Unassigned = whatever remains, never negative
+  //  Unassigned = whatever remains, never negative
   final unassigned = (_totalSaving - effectiveAssigned).clamp(0.0, double.infinity);
 
-  // 5️⃣ Update state (cache adjusted assigned + set unassigned)
+  
+  if (!mounted) return;
   setState(() {
     _assignedBalanceCached = effectiveAssigned;
     _unassignedBalance = unassigned;
   });
 
-  // 6️⃣ Optional debug check
-  debugPrint(
-    '🧮 Balances recalculated → '
-    'Total: $_totalSaving | Assigned: $_assignedBalanceCached | '
-    'Unassigned: $_unassignedBalance | '
-    'Sum: ${_assignedBalanceCached + _unassignedBalance}',
-  );
 }
 
 
@@ -693,8 +687,9 @@ Future<void> _generateMonthlySavings() async {
 
     final now = DateTime.now();
     final monthStart = DateTime(now.year, now.month, 1);
+    final nextMonth = DateTime(now.year, now.month + 1, 1);
 
-    // 🧾 Fetch all past monthly records (previous months only)
+    // Fetch all past monthly records (previous months only)
     final monthlyRecords = await supabase
         .from('Monthly_Financial_Record')
         .select('period_start, monthly_saving')
@@ -710,98 +705,41 @@ Future<void> _generateMonthlySavings() async {
       final saving = (record['monthly_saving'] ?? 0).toDouble();
       monthMap[label] = saving;
 
-      // ✅ Only include months before current one
+      // Only include months before current one
       if (start.isBefore(monthStart)) {
         totalSaving += saving;
       }
     }
 
-    // 🧮 Compute current month dynamic saving
-    double currentFixedIncome = 0;
-    double currentFixedExpense = 0;
-    double currentDynamicIncome = 0;
-    double currentDynamicExpense = 0;
+    //  Retrieve current month's saving directly from DB 
+    final currentRecord = await supabase
+        .from('Monthly_Financial_Record')
+        .select('monthly_saving')
+        .eq('profile_id', profileId)
+        .gte('period_start', monthStart.toIso8601String())
+        .lt('period_end', nextMonth.toIso8601String())
+        .maybeSingle();
 
-    // 💰 Fixed Income (check PAYDAY only)
-    final fixedIncomes = await supabase
-        .from('Fixed_Income')
-        .select('monthly_income, payday')
-        .eq('profile_id', profileId);
-
-    for (final fi in (fixedIncomes as List? ?? [])) {
-      final payday = (fi['payday'] ?? 1).toInt();
-
-      // ✅ Count income only if payday has occurred in current month
-      if (now.day >= payday) {
-        currentFixedIncome += (fi['monthly_income'] ?? 0).toDouble();
-        debugPrint('💰 Fixed Income added: ${fi['monthly_income']} (Payday: $payday, Current Day: ${now.day})');
-      } else {
-        debugPrint('⏳ Fixed Income pending: ${fi['monthly_income']} (Payday: $payday, Current Day: ${now.day})');
-      }
+    double currentMonthSaving = 0.0;
+    if (currentRecord != null) {
+      currentMonthSaving = (currentRecord['monthly_saving'] ?? 0).toDouble();
+      debugPrint('Using existing Monthly_Financial_Record value: $currentMonthSaving');
+    } else {
+      debugPrint(' No Monthly_Financial_Record found for current month — setting 0.');
     }
 
-    // 💸 Fixed Expense (check DUE DATE only)
-    final fixedExpenses = await supabase
-        .from('Fixed_Expense')
-        .select('amount, due_date')
-        .eq('profile_id', profileId);
-
-    for (final fe in (fixedExpenses as List? ?? [])) {
-      final dueDate = (fe['due_date'] ?? 1).toInt();
-
-      // ✅ Count expense only if due date has occurred in current month
-      if (now.day >= dueDate) {
-        currentFixedExpense += (fe['amount'] ?? 0).toDouble();
-        debugPrint('💸 Fixed Expense added: ${fe['amount']} (Due Date: $dueDate, Current Day: ${now.day})');
-      } else {
-        debugPrint('⏳ Fixed Expense pending: ${fe['amount']} (Due Date: $dueDate, Current Day: ${now.day})');
-      }
-    }
-
-    // 📊 Transaction (Earning/Income/Expense) for current month
-    final transactions = await supabase
-        .from('Transaction')
-        .select('amount, type, date')
-        .eq('profile_id', profileId);
-
-    for (final tx in (transactions as List? ?? [])) {
-      final date = DateTime.tryParse(tx['date'] ?? '');
-      if (date == null) continue;
-      if (date.year == now.year && date.month == now.month) {
-        final type = (tx['type'] ?? '').toString().toLowerCase();
-        if (type == 'earning' || type == 'income') {
-          currentDynamicIncome += (tx['amount'] ?? 0).toDouble();
-        } else if (type == 'expense') {
-          currentDynamicExpense += (tx['amount'] ?? 0).toDouble();
-        }
-      }
-    }
-
-    // 🧾 Compute current month total saving
-    final currentMonthSaving =
-        (currentFixedIncome + currentDynamicIncome) -
-        (currentFixedExpense + currentDynamicExpense);
-
-    final currentLabel =
-        '${now.year}-${now.month.toString().padLeft(2, '0')}';
+    // Store current month saving in the chart map
+    final currentLabel = '${now.year}-${now.month.toString().padLeft(2, '0')}';
     monthMap[currentLabel] = currentMonthSaving;
 
-    // 🔄 Reverse order so current month is on the LEFT
+    // Reverse order so current month is on the LEFT
     final reversedMonthMap = Map.fromEntries(
       monthMap.entries.toList().reversed,
     );
 
-    debugPrint('📊 Fixed Income: $currentFixedIncome');
-    debugPrint('📉 Fixed Expense: $currentFixedExpense');
-    debugPrint('💰 Transaction Income: $currentDynamicIncome');
-    debugPrint('💸 Transaction Expense: $currentDynamicExpense');
-    debugPrint('🟣 Current Month Saving: $currentMonthSaving');
-    debugPrint('🟢 Total Saving (previous only): $totalSaving');
-
     if (!mounted) return;
     setState(() {
       _totalSaving = totalSaving < 0 ? 0 : totalSaving;
-
       _monthlySavings
         ..clear()
         ..addAll(reversedMonthMap);
@@ -811,13 +749,13 @@ Future<void> _generateMonthlySavings() async {
     if (mounted) {
       _recalculateBalances();
       await _autoAdjustOverAssignedGoals();
-      // Refresh current month from DB after generating monthly savings
       await _refreshCurrentSavingFromRecord();
     }
   } catch (e) {
-    debugPrint('❌ Error in _generateMonthlySavings: $e');
+    debugPrint('Error in _generateMonthlySavings: $e');
   }
 }
+
 
   GoalType _statusToType(dynamic status) {
     if (status == null) return GoalType.active;
@@ -1046,7 +984,7 @@ Widget build(BuildContext context) {
                                         ),
                                         const SizedBox(width: 8),
                                         const Text(
-                                          'About this chart',
+                                          'Total Montly Saving',
                                           style: TextStyle(
                                             color: Colors.white,
                                             fontWeight: FontWeight.w600,
@@ -1059,7 +997,7 @@ Widget build(BuildContext context) {
 
                                     // Description
                                     const Text(
-                                      'Shows this month: spending vs what you have (earnings + income).',
+                                      'Total Savings includes all the money you’ve saved across previous months, showing your overall accumulated savings.',
                                       style: TextStyle(
                                         color: Colors.white70,
                                         height: 1.4,
@@ -1246,7 +1184,7 @@ Widget build(BuildContext context) {
   );
 }
 void _openAssignSheet() {
-  // 🧮 1️⃣ Check if there's any unassigned balance
+  //  Check if there's any unassigned balance
   if ((_unassignedBalance ?? 0) <= 0) {
     showDialog(
       context: context,
@@ -1270,10 +1208,10 @@ void _openAssignSheet() {
         ],
       ),
     );
-    return; // 🔚 Stop here — no funds to assign
+    return; 
   }
 
-  // 🧩 2️⃣ Check if there are any active goals
+  //  Check if there are any active goals
   final availableGoals = _goals
       .where((g) => g.type == GoalType.active && g.remaining > 0)
       .toList();
@@ -1296,7 +1234,7 @@ void _openAssignSheet() {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel', style: TextStyle(color: Colors.white70)),
+            child: const Text('Cancel', style: TextStyle(color: Color.fromARGB(255, 255, 255, 255))),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
@@ -1317,10 +1255,10 @@ void _openAssignSheet() {
         ],
       ),
     );
-    return; // 🔚 Stop here — no goals to assign to
+    return; 
   }
 
-  // ✅ 3️⃣ Open normal assign sheet
+  // Open  assign sheet
   showModalBottomSheet(
     context: context,
     isScrollControlled: true,
@@ -1329,10 +1267,10 @@ void _openAssignSheet() {
       goals: availableGoals,
       unassignedBalance: _unassignedBalance,
      onAssign: (goal, amount) async {
-      // ✅ Immediately close the sheet to prevent double tap
+      //  Immediately close the sheet to prevent double tap
       Navigator.pop(context);
 
-      // ✅ Show loading feedback right away
+      //  Show loading feedback right away
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           duration: const Duration(seconds: 1),
@@ -1362,7 +1300,7 @@ void _openAssignSheet() {
         await _fetchGoals();
         await _generateMonthlySavings();
 
-        // ✅ Replace the loading snackbar with success message
+        
         if (mounted) {
           ScaffoldMessenger.of(context)
             ..hideCurrentSnackBar()
@@ -1370,14 +1308,14 @@ void _openAssignSheet() {
               SnackBar(
                 backgroundColor: Colors.green.shade700,
                 content: Text(
-                  '✅ Assigned ${_fmt(amount)} SAR to ${goal.title}',
+                  ' Assigned ${_fmt(amount)} SAR to ${goal.title}',
                   style: const TextStyle(fontWeight: FontWeight.w600),
                 ),
               ),
             );
         }
       } catch (e) {
-        debugPrint('❌ Error assigning: $e');
+        debugPrint('Error assigning: $e');
         if (mounted) {
           ScaffoldMessenger.of(context)
             ..hideCurrentSnackBar()
@@ -1547,7 +1485,7 @@ void _openAssignSheet() {
           'direction': 'Unassign',
           'created_at': DateTime.now().toIso8601String(),
         });
-        debugPrint('💸 Returned $assignedAmount SAR to unassigned balance');
+        debugPrint(' Returned $assignedAmount SAR to unassigned balance');
       }
       await supabase.from('Goal').delete().eq('goal_id', goal.id);
       await _fetchGoals();
@@ -1887,18 +1825,18 @@ class _GoalTile extends StatelessWidget {
     final Color accentColor = isCompleted
         ? const Color.fromARGB(255, 30, 163, 57) 
         : isUncompleted
-            ? const Color(0xFFEF4444) // Red
+            ? const Color(0xFFEF4444) 
             : isAchieved
-                ? const Color(0xFFFBBF24) // Gold accent
-                : const Color(0xFF8B5CF6); // Purple (matches page accent)
+                ? const Color(0xFFFBBF24) 
+                : const Color(0xFF8B5CF6); 
     
     final Color bgColor = isCompleted
-        ? const Color(0xFF064E3B).withValues(alpha:0.15) // Dark emerald tint
+        ? const Color(0xFF064E3B).withValues(alpha:0.15) 
         : isUncompleted
-            ? const Color(0xFF7F1D1D).withValues(alpha:0.15) // Dark red tint
+            ? const Color(0xFF7F1D1D).withValues(alpha:0.15) 
             : isAchieved
-                ? const Color(0xFF78350F).withValues(alpha:0.15) // Dark gold tint
-                : const Color(0xFF4C1D95).withValues(alpha:0.15); // Dark purple tint
+                ? const Color(0xFF78350F).withValues(alpha:0.15) 
+                : const Color(0xFF4C1D95).withValues(alpha:0.15); 
 
     final parent = context.findAncestorStateOfType<_SavingsPageState>();
 
@@ -1906,7 +1844,7 @@ class _GoalTile extends StatelessWidget {
     final Widget statusChip;
     if (isActive) {
       statusChip = Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6), // Increased padding for readability
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6), 
         decoration: BoxDecoration(
           gradient: LinearGradient(
             colors: [accentColor.withValues(alpha:0.25), accentColor.withValues(alpha:0.15)],
@@ -2011,7 +1949,7 @@ class _GoalTile extends StatelessWidget {
         if (parent.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('✅ Goal updated & balances refreshed'),
+              content: Text('Goal updated & balances refreshed'),
               duration: Duration(seconds: 2),
             ),
           );
@@ -2059,7 +1997,7 @@ class _GoalTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(24),
         child: Stack(
           children: [
-            // Subtle gradient overlay
+            
             Positioned(
               top: 0,
               left: 0,
@@ -2135,7 +2073,7 @@ class _GoalTile extends StatelessWidget {
                             const SizedBox(width: 8),
                             _EnhancedIconButton(
                               icon: Icons.delete_outline_rounded,
-                              color: const Color(0xFFDC2626), // Softer red for delete
+                              color: const Color(0xFFDC2626), 
                               onTap: _askDelete,
                             ),
                             const SizedBox(width: 12),

@@ -65,11 +65,11 @@ class _SurraAppState extends State<SurraApp> {
 
       // If already logged in, ensure services start once
       if (session?.user != null) {
-        debugPrint('🟢 User already logged in – ensuring background updaters start once.');
+        debugPrint(' User already logged in – ensuring background updaters start once.');
         await _ensureMonthlyAndCategoryServices(context);
       }
 
-      // 🔹 Handle login/logout transitions
+      //  Handle login/logout transitions
       _supabase.auth.onAuthStateChange.listen((event) async {
         final session = event.session;
         if (session != null) {
@@ -78,7 +78,7 @@ class _SurraAppState extends State<SurraApp> {
           UpdateMonthlyRecordService.stop();
           UpdateCategorySummaryService.stop();
           _servicesStarted = false;
-          debugPrint('🔴 Updaters stopped after logout');
+          debugPrint(' Updaters stopped after logout');
         }
       });
     } catch (e) {
@@ -86,14 +86,14 @@ class _SurraAppState extends State<SurraApp> {
         _user = null;
         _isLoading = false;
       });
-      debugPrint('❌ Error initializing session: $e');
+      debugPrint(' Error initializing session: $e');
     }
   }
 
   /// Ensures that Monthly + Category summary updaters start exactly once
   Future<void> _ensureMonthlyAndCategoryServices(BuildContext context) async {
     if (_servicesStarted) {
-      debugPrint('⚙️ Updaters already running – skipping duplicate start.');
+      debugPrint(' Updaters already running – skipping duplicate start.');
       return;
     }
     _servicesStarted = true;
@@ -105,7 +105,7 @@ class _SurraAppState extends State<SurraApp> {
     while (profileId == null && retries < 5) {
       profileId = await getProfileId(context);
       if (profileId == null) {
-        debugPrint('[main.dart] ⚠️ Profile not ready (retry $retries)');
+        debugPrint('[main.dart]  Profile not ready (retry $retries)');
         await Future.delayed(const Duration(seconds: 1));
         retries++;
       }

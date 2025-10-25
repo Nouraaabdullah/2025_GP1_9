@@ -130,7 +130,7 @@ class _CreateGoalPageState extends State<CreateGoalPage> {
     } catch (e) {
       debugPrint('CreateGoal error: $e');
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error creating goal: $e')),
+        SnackBar(content: Text('Cannot creating goal: $e')),
       );
       setState(() => _submitting = false);
     }
@@ -237,7 +237,7 @@ class _CreateGoalPageState extends State<CreateGoalPage> {
                           controller: _titleCtrl,
                           textInputAction: TextInputAction.next,
                           style: const TextStyle(color: Colors.black),
-                          decoration: _inputDecoration(hint: 'e.g., Buy a new phone'),
+                          decoration: _inputDecoration(hint: 'e.g., phone'),
                           onChanged: (_) => setState(() => _titleError = null),
                         ),
                       ),

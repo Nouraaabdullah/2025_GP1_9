@@ -6,7 +6,7 @@ import '../../utils/auth_helpers.dart';
 import 'update_monthly_record_service.dart';
 
 /// ---------------------------------------------------------------------------
-/// 🔹 UpdateCategorySummaryService
+///  UpdateCategorySummaryService
 /// ---------------------------------------------------------------------------
 /// Keeps Category_Summary table up-to-date for the logged-in user.
 /// - Calculates total expenses per category each month.
@@ -28,17 +28,17 @@ class UpdateCategorySummaryService {
     try {
       final profileId = await getProfileId(context);
       if (profileId == null) {
-        debugPrint('⚠️ No profile found — CategorySummaryService cannot start.');
+        debugPrint(' No profile found — CategorySummaryService cannot start.');
         return;
       }
       _profileId = profileId;
 
-      await _updateAll(); // Initial computation
+      await _updateAll(); 
       _setupRealtime();
 
-      debugPrint('📊 UpdateCategorySummaryService started for $profileId');
+      debugPrint(' UpdateCategorySummaryService started for $profileId');
     } catch (e) {
-      debugPrint('❌ Error starting CategorySummaryService: $e');
+      debugPrint(' Error starting CategorySummaryService: $e');
     }
   }
 
@@ -49,7 +49,7 @@ class UpdateCategorySummaryService {
     _transactionListener?.unsubscribe();
     _fixedExpenseListener?.unsubscribe();
     _profileId = null;
-    debugPrint('🛑 UpdateCategorySummaryService stopped.');
+    debugPrint(' UpdateCategorySummaryService stopped.');
   }
 
   /// Set up realtime table watchers
@@ -76,7 +76,7 @@ class UpdateCategorySummaryService {
       )
       ..subscribe();
 
-    debugPrint('✅ Category summary realtime channels subscribed.');
+    debugPrint(' Category summary realtime channels subscribed.');
   }
 
   static void _debouncedUpdate() {
@@ -108,13 +108,13 @@ class UpdateCategorySummaryService {
           .maybeSingle();
 
       if (record == null) {
-        debugPrint('⚠️ No monthly record found for current month.');
+        debugPrint(' No monthly record found for current month.');
         return;
       }
 
       final recordId = record['record_id'] as String;
 
-      // Get active (non-archived) categories
+      // Get active  categories
       final categories = await _supabase
           .from('Category')
           .select('category_id')
@@ -137,7 +137,7 @@ class UpdateCategorySummaryService {
         totals[cid] = (totals[cid] ?? 0) - amt;
       }
 
-      // 🧾 A) Add dynamic Transaction-based expenses
+      //  Add dynamic Transaction-based expenses
       final txs = await _supabase
           .from('Transaction')
           .select('category_id, amount, type, date')
@@ -150,7 +150,7 @@ class UpdateCategorySummaryService {
         add(t['category_id'] as String?, (t['amount'] ?? 0).toDouble());
       }
 
-      // 💰 B) Handle Fixed Expenses dynamically (archive-aware)
+      // Handle Fixed Expenses dynamically 
 final fx = await _supabase
     .from('Fixed_Expense')
     .select('expense_id, category_id, amount, start_time, end_time, due_date')
@@ -175,7 +175,7 @@ for (final f in (fx as List? ?? [])) {
   // Skip invalid or archived ranges
   if (end.isBefore(start)) continue;
 
-  // 🧩 Ignore records that ended today (archived same day)
+  //  Ignore records that ended today (archived same day)
   if (_isSameDay(end, now)) continue;
 
   // Active if current date is between start and end
@@ -208,7 +208,7 @@ for (final f in (fx as List? ?? [])) {
   }
 }
 
-      // 🟣 Upsert Category_Summary
+      //  Upsert Category_Summary
       for (final entry in totals.entries) {
         final cid = entry.key;
         final total = entry.value;
@@ -234,13 +234,13 @@ for (final f in (fx as List? ?? [])) {
         }
       }
 
-      // 🔁 Trigger main monthly record recalculation
+      //  Trigger main monthly record recalculation
       await UpdateMonthlyRecordService.startWithoutContext(_profileId!);
 
       debugPrint(
-          '✅ Category_Summary updated and linked to Monthly_Record $recordId');
+          ' Category_Summary updated and linked to Monthly_Record $recordId');
     } catch (e, st) {
-      debugPrint('❌ Error updating Category_Summary: $e\n$st');
+      debugPrint(' Error updating Category_Summary: $e\n$st');
     }
   }
 

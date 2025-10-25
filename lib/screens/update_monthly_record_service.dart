@@ -16,7 +16,7 @@ class UpdateMonthlyRecordService {
   static Future<void> start(BuildContext context) async {
     final profileId = await getProfileId(context);
     if (profileId == null) {
-      debugPrint('[MonthlyRecord] ⚠️ No profile found — updater not started.');
+      debugPrint('[MonthlyRecord]  No profile found — updater not started.');
       return;
     }
 
@@ -34,15 +34,23 @@ class UpdateMonthlyRecordService {
         )
         .subscribe();
 
-    _transactionListener = _supabase
-        .channel('public:Transaction')
-        .onPostgresChanges(
-          event: PostgresChangeEvent.all,
-          schema: 'public',
-          table: 'Transaction',
-          callback: (_) async => await _generateOrUpdateRecord(profileId),
-        )
-        .subscribe();
+_transactionListener = _supabase
+    .channel('public:Transaction')
+    .onPostgresChanges(
+      event: PostgresChangeEvent.all,
+      schema: 'public',
+      table: 'Transaction',
+      callback: (payload) async {
+        // ✅ Optional: check profile_id manually from payload
+        final newRow = payload.newRecord;
+        if (newRow != null && newRow['profile_id'] == profileId) {
+          await Future.delayed(const Duration(milliseconds: 800));
+          await _generateOrUpdateRecord(profileId);
+        }
+      },
+    )
+    .subscribe();
+
 
         
 _fixedIncomeListener = _supabase
@@ -52,7 +60,7 @@ _fixedIncomeListener = _supabase
       schema: 'public',
       table: 'Fixed_Income',
       callback: (_) async {
-        // ⏳ small delay ensures new payday/start_time are committed
+        //  small delay ensures new payday/start_time are committed
         await Future.delayed(const Duration(milliseconds: 800));
         await _generateOrUpdateRecord(profileId);
       },
@@ -73,11 +81,11 @@ _fixedIncomeListener = _supabase
     // Periodic check (safety net)
     _monthCheckTimer?.cancel();
     _monthCheckTimer = Timer.periodic(const Duration(hours: 12), (_) async {
-      debugPrint('[MonthlyRecord] ⏰ Periodic recheck triggered');
+      debugPrint('[MonthlyRecord]  Periodic recheck triggered');
       await _generateOrUpdateRecord(profileId);
     });
 
-    debugPrint('[MonthlyRecord] ✅ Live updates started');
+    debugPrint('[MonthlyRecord]  Live updates started');
   }
 
   static void stop() {
@@ -86,7 +94,7 @@ _fixedIncomeListener = _supabase
     _fixedIncomeListener?.unsubscribe();
     _fixedExpenseListener?.unsubscribe();
     _monthCheckTimer?.cancel();
-    debugPrint('[MonthlyRecord] 🛑 Service stopped');
+    debugPrint('[MonthlyRecord]  Service stopped');
   }
 
   /// Insert or update the record for the current month
@@ -119,13 +127,13 @@ _fixedIncomeListener = _supabase
           'monthly_saving': 0,
         }).select('record_id').maybeSingle();
         recordId = res?['record_id'];
-        debugPrint('[MonthlyRecord] 🟢 Created new record for $monthStart');
+        debugPrint('[MonthlyRecord]  Created new record for $monthStart');
       } else {
         recordId = existing['record_id'];
       }
 
       if (recordId.isEmpty) {
-        debugPrint('[MonthlyRecord] ⚠️ Missing record_id — abort update.');
+        debugPrint('[MonthlyRecord]  Missing record_id — abort update.');
         return;
       }
 
@@ -158,7 +166,7 @@ for (final i in (fi as List? ?? [])) {
       ? DateTime.parse(i['end_time'])
       : DateTime(9999);
 
-  // 🧩 Skip invalid or same-day archived records
+  //  Skip invalid or same-day archived records
   if (end.isBefore(start)) continue;
   if (_isSameDay(end, now)) continue;
 
@@ -210,9 +218,9 @@ for (final i in (fi as List? ?? [])) {
       }).eq('record_id', recordId);
 
       debugPrint(
-          '[MonthlyRecord] 🔄 Updated → Income: $totalIncome | Earning: $totalEarning | Expense: $totalExpense | Saving: $monthlySaving');
+          '[MonthlyRecord]  Updated → Income: $totalIncome | Earning: $totalEarning | Expense: $totalExpense | Saving: $monthlySaving');
     } catch (e, st) {
-      debugPrint('[MonthlyRecord] ❌ Error: $e\n$st');
+      debugPrint('[MonthlyRecord]  Error: $e\n$st');
     }
   }
 
@@ -221,7 +229,7 @@ static Future<void> startWithoutContext(String profileId) async {
   try {
     await _generateOrUpdateRecord(profileId);
   } catch (e) {
-    debugPrint('⚠️ startWithoutContext failed: $e');
+    debugPrint(' startWithoutContext failed: $e');
   }
 }
 static void _debugRealtimeStatus() {

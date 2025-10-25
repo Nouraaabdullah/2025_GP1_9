@@ -249,7 +249,7 @@ class _AddEditExpensePageState extends State<AddEditExpensePage> {
             ),
             const SizedBox(height: 8),
             const Text(
-              'Are you sure you want to add this expense?',
+              '',
               style: TextStyle(
                 color: Colors.orange,
                 fontSize: 12,
@@ -259,13 +259,6 @@ class _AddEditExpensePageState extends State<AddEditExpensePage> {
           ],
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(color: Colors.white70),
-            ),
-          ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF704EF4),
@@ -277,10 +270,7 @@ class _AddEditExpensePageState extends State<AddEditExpensePage> {
               Navigator.pop(ctx);
               onConfirm();
             },
-            child: const Text(
-              'Add Anyway',
-              style: TextStyle(color: Colors.white),
-            ),
+            child: const Text('Add', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),

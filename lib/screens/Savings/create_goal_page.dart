@@ -237,7 +237,7 @@ class _CreateGoalPageState extends State<CreateGoalPage> {
                           controller: _titleCtrl,
                           textInputAction: TextInputAction.next,
                           style: const TextStyle(color: Colors.black),
-                          decoration: _inputDecoration(hint: 'e.g., phone'),
+                          decoration: _inputDecoration(),
                           onChanged: (_) => setState(() => _titleError = null),
                         ),
                       ),
@@ -258,7 +258,7 @@ class _CreateGoalPageState extends State<CreateGoalPage> {
                           keyboardType: TextInputType.number,
                           inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                           style: const TextStyle(color: Colors.black),
-                          decoration: _inputDecoration(hint: 'e.g., 2000').copyWith(
+                          decoration: _inputDecoration().copyWith(
                             prefixText: 'SAR  ',
                             prefixStyle: const TextStyle(
                               fontSize: 12,

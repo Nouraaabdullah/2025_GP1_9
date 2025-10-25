@@ -984,7 +984,7 @@ Widget build(BuildContext context) {
                                         ),
                                         const SizedBox(width: 8),
                                         const Text(
-                                          'Total Montly Saving',
+                                          'Total Monthly Saving',
                                           style: TextStyle(
                                             color: Colors.white,
                                             fontWeight: FontWeight.w600,
@@ -1452,7 +1452,8 @@ void _openAssignSheet() {
             onPressed: () => Navigator.pop(ctx, false),
             child: const Text('Cancel', style: TextStyle(color: Color.fromARGB(255, 246, 242, 242))),
           ),
-          TextButton(
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.accent),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Delete', style: TextStyle(color: Color.fromARGB(255, 246, 242, 242))),
           ),
@@ -2067,7 +2068,7 @@ class _GoalTile extends StatelessWidget {
                               goal.type == GoalType.completed) ...[
                             _EnhancedIconButton(
                               icon: Icons.edit_rounded,
-                              color: Colors.white,
+                              color: const Color.fromARGB(255, 167, 166, 166),
                               onTap: _openEdit,
                             ),
                             const SizedBox(width: 8),

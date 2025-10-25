@@ -7,6 +7,7 @@ import 'create_goal_page.dart';
 import 'edit_goal_page.dart';
 import 'dart:math'; 
 import '../../utils/auth_helpers.dart'; 
+import '/../screens/category_summary_service.dart';
 
 
 /// ---------------- Domain ----------------
@@ -252,167 +253,6 @@ class _SavingsPageState extends State<SavingsPage> with WidgetsBindingObserver {
       .subscribe();
 }
 
-// Future<void> _logCompletedGoalExpense(Goal goal) async {
-//   try {
-//     final profileId = await getProfileId(context);
-//     if (profileId == null) return; // not logged in
-
-//     final supabase = Supabase.instance.client;
-//     final amount = goal.targetAmount;
-
-
-
-//     // Step 1️⃣ — Fetch user-specific, active categories (fixed + custom)
-//     final categories = await supabase
-//         .from('Category')
-//         .select('category_id, name, type')
-//         .eq('profile_id', profileId)
-//         .eq('is_archived', false)
-//         .order('name', ascending: true);
-
-//     if (categories == null || categories.isEmpty) {
-//       ScaffoldMessenger.of(context).showSnackBar(
-//         const SnackBar(content: Text('No active categories available for this user.')),
-//       );
-//       return;
-//     }
-
-//     String? selectedCategory;
-//     final confirm = await showDialog<bool>(
-//       context: context,
-//       builder: (ctx) => AlertDialog(
-//         backgroundColor: AppColors.card,
-//         title: const Text('Confirm Goal Expense',
-//             style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800)),
-//         content: Column(
-//           mainAxisSize: MainAxisSize.min,
-//           children: [
-//             Text(
-//               'You\'re about to log "${goal.title}" as an expense of ${amount.toStringAsFixed(2)} SAR.',
-//               style: const TextStyle(color: Colors.white70),
-//             ),
-//             const SizedBox(height: 12),
-//             DropdownButtonFormField<String>(
-//               dropdownColor: AppColors.card,
-//               decoration: InputDecoration(
-//                 labelText: 'Select Category',
-//                 labelStyle: const TextStyle(color: Colors.white70),
-//                 enabledBorder: OutlineInputBorder(
-//                   borderSide: BorderSide(color: Colors.white24),
-//                   borderRadius: BorderRadius.circular(10),
-//                 ),
-//                 focusedBorder: OutlineInputBorder(
-//                   borderSide: BorderSide(color: AppColors.accent, width: 1.5),
-//                   borderRadius: BorderRadius.circular(10),
-//                 ),
-//               ),
-//               items: [
-//                 for (final c in categories)
-//                   DropdownMenuItem(
-//                     value: c['category_id'],
-//                     child: Text(c['name'], style: const TextStyle(color: Colors.white)),
-//                   ),
-//               ],
-//               onChanged: (v) => selectedCategory = v,
-//             ),
-//           ],
-//         ),
-//         actions: [
-//           TextButton(
-//             onPressed: () => Navigator.pop(ctx, false),
-//             child: const Text('Cancel', style: TextStyle(color: Colors.white70)),
-//           ),
-//           ElevatedButton(
-//             style: ElevatedButton.styleFrom(backgroundColor: AppColors.accent),
-//             onPressed: () {
-//               if (selectedCategory != null) Navigator.pop(ctx, true);
-//             },
-//             child: const Text('Confirm', style: TextStyle(color: Colors.white70)),
-//           ),
-//         ],
-//       ),
-//     );
-
-//     if (confirm != true || selectedCategory == null) return;
-
-//     // Step 2️⃣ — Start safe DB sequence
-//     try {
-//       // 1. Insert expense transaction (this will work even with negative balance)
-//       await supabase.from('Transaction').insert({
-//         'profile_id': profileId,
-//         'category_id': selectedCategory,
-//         'amount': amount,
-//         'type': 'Expense',
-//         'date': DateTime.now().toIso8601String(),
-//       });
-
-//       // 2. Get current balance and deduct the amount (can go negative)
-//       final user = await supabase
-//           .from('User_Profile')
-//           .select('current_balance')
-//           .eq('profile_id', profileId)
-//           .maybeSingle();
-
-//       final double currentBalance = (user?['current_balance'] ?? 0).toDouble();
-//       final double newBalance = currentBalance - amount;
-
-//       await supabase
-//           .from('User_Profile')
-//           .update({'current_balance': newBalance})
-//           .eq('profile_id', profileId);
-
-//       // 3️⃣ Keep assigned amount as historical
-//       // Optionally, add a special marker in the goal for clarity
-//       await supabase
-//           .from('Goal')
-//           .update({'status': 'Achieved'})
-//           .eq('goal_id', goal.id);
-
-//       // 4. Mark goal as achieved
-//       await supabase
-//           .from('Goal')
-//           .update({'status': 'Achieved'})
-//           .eq('goal_id', goal.id);
-
-//       // 5. Update total saving and assigned balance
-//       await _generateMonthlySavings(); // updates _totalSaving from DB
-//       await _fetchGoals();              // refreshes goal list
-//       _recalculateBalances();           // recompute assigned/unassigned
-
-//       // 6. Show success & move to achieved tab
-//       setState(() => _selected = GoalType.achieved);
-
-//       ScaffoldMessenger.of(context).showSnackBar(
-//         SnackBar(content: Text('Goal "${goal.title}" logged successfully as expense!')),
-//       );
-//     } catch (dbError) {
-//       // Rollback if failed
-//       final user = await supabase
-//           .from('User_Profile')
-//           .select('current_balance')
-//           .eq('profile_id', profileId)
-//           .maybeSingle();
-//       final double currentBalance = (user?['current_balance'] ?? 0).toDouble();
-      
-//       await supabase
-//           .from('User_Profile')
-//           .update({'current_balance': currentBalance})
-//           .eq('profile_id', profileId);
-      
-//       debugPrint('❌ Rolled back due to: $dbError');
-//       ScaffoldMessenger.of(context).showSnackBar(
-//         SnackBar(content: Text('Error logging expense: $dbError')),
-//       );
-//     }
-//   } catch (e) {
-//     debugPrint('❌ Unexpected error logging goal as expense: $e');
-//     ScaffoldMessenger.of(context).showSnackBar(
-//       SnackBar(content: Text('Error logging expense: $e')),
-//     );
-//   }
-// }
-
-
 Future<void> _logCompletedGoalExpense(Goal goal) async {
   try {
     final profileId = await getProfileId(context);
@@ -569,7 +409,7 @@ Future<void> _logCompletedGoalExpense(Goal goal) async {
         'type': 'Expense',
         'date': DateTime.now().toIso8601String(),
       });
-
+  await UpdateCategorySummaryService.start(context);
       // 2. Get current balance and deduct the amount (can go negative)
       final user = await supabase
           .from('User_Profile')

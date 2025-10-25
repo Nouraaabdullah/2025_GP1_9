@@ -255,13 +255,12 @@ class _LogTransactionManuallyPageState
     return num.tryParse('$v') ?? 0;
   }
 
-  // helpers for color hex normalization used in validation
+  // helpers for color and name normalization used in validation
   String _normalizeDbHex(String s) {
     var t = (s).trim();
     if (t.startsWith('#')) t = t.substring(1);
     t = t.toUpperCase();
     if (t.length == 8) {
-      // if ARGB or AARRGGBB, drop leading alpha
       t = t.substring(2);
     }
     if (t.length > 6) {
@@ -273,6 +272,10 @@ class _LogTransactionManuallyPageState
   String _hexFromColorRGB(Color c) {
     final rgb = c.value & 0x00FFFFFF;
     return rgb.toRadixString(16).toUpperCase().padLeft(6, '0');
+  }
+
+  String _normalizeName(String s) {
+    return s.trim().toLowerCase();
   }
 
   // color picker helper opened via root navigator with hue and saturation wheel plus brightness
@@ -562,15 +565,15 @@ class _LogTransactionManuallyPageState
 
                     final profileId = await _getProfileId();
 
-                    // tiny validation: chosen color must be unique among existing categories
+                    // validation for unique color and unique name
                     try {
                       final List rows = await _sb
                           .from('Category')
-                          .select('icon_color')
+                          .select('icon_color,name')
                           .eq('profile_id', profileId)
                           .eq('is_archived', false);
 
-                      final taken = <String>{
+                      final takenColors = <String>{
                         for (final r in rows)
                           _normalizeDbHex(
                             ((r as Map<String, dynamic>)['icon_color'] ?? '')
@@ -578,21 +581,45 @@ class _LogTransactionManuallyPageState
                           ),
                       };
 
+                      final takenNames = <String>{
+                        for (final r in rows)
+                          _normalizeName(
+                            ((r as Map<String, dynamic>)['name'] ?? '')
+                                .toString(),
+                          ),
+                      };
+
                       final chosenHex = _hexFromColorRGB(chosenColor);
-                      if (taken.contains(chosenHex)) {
+                      if (takenColors.contains(chosenHex)) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
-                              content: Text(
-                                  'This color is already used by another category. Pick a different color')),
+                            content: Text(
+                              'This color is already used by another category. Pick a different color',
+                            ),
+                          ),
+                        );
+                        return;
+                      }
+
+                      final rawName = nameCtrl.text;
+                      final normalized = _normalizeName(rawName);
+                      if (takenNames.contains(normalized)) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'A category with this name already exists',
+                            ),
+                          ),
                         );
                         return;
                       }
                     } catch (e) {
-                      // if validation query fails, fail safe and block creation
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
-                            content: Text(
-                                'Could not validate color uniqueness: $e')),
+                          content: Text(
+                            'Could not validate uniqueness: $e',
+                          ),
+                        ),
                       );
                       return;
                     }
@@ -605,8 +632,8 @@ class _LogTransactionManuallyPageState
                       if (parsed == null || parsed < 0) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
-                              content:
-                                  Text('Enter a valid non negative limit')),
+                            content: Text('Enter a valid non negative limit'),
+                          ),
                         );
                         return;
                       }

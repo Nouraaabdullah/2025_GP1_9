@@ -40,10 +40,14 @@ Jira : For sprint planning, task tracking, and project management.
 ### Launch Instructions
 
 1- Clone the Repository
+
 2- Install Dependencies
+
 3- Connect to Supabase
+
   The project is already linked to the existing Supabase database.
   Ensure the Supabase credentials (supabaseUrl and supabaseAnonKey) are correctly set in the configuration file.
+  
 4- Run the Application
 
 The app will automatically connect to the existing Supabase backend, load user data, and enable features such as authentication, category tracking, goal management, and real-time updates.

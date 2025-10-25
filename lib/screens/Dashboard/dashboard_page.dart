@@ -159,7 +159,7 @@ class _DashboardPageState extends State<DashboardPage> {
 
       final mfrRows = await _sb
           .from('Monthly_Financial_Record')
-          .select('period_start, total_income, monthly_saving, profile_id')
+          .select('period_start, monthly_saving, total_income, total_expense, total_earning, profile_id')
           .eq('profile_id', profileId)
           .gte('period_start', _iso(DateTime(now.year, 1, 1)))
           .lte('period_start', _iso(DateTime(now.year, 12, 31)));
@@ -330,6 +330,66 @@ class _DashboardPageState extends State<DashboardPage> {
           }
         }
       }
+
+      // Override series for monthly and yearly using Monthly_Financial_Record totals
+if (_periodIndex == 1) {
+  // monthly: use totals directly
+  for (var i = 0; i < n; i++) {
+    _rawExpenses[i] = 0;
+    _rawEarnings[i] = 0;
+    _seriesExpenses[i] = 0;
+    _seriesEarnings[i] = 0;
+  }
+
+  final byMonthExp = List<num>.filled(12, 0);
+  final byMonthEarn = List<num>.filled(12, 0);
+
+  for (final r in mfrRows) {
+    final d = DateTime.parse(r['period_start'] as String);
+    final mIdx = d.month - 1;
+    byMonthExp[mIdx]  += (r['total_expense'] as num?) ?? 0;
+    byMonthEarn[mIdx] += (r['total_earning'] as num?) ?? 0;
+  }
+
+  for (var i = 0; i < n; i++) {
+    final mIdx = buckets[i].month! - 1;
+    final e  = byMonthExp[mIdx];
+    final er = byMonthEarn[mIdx];
+    _rawExpenses[i]   = e;
+    _seriesExpenses[i] = e;
+    _rawEarnings[i]   = er;
+    _seriesEarnings[i] = er;
+  }
+
+} else if (_periodIndex == 2) {
+  // yearly: sum all monthly records per year
+  final mfrAllYears = await _sb
+      .from('Monthly_Financial_Record')
+      .select('period_start, total_expense, total_earning')
+      .eq('profile_id', profileId)
+      .gte('period_start', _iso(rangeStart))
+      .lte('period_start', _iso(rangeEnd));
+
+  final expByYear = <int, num>{};
+  final earnByYear = <int, num>{};
+
+  for (final r in mfrAllYears) {
+    final d = DateTime.parse(r['period_start'] as String);
+    expByYear[d.year]  = (expByYear[d.year]  ?? 0) + ((r['total_expense'] as num?) ?? 0);
+    earnByYear[d.year] = (earnByYear[d.year] ?? 0) + ((r['total_earning'] as num?) ?? 0);
+  }
+
+  for (var i = 0; i < n; i++) {
+    final y = buckets[i].year!;
+    final e  = expByYear[y]  ?? 0;
+    final er = earnByYear[y] ?? 0;
+    _rawExpenses[i]   = e;
+    _seriesExpenses[i] = e;
+    _rawEarnings[i]   = er;
+    _seriesEarnings[i] = er;
+  }
+}
+// weekly mode remains unchanged
 
       // 9) labels
       if (_periodIndex == 2) {

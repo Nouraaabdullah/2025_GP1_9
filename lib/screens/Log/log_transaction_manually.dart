@@ -12,7 +12,8 @@ class LogTransactionManuallyPage extends StatefulWidget {
       _LogTransactionManuallyPageState();
 }
 
-class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage> {
+class _LogTransactionManuallyPageState
+    extends State<LogTransactionManuallyPage> {
   final _formKey = GlobalKey<FormState>();
 
   String _type = 'Expense';
@@ -47,9 +48,9 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
       await _loadCategories();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Auth or data error: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Auth or data error: $e')));
       Navigator.pop(context);
     }
   }
@@ -86,7 +87,8 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
         _categories
           ..clear()
           ..addAll(names);
-        if (_selectedCategory != null && !_categories.contains(_selectedCategory)) {
+        if (_selectedCategory != null &&
+            !_categories.contains(_selectedCategory)) {
           _selectedCategory = null;
         }
       });
@@ -107,13 +109,18 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
     return map['category_id'] as String;
   }
 
-  Future<Map<String, dynamic>> _getOrCreateCurrentMonthRecord(String profileId, DateTime date) async {
+  Future<Map<String, dynamic>> _getOrCreateCurrentMonthRecord(
+    String profileId,
+    DateTime date,
+  ) async {
     final first = DateTime(date.year, date.month, 1);
     final last = DateTime(date.year, date.month + 1, 0);
 
     final List recs = await _sb
         .from('Monthly_Financial_Record')
-        .select('record_id,total_expense,total_income,monthly_saving,period_start,period_end')
+        .select(
+          'record_id,total_expense,total_income,total_earning,monthly_saving,period_start,period_end',
+        )
         .eq('profile_id', profileId)
         .gte('period_start', _fmt(first))
         .lte('period_end', _fmt(last));
@@ -122,19 +129,55 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
       return recs.first as Map<String, dynamic>;
     }
 
-    final insertRes = await _sb.from('Monthly_Financial_Record').insert({
-      'period_start': _fmt(first),
-      'period_end': _fmt(last),
-      'total_expense': 0,
-      'total_income': 0,
-      'monthly_saving': 0,
-      'profile_id': profileId,
-    }).select().single();
+    final insertRes = await _sb
+        .from('Monthly_Financial_Record')
+        .insert({
+          'period_start': _fmt(first),
+          'period_end': _fmt(last),
+          'total_expense': 0,
+          'total_income': 0,
+          'total_earning': 0,
+          'monthly_saving': 0,
+          'profile_id': profileId,
+        })
+        .select()
+        .single();
 
     return insertRes as Map<String, dynamic>;
   }
 
-  Future<num> _sumAllMonthlySavingsExceptCurrent(String profileId, DateTime now) async {
+  // NEW METHOD: Update total_earning for earnings
+  Future<void> _bumpMonthEarningTotal({
+    required String profileId,
+    required DateTime date,
+    required num amount,
+  }) async {
+    final month = await _getOrCreateCurrentMonthRecord(profileId, date);
+    final recordId = month['record_id'] as String;
+
+    // Get current total_earning
+    final num currTotalEarning = (month['total_earning'] is num)
+        ? month['total_earning'] as num
+        : num.tryParse('${month['total_earning']}') ?? 0;
+
+    // Calculate new total_earning
+    final num nextTotalEarning = currTotalEarning + amount;
+
+    // Update monthly record with new total_earning
+    await _sb
+        .from('Monthly_Financial_Record')
+        .update({'total_earning': nextTotalEarning})
+        .eq('record_id', recordId);
+
+    debugPrint(
+      '💰 Updated total_earning: $currTotalEarning → $nextTotalEarning',
+    );
+  }
+
+  Future<num> _sumAllMonthlySavingsExceptCurrent(
+    String profileId,
+    DateTime now,
+  ) async {
     final first = DateTime(now.year, now.month, 1);
 
     final dynamic res = await _sb
@@ -147,7 +190,8 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
       final ps = DateTime.parse(row['period_start']);
       if (ps.year == first.year && ps.month == first.month) continue;
       final v = row['monthly_saving'];
-      if (v is num) total += v;
+      if (v is num)
+        total += v;
       else {
         final parsed = num.tryParse('$v');
         if (parsed != null) total += parsed;
@@ -169,7 +213,10 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
     return num.tryParse('$v') ?? 0;
   }
 
-  Future<void> _updateBalance({required num amount, required bool isEarning}) async {
+  Future<void> _updateBalance({
+    required num amount,
+    required bool isEarning,
+  }) async {
     final profileId = await _getProfileId();
     final dynamic getRes = await _sb
         .from('User_Profile')
@@ -243,7 +290,11 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
     return row as Map<String, dynamic>;
   }
 
-  Future<num> _getCategoryMonthlySpent(String profileId, String categoryId, DateTime date) async {
+  Future<num> _getCategoryMonthlySpent(
+    String profileId,
+    String categoryId,
+    DateTime date,
+  ) async {
     final month = await _getOrCreateCurrentMonthRecord(profileId, date);
     final recordId = month['record_id'] as String;
 
@@ -270,7 +321,9 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
       builder: (ctx) {
         return AlertDialog(
           backgroundColor: AppColors.card,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           title: const Text(
             "Pick a Color",
             style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
@@ -306,7 +359,10 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
                               decoration: BoxDecoration(
                                 color: tempColor,
                                 shape: BoxShape.circle,
-                                border: Border.all(color: Colors.white, width: 3),
+                                border: Border.all(
+                                  color: Colors.white,
+                                  width: 3,
+                                ),
                               ),
                             ),
                           ),
@@ -316,7 +372,11 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
                     const SizedBox(height: 16),
                     Row(
                       children: [
-                        const Icon(Icons.brightness_6, color: Colors.white70, size: 20),
+                        const Icon(
+                          Icons.brightness_6,
+                          color: Colors.white70,
+                          size: 20,
+                        ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: SliderTheme(
@@ -351,11 +411,21 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
           actions: [
             TextButton(
               onPressed: () => Navigator.of(ctx, rootNavigator: true).pop(null),
-              child: const Text("Cancel", style: TextStyle(color: Colors.white70)),
+              child: const Text(
+                "Cancel",
+                style: TextStyle(color: Colors.white70),
+              ),
             ),
             TextButton(
-              onPressed: () => Navigator.of(ctx, rootNavigator: true).pop(tempColor),
-              child: Text("Done", style: TextStyle(color: AppColors.accent, fontWeight: FontWeight.w600)),
+              onPressed: () =>
+                  Navigator.of(ctx, rootNavigator: true).pop(tempColor),
+              child: Text(
+                "Done",
+                style: TextStyle(
+                  color: AppColors.accent,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ),
           ],
         );
@@ -407,8 +477,13 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
           builder: (ctx, setDialog) {
             return AlertDialog(
               backgroundColor: AppColors.card,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              title: const Text('New Category', style: TextStyle(color: Colors.white)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              title: const Text(
+                'New Category',
+                style: TextStyle(color: Colors.white),
+              ),
               content: Form(
                 key: formKey,
                 child: SingleChildScrollView(
@@ -417,30 +492,45 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
                     children: [
                       TextFormField(
                         controller: nameCtrl,
-                        decoration: _inputDecoration().copyWith(hintText: 'Name'),
-                        validator: (v) => (v == null || v.trim().isEmpty) ? 'Enter a name' : null,
+                        decoration: _inputDecoration().copyWith(
+                          hintText: 'Name',
+                        ),
+                        validator: (v) => (v == null || v.trim().isEmpty)
+                            ? 'Enter a name'
+                            : null,
                       ),
                       const SizedBox(height: 12),
                       TextFormField(
                         controller: limitCtrl,
-                        decoration: _inputDecoration().copyWith(hintText: 'Monthly limit'),
-                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        decoration: _inputDecoration().copyWith(
+                          hintText: 'Monthly limit',
+                        ),
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
                         validator: (v) => (v == null || v.trim().isEmpty)
                             ? 'Enter a limit'
-                            : (double.tryParse(v.trim()) == null ? 'Enter a number' : null),
+                            : (double.tryParse(v.trim()) == null
+                                  ? 'Enter a number'
+                                  : null),
                       ),
                       const SizedBox(height: 12),
                       Row(
                         children: [
-                          const Text('Color', style: TextStyle(color: Colors.white70)),
+                          const Text(
+                            'Color',
+                            style: TextStyle(color: Colors.white70),
+                          ),
                           const SizedBox(width: 10),
                           GestureDetector(
                             onTap: () async {
                               final picked = await _pickWheelColor(chosenColor);
-                              if (picked != null) setDialog(() => chosenColor = picked);
+                              if (picked != null)
+                                setDialog(() => chosenColor = picked);
                             },
                             child: Container(
-                              width: 28, height: 28,
+                              width: 28,
+                              height: 28,
                               decoration: BoxDecoration(
                                 color: chosenColor,
                                 shape: BoxShape.circle,
@@ -452,7 +542,9 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
                       ),
                       const SizedBox(height: 12),
                       SizedBox(
-                        width: 5 * 50 + 4 * 8, // 5 icons per row (tile width + spacing)
+                        width:
+                            5 * 50 +
+                            4 * 8, // 5 icons per row (tile width + spacing)
                         child: Wrap(
                           spacing: 6,
                           runSpacing: 8,
@@ -465,10 +557,16 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
                                 child: Container(
                                   padding: const EdgeInsets.all(8),
                                   decoration: BoxDecoration(
-                                    color: isSelected ? AppColors.accent : const Color(0xFF2A2550),
+                                    color: isSelected
+                                        ? AppColors.accent
+                                        : const Color(0xFF2A2550),
                                     borderRadius: BorderRadius.circular(8),
                                   ),
-                                  child: Icon(icon, color: Colors.white, size: 20),
+                                  child: Icon(
+                                    icon,
+                                    color: Colors.white,
+                                    size: 20,
+                                  ),
                                 ),
                               ),
                             );
@@ -485,7 +583,9 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
                   child: const Text('Cancel'),
                 ),
                 ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.accent),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.accent,
+                  ),
                   onPressed: () async {
                     if (!formKey.currentState!.validate()) return;
                     if (chosenIcon == null) {
@@ -499,15 +599,19 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
                     final name = nameCtrl.text.trim();
                     final limit = num.parse(limitCtrl.text.trim());
 
-                    final inserted = await _sb.from('Category').insert({
-                      'name': name,
-                      'type': 'Custom',
-                      'monthly_limit': limit,
-                      'icon': chosenIcon.toString().split('.').last,
-                      'icon_color': chosenColor.value.toRadixString(16),
-                      'is_archived': false,
-                      'profile_id': profileId,
-                    }).select('category_id,name').single();
+                    final inserted = await _sb
+                        .from('Category')
+                        .insert({
+                          'name': name,
+                          'type': 'Custom',
+                          'monthly_limit': limit,
+                          'icon': chosenIcon.toString().split('.').last,
+                          'icon_color': chosenColor.value.toRadixString(16),
+                          'is_archived': false,
+                          'profile_id': profileId,
+                        })
+                        .select('category_id,name')
+                        .single();
 
                     createdCategoryName = inserted['name'] as String;
 
@@ -515,7 +619,10 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
                       Navigator.of(ctx, rootNavigator: true).pop();
                     }
                   },
-                  child: const Text('Create', style: TextStyle(color: Colors.white)),
+                  child: const Text(
+                    'Create',
+                    style: TextStyle(color: Colors.white),
+                  ),
                 ),
               ],
             );
@@ -547,12 +654,18 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
     final double angle = (math.atan2(dy, dx) * 180 / math.pi + 360) % 360;
     final double saturation = (distance / radius).clamp(0.0, 1.0);
 
-    final color = HSVColor.fromAHSV(1.0, angle, saturation, brightness).toColor();
+    final color = HSVColor.fromAHSV(
+      1.0,
+      angle,
+      saturation,
+      brightness,
+    ).toColor();
 
     setStateDialog(() {});
     setColor(color);
   }
 
+  // MODIFIED: Now handles both expense and earning updates
   Future<void> _submitToDb() async {
     final profileId = await _getProfileId();
 
@@ -584,9 +697,22 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
       payload['category_id'] = categoryId;
     }
 
+    // Insert the transaction
     await _sb.from('Transaction').insert(payload);
+
+    // Update user balance
     await _updateBalance(amount: amount, isEarning: typeDb == 'Earning');
 
+    // NEW: Handle earning updates to monthly record
+    if (typeDb == 'Earning') {
+      await _bumpMonthEarningTotal(
+        profileId: profileId,
+        date: _selectedDate,
+        amount: amount,
+      );
+    }
+
+    // Handle expense updates (existing logic)
     if (typeDb == 'Expense' && categoryId != null) {
       await _bumpMonthTotalsAndCategorySummary(
         profileId: profileId,
@@ -598,8 +724,14 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
       final catRow = await _fetchCategoryById(categoryId);
       final limitVal = catRow['monthly_limit'];
       if (limitVal != null) {
-        final num limit = (limitVal is num) ? limitVal : num.tryParse('$limitVal') ?? 0;
-        final num spentNow = await _getCategoryMonthlySpent(profileId, categoryId, _selectedDate);
+        final num limit = (limitVal is num)
+            ? limitVal
+            : num.tryParse('$limitVal') ?? 0;
+        final num spentNow = await _getCategoryMonthlySpent(
+          profileId,
+          categoryId,
+          _selectedDate,
+        );
         if (limit > 0 && spentNow > limit && mounted) {
           _showOverspendNote(
             'Category limit exceeded for ${catRow['name']}. Spent $spentNow over $limit.',
@@ -643,8 +775,9 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
     String? categoryName,
     required String dateText,
   }) async {
-    final double newBalance =
-        isExpense ? currentBalance - amount : currentBalance + amount;
+    final double newBalance = isExpense
+        ? currentBalance - amount
+        : currentBalance + amount;
 
     final Color amountColor = isExpense ? Colors.redAccent : Colors.greenAccent;
     final String amountPrefix = isExpense ? '-' : '+';
@@ -666,7 +799,9 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
       builder: (ctx) {
         return Dialog(
           backgroundColor: AppColors.card,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(20, 22, 20, 14),
             child: Column(
@@ -715,7 +850,8 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
                 ),
                 const SizedBox(height: 10),
 
-                if (isExpense && (categoryName != null && categoryName.isNotEmpty))
+                if (isExpense &&
+                    (categoryName != null && categoryName.isNotEmpty))
                   _ConfirmRow(
                     label: 'Category',
                     value: categoryName,
@@ -776,7 +912,11 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text(
           'Heads up',
-          style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700),
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 20,
+            fontWeight: FontWeight.w700,
+          ),
         ),
         content: const Text(
           'This expense will bring your balance to 0. We will log it and continue. Future expenses will make your balance negative.',
@@ -853,8 +993,9 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
       );
       if (!confirmed) return;
 
-      final newBalance =
-          isExpense ? currentBalance - amount : currentBalance + amount;
+      final newBalance = isExpense
+          ? currentBalance - amount
+          : currentBalance + amount;
 
       await _showZeroBalanceInfoIfNeeded(
         isExpense: isExpense,
@@ -867,14 +1008,17 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
           '$_type • ${_selectedCategory ?? ''} • ${_amountCtrl.text.trim()} • ${_fmt(_selectedDate)}';
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Saved: $preview'), behavior: SnackBarBehavior.floating),
+        SnackBar(
+          content: Text('Saved: $preview'),
+          behavior: SnackBarBehavior.floating,
+        ),
       );
       Navigator.pop(context);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not save: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not save: $e')));
     }
   }
 
@@ -928,7 +1072,10 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
             child: Align(
               alignment: Alignment.topLeft,
               child: IconButton(
-                icon: const Icon(Icons.arrow_back_ios_new, color: Color(0xFF704EF4)),
+                icon: const Icon(
+                  Icons.arrow_back_ios_new,
+                  color: Color(0xFF704EF4),
+                ),
                 onPressed: () => Navigator.pop(context),
                 tooltip: '',
               ),
@@ -939,7 +1086,10 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
             top: 40,
             left: 0,
             right: 0,
-            child: Hero(tag: 'surra-add-fab', child: SizedBox(width: 0, height: 0)),
+            child: Hero(
+              tag: 'surra-add-fab',
+              child: SizedBox(width: 0, height: 0),
+            ),
           ),
 
           Positioned(
@@ -987,9 +1137,7 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
                       if (!isEarning) ...[
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: const [
-                            _FieldLabel('Category'),
-                          ],
+                          children: const [_FieldLabel('Category')],
                         ),
                         const SizedBox(height: 8),
                         _rounded(
@@ -1001,25 +1149,39 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
                                   isExpanded: true,
                                   decoration: _inputDecoration(),
                                   items: _categories
-                                      .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                                      .map(
+                                        (c) => DropdownMenuItem(
+                                          value: c,
+                                          child: Text(c),
+                                        ),
+                                      )
                                       .toList(),
                                   onChanged: _loadingCats
                                       ? null
-                                      : (v) => setState(() => _selectedCategory = v),
+                                      : (v) => setState(
+                                          () => _selectedCategory = v,
+                                        ),
                                   validator: (v) =>
-                                      _type == 'Expense' && v == null ? 'Select a category' : null,
+                                      _type == 'Expense' && v == null
+                                      ? 'Select a category'
+                                      : null,
                                 ),
                               ),
                               const SizedBox(width: 8),
                               IconButton(
                                 tooltip: 'New',
                                 style: ButtonStyle(
-                                  backgroundColor: MaterialStateProperty.all(const Color(0xFF393A65)),
-                                  foregroundColor: MaterialStateProperty.all(Colors.white),
+                                  backgroundColor: MaterialStateProperty.all(
+                                    const Color(0xFF393A65),
+                                  ),
+                                  foregroundColor: MaterialStateProperty.all(
+                                    Colors.white,
+                                  ),
                                 ),
                                 onPressed: () async {
                                   try {
-                                    final created = await _createCategoryDialog();
+                                    final created =
+                                        await _createCategoryDialog();
                                     await _loadCategories();
                                     setState(() => _selectedCategory = created);
                                   } catch (_) {}
@@ -1033,8 +1195,10 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
                         if (_loadingCats)
                           const Padding(
                             padding: EdgeInsets.only(top: 8),
-                            child: Text('Loading categories...',
-                                style: TextStyle(color: Colors.white70)),
+                            child: Text(
+                              'Loading categories...',
+                              style: TextStyle(color: Colors.white70),
+                            ),
                           ),
                         const SizedBox(height: 18),
                       ],
@@ -1044,8 +1208,9 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
                       _rounded(
                         child: TextFormField(
                           controller: _amountCtrl,
-                          keyboardType:
-                              const TextInputType.numberWithOptions(decimal: true),
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
                           decoration: _inputDecoration().copyWith(
                             prefixText: 'SAR  ',
                             prefixStyle: const TextStyle(
@@ -1058,7 +1223,8 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
                             final txt = v?.trim() ?? '';
                             if (txt.isEmpty) return 'Enter an amount';
                             final val = double.tryParse(txt);
-                            if (val == null || val <= 0) return 'Enter a valid amount';
+                            if (val == null || val <= 0)
+                              return 'Enter a valid amount';
                             return null;
                           },
                         ),
@@ -1072,14 +1238,21 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
                           onTap: _pickDate,
                           borderRadius: BorderRadius.circular(18),
                           child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 12,
+                            ),
                             child: Row(
                               children: [
                                 Expanded(
                                   child: Text(
-                                    _datePicked ? _fmt(_selectedDate) : _fmt(DateTime.now()),
+                                    _datePicked
+                                        ? _fmt(_selectedDate)
+                                        : _fmt(DateTime.now()),
                                     style: TextStyle(
-                                      color: _datePicked ? Colors.black : const Color(0xFF989898),
+                                      color: _datePicked
+                                          ? Colors.black
+                                          : const Color(0xFF989898),
                                       fontSize: 16,
                                       fontWeight: FontWeight.w500,
                                     ),
@@ -1091,7 +1264,11 @@ class _LogTransactionManuallyPageState extends State<LogTransactionManuallyPage>
                                     borderRadius: BorderRadius.circular(10),
                                   ),
                                   padding: const EdgeInsets.all(8),
-                                  child: const Icon(Icons.calendar_month, color: Colors.white, size: 18),
+                                  child: const Icon(
+                                    Icons.calendar_month,
+                                    color: Colors.white,
+                                    size: 18,
+                                  ),
                                 ),
                               ],
                             ),

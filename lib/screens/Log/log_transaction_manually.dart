@@ -119,7 +119,7 @@ class _LogTransactionManuallyPageState
     final List recs = await _sb
         .from('Monthly_Financial_Record')
         .select(
-          'record_id,total_expense,total_income,total_earning,monthly_saving,period_start,period_end',
+          'record_id,total_expense,total_income,monthly_saving,period_start,period_end',
         )
         .eq('profile_id', profileId)
         .gte('period_start', _fmt(first))
@@ -136,7 +136,6 @@ class _LogTransactionManuallyPageState
           'period_end': _fmt(last),
           'total_expense': 0,
           'total_income': 0,
-          'total_earning': 0,
           'monthly_saving': 0,
           'profile_id': profileId,
         })
@@ -144,34 +143,6 @@ class _LogTransactionManuallyPageState
         .single();
 
     return insertRes as Map<String, dynamic>;
-  }
-
-  // NEW METHOD: Update total_earning for earnings
-  Future<void> _bumpMonthEarningTotal({
-    required String profileId,
-    required DateTime date,
-    required num amount,
-  }) async {
-    final month = await _getOrCreateCurrentMonthRecord(profileId, date);
-    final recordId = month['record_id'] as String;
-
-    // Get current total_earning
-    final num currTotalEarning = (month['total_earning'] is num)
-        ? month['total_earning'] as num
-        : num.tryParse('${month['total_earning']}') ?? 0;
-
-    // Calculate new total_earning
-    final num nextTotalEarning = currTotalEarning + amount;
-
-    // Update monthly record with new total_earning
-    await _sb
-        .from('Monthly_Financial_Record')
-        .update({'total_earning': nextTotalEarning})
-        .eq('record_id', recordId);
-
-    debugPrint(
-      '💰 Updated total_earning: $currTotalEarning → $nextTotalEarning',
-    );
   }
 
   Future<num> _sumAllMonthlySavingsExceptCurrent(
@@ -665,7 +636,6 @@ class _LogTransactionManuallyPageState
     setColor(color);
   }
 
-  // MODIFIED: Now handles both expense and earning updates
   Future<void> _submitToDb() async {
     final profileId = await _getProfileId();
 
@@ -697,22 +667,9 @@ class _LogTransactionManuallyPageState
       payload['category_id'] = categoryId;
     }
 
-    // Insert the transaction
     await _sb.from('Transaction').insert(payload);
-
-    // Update user balance
     await _updateBalance(amount: amount, isEarning: typeDb == 'Earning');
 
-    // NEW: Handle earning updates to monthly record
-    if (typeDb == 'Earning') {
-      await _bumpMonthEarningTotal(
-        profileId: profileId,
-        date: _selectedDate,
-        amount: amount,
-      );
-    }
-
-    // Handle expense updates (existing logic)
     if (typeDb == 'Expense' && categoryId != null) {
       await _bumpMonthTotalsAndCategorySummary(
         profileId: profileId,

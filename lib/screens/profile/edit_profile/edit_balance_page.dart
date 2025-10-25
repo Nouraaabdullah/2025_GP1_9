@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:surra_application/utils/auth_helpers.dart'; // Import the utility
+import 'package:surra_application/utils/auth_helpers.dart'; // getProfileId(context)
 
 class EditBalancePage extends StatefulWidget {
   final double currentBalance;
@@ -65,9 +65,9 @@ class _EditBalancePageState extends State<EditBalancePage> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
+            const Text(
               'Are you sure you want to update your balance?',
-              style: const TextStyle(color: Colors.white70),
+              style: TextStyle(color: Colors.white70),
             ),
             const SizedBox(height: 16),
             _buildConfirmationRow(
@@ -138,7 +138,10 @@ class _EditBalancePageState extends State<EditBalancePage> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: TextStyle(color: Colors.white70, fontSize: 14)),
+          Text(
+            label,
+            style: const TextStyle(color: Colors.white70, fontSize: 14),
+          ),
           Text(
             value,
             style: TextStyle(
@@ -152,6 +155,22 @@ class _EditBalancePageState extends State<EditBalancePage> {
         ],
       ),
     );
+  }
+
+  /// Read-only: fetch the fixed "Other" category_id for this profile.
+  /// Throws if not found (your data guarantees it should exist).
+  Future<String> _getOtherCategoryId(String profileId) async {
+    final row = await _sb
+        .from('Category')
+        .select('category_id')
+        .eq('profile_id', profileId)
+        .ilike('name', 'other')
+        .maybeSingle();
+
+    if (row == null || row['category_id'] == null) {
+      throw Exception('Fixed "Other" category not found for this user.');
+    }
+    return row['category_id'].toString();
   }
 
   Future<void> _saveBalance() async {
@@ -180,19 +199,29 @@ class _EditBalancePageState extends State<EditBalancePage> {
 
       // Record transaction only if there's a difference
       if (difference > 0) {
-        await _sb.from('Transaction').insert({
-          'type': transactionType,
+        // Prepare base transaction data
+        final Map<String, dynamic> transactionData = {
+          'type': transactionType, // 'Earning' | 'Expense'
           'amount': difference,
           'date': _iso(DateTime.now()),
           'profile_id': profileId,
-          'category_id': null, // No category for balance adjustments
-        });
+        };
+
+        // If expense, attach the fixed "Other" category
+        if (transactionType == 'Expense') {
+          final otherId = await _getOtherCategoryId(profileId);
+          transactionData['category_id'] = otherId;
+        }
+        // If earning: do not attach/change category (kept as you requested)
+
+        await _sb.from('Transaction').insert(transactionData);
       }
 
       if (mounted) {
         Navigator.pop(context, true); // Return success
       }
     } catch (e) {
+      debugPrint('Error updating balance: $e');
       if (mounted) {
         _showError('Error updating balance: $e');
       }
@@ -230,9 +259,9 @@ class _EditBalancePageState extends State<EditBalancePage> {
           Container(
             height: 230,
             width: double.infinity,
-            decoration: BoxDecoration(
-              color: const Color(0xFF704EF4),
-              borderRadius: const BorderRadius.only(
+            decoration: const BoxDecoration(
+              color: Color(0xFF704EF4),
+              borderRadius: BorderRadius.only(
                 bottomLeft: Radius.circular(40),
                 bottomRight: Radius.circular(40),
               ),
@@ -327,7 +356,7 @@ class _EditBalancePageState extends State<EditBalancePage> {
                       _rounded(
                         child: TextFormField(
                           controller: _balanceController,
-                          keyboardType: TextInputType.numberWithOptions(
+                          keyboardType: const TextInputType.numberWithOptions(
                             decimal: true,
                           ),
                           decoration: _inputDecoration().copyWith(
@@ -442,7 +471,7 @@ class _EditBalancePageState extends State<EditBalancePage> {
                             Text(
                               difference > 0
                                   ? 'This increase will be recorded as an earning transaction'
-                                  : 'This decrease will be recorded as an expense transaction',
+                                  : 'This decrease will be recorded as an expense transaction with "Other" category',
                               style: const TextStyle(
                                 color: Colors.white70,
                                 fontSize: 12,

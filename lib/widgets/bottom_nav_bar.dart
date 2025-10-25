@@ -27,7 +27,7 @@ class SurraBottomBar extends StatelessWidget {
       alignment: Alignment.topCenter,
       children: [
         SizedBox(
-          height: 100,
+          height: 110,
           child: Stack(
             clipBehavior: Clip.none,
             children: [
@@ -43,7 +43,7 @@ class SurraBottomBar extends StatelessWidget {
               Positioned.fill(
                 child: SafeArea(
                   child: Padding(
-                    padding: const EdgeInsets.only(top: 30, bottom: 5),
+                    padding: const EdgeInsets.only(top: 35, bottom: 0),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceAround,
                       crossAxisAlignment: CrossAxisAlignment.end,

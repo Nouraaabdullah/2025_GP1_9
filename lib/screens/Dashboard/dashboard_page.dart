@@ -645,8 +645,7 @@ class _DashboardPageState extends State<DashboardPage> {
           }
         }
 
-        // E) completed weeks only
-        // E) include current week too but exclude future weeks
+        // E) completed weeks only (include current week too but exclude future weeks)
 final today = DateTime.now();
 final currentWeekIdx =
     (today.day <= 7)  ? 0 :

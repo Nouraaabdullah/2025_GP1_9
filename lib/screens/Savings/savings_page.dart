@@ -252,6 +252,167 @@ class _SavingsPageState extends State<SavingsPage> with WidgetsBindingObserver {
       .subscribe();
 }
 
+// Future<void> _logCompletedGoalExpense(Goal goal) async {
+//   try {
+//     final profileId = await getProfileId(context);
+//     if (profileId == null) return; // not logged in
+
+//     final supabase = Supabase.instance.client;
+//     final amount = goal.targetAmount;
+
+
+
+//     // Step 1️⃣ — Fetch user-specific, active categories (fixed + custom)
+//     final categories = await supabase
+//         .from('Category')
+//         .select('category_id, name, type')
+//         .eq('profile_id', profileId)
+//         .eq('is_archived', false)
+//         .order('name', ascending: true);
+
+//     if (categories == null || categories.isEmpty) {
+//       ScaffoldMessenger.of(context).showSnackBar(
+//         const SnackBar(content: Text('No active categories available for this user.')),
+//       );
+//       return;
+//     }
+
+//     String? selectedCategory;
+//     final confirm = await showDialog<bool>(
+//       context: context,
+//       builder: (ctx) => AlertDialog(
+//         backgroundColor: AppColors.card,
+//         title: const Text('Confirm Goal Expense',
+//             style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800)),
+//         content: Column(
+//           mainAxisSize: MainAxisSize.min,
+//           children: [
+//             Text(
+//               'You\'re about to log "${goal.title}" as an expense of ${amount.toStringAsFixed(2)} SAR.',
+//               style: const TextStyle(color: Colors.white70),
+//             ),
+//             const SizedBox(height: 12),
+//             DropdownButtonFormField<String>(
+//               dropdownColor: AppColors.card,
+//               decoration: InputDecoration(
+//                 labelText: 'Select Category',
+//                 labelStyle: const TextStyle(color: Colors.white70),
+//                 enabledBorder: OutlineInputBorder(
+//                   borderSide: BorderSide(color: Colors.white24),
+//                   borderRadius: BorderRadius.circular(10),
+//                 ),
+//                 focusedBorder: OutlineInputBorder(
+//                   borderSide: BorderSide(color: AppColors.accent, width: 1.5),
+//                   borderRadius: BorderRadius.circular(10),
+//                 ),
+//               ),
+//               items: [
+//                 for (final c in categories)
+//                   DropdownMenuItem(
+//                     value: c['category_id'],
+//                     child: Text(c['name'], style: const TextStyle(color: Colors.white)),
+//                   ),
+//               ],
+//               onChanged: (v) => selectedCategory = v,
+//             ),
+//           ],
+//         ),
+//         actions: [
+//           TextButton(
+//             onPressed: () => Navigator.pop(ctx, false),
+//             child: const Text('Cancel', style: TextStyle(color: Colors.white70)),
+//           ),
+//           ElevatedButton(
+//             style: ElevatedButton.styleFrom(backgroundColor: AppColors.accent),
+//             onPressed: () {
+//               if (selectedCategory != null) Navigator.pop(ctx, true);
+//             },
+//             child: const Text('Confirm', style: TextStyle(color: Colors.white70)),
+//           ),
+//         ],
+//       ),
+//     );
+
+//     if (confirm != true || selectedCategory == null) return;
+
+//     // Step 2️⃣ — Start safe DB sequence
+//     try {
+//       // 1. Insert expense transaction (this will work even with negative balance)
+//       await supabase.from('Transaction').insert({
+//         'profile_id': profileId,
+//         'category_id': selectedCategory,
+//         'amount': amount,
+//         'type': 'Expense',
+//         'date': DateTime.now().toIso8601String(),
+//       });
+
+//       // 2. Get current balance and deduct the amount (can go negative)
+//       final user = await supabase
+//           .from('User_Profile')
+//           .select('current_balance')
+//           .eq('profile_id', profileId)
+//           .maybeSingle();
+
+//       final double currentBalance = (user?['current_balance'] ?? 0).toDouble();
+//       final double newBalance = currentBalance - amount;
+
+//       await supabase
+//           .from('User_Profile')
+//           .update({'current_balance': newBalance})
+//           .eq('profile_id', profileId);
+
+//       // 3️⃣ Keep assigned amount as historical
+//       // Optionally, add a special marker in the goal for clarity
+//       await supabase
+//           .from('Goal')
+//           .update({'status': 'Achieved'})
+//           .eq('goal_id', goal.id);
+
+//       // 4. Mark goal as achieved
+//       await supabase
+//           .from('Goal')
+//           .update({'status': 'Achieved'})
+//           .eq('goal_id', goal.id);
+
+//       // 5. Update total saving and assigned balance
+//       await _generateMonthlySavings(); // updates _totalSaving from DB
+//       await _fetchGoals();              // refreshes goal list
+//       _recalculateBalances();           // recompute assigned/unassigned
+
+//       // 6. Show success & move to achieved tab
+//       setState(() => _selected = GoalType.achieved);
+
+//       ScaffoldMessenger.of(context).showSnackBar(
+//         SnackBar(content: Text('Goal "${goal.title}" logged successfully as expense!')),
+//       );
+//     } catch (dbError) {
+//       // Rollback if failed
+//       final user = await supabase
+//           .from('User_Profile')
+//           .select('current_balance')
+//           .eq('profile_id', profileId)
+//           .maybeSingle();
+//       final double currentBalance = (user?['current_balance'] ?? 0).toDouble();
+      
+//       await supabase
+//           .from('User_Profile')
+//           .update({'current_balance': currentBalance})
+//           .eq('profile_id', profileId);
+      
+//       debugPrint('❌ Rolled back due to: $dbError');
+//       ScaffoldMessenger.of(context).showSnackBar(
+//         SnackBar(content: Text('Error logging expense: $dbError')),
+//       );
+//     }
+//   } catch (e) {
+//     debugPrint('❌ Unexpected error logging goal as expense: $e');
+//     ScaffoldMessenger.of(context).showSnackBar(
+//       SnackBar(content: Text('Error logging expense: $e')),
+//     );
+//   }
+// }
+
+
 Future<void> _logCompletedGoalExpense(Goal goal) async {
   try {
     final profileId = await getProfileId(context);
@@ -260,12 +421,10 @@ Future<void> _logCompletedGoalExpense(Goal goal) async {
     final supabase = Supabase.instance.client;
     final amount = goal.targetAmount;
 
-
-
     // Step 1️⃣ — Fetch user-specific, active categories (fixed + custom)
     final categories = await supabase
         .from('Category')
-        .select('category_id, name, type')
+        .select('category_id, name, type, monthly_limit')
         .eq('profile_id', profileId)
         .eq('is_archived', false)
         .order('name', ascending: true);
@@ -282,8 +441,10 @@ Future<void> _logCompletedGoalExpense(Goal goal) async {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.card,
-        title: const Text('Confirm Goal Expense',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800)),
+        title: const Text(
+          'Confirm Goal Expense',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800),
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -335,6 +496,69 @@ Future<void> _logCompletedGoalExpense(Goal goal) async {
 
     if (confirm != true || selectedCategory == null) return;
 
+    // ✅ Step 1.5 — Check Category Limit Before Logging
+    final now = DateTime.now();
+    final monthStart = DateTime(now.year, now.month, 1);
+
+    // 1️⃣ Get current monthly record
+    final mfr = await supabase
+        .from('Monthly_Financial_Record')
+        .select('record_id')
+        .eq('profile_id', profileId)
+        .eq('period_start', monthStart.toIso8601String())
+        .maybeSingle();
+
+    if (mfr != null) {
+      final recordId = mfr['record_id'];
+
+      // 2️⃣ Get total spent in this category this month
+      final summary = await supabase
+          .from('Category_Summary')
+          .select('total_expense')
+          .eq('record_id', recordId)
+          .eq('category_id', selectedCategory!)
+          .maybeSingle();
+
+      final double currentExpense = (summary?['total_expense'] ?? 0).toDouble();
+
+      // 3️⃣ Get the category’s monthly limit
+      final cat = categories.firstWhere(
+        (c) => c['category_id'] == selectedCategory,
+        orElse: () => {},
+      );
+      final double limit = (cat['monthly_limit'] ?? 0).toDouble();
+
+      final double newTotal = currentExpense + amount;
+
+      // 4️⃣ Compare with limit
+      if (limit > 0 && newTotal > limit) {
+        await showDialog(
+          context: context,
+          builder: (_) => AlertDialog(
+            backgroundColor: AppColors.card,
+            title: const Text(
+              'Category Limit Exceeded',
+              style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800),
+            ),
+            content: Text(
+              '⚠️ You are exceeding the monthly limit for this category.\n\n'
+              'Limit: ${limit.toStringAsFixed(2)} SAR\n'
+              'Current: ${currentExpense.toStringAsFixed(2)} SAR\n'
+              'This expense would make it: ${newTotal.toStringAsFixed(2)} SAR.',
+              style: const TextStyle(color: Colors.white70),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('OK', style: TextStyle(color: Colors.white70)),
+              ),
+            ],
+          ),
+        );
+        return; // ❌ Stop here
+      }
+    }
+
     // Step 2️⃣ — Start safe DB sequence
     try {
       // 1. Insert expense transaction (this will work even with negative balance)
@@ -362,43 +586,23 @@ Future<void> _logCompletedGoalExpense(Goal goal) async {
           .eq('profile_id', profileId);
 
       // 3️⃣ Keep assigned amount as historical
-      // Optionally, add a special marker in the goal for clarity
       await supabase
           .from('Goal')
           .update({'status': 'Achieved'})
           .eq('goal_id', goal.id);
 
-      // 4. Mark goal as achieved
-      await supabase
-          .from('Goal')
-          .update({'status': 'Achieved'})
-          .eq('goal_id', goal.id);
+      // 4️⃣ Refresh savings and goals
+      await _generateMonthlySavings();
+      await _fetchGoals();
+      _recalculateBalances();
 
-      // 5. Update total saving and assigned balance
-      await _generateMonthlySavings(); // updates _totalSaving from DB
-      await _fetchGoals();              // refreshes goal list
-      _recalculateBalances();           // recompute assigned/unassigned
-
-      // 6. Show success & move to achieved tab
+      // 5️⃣ Move to achieved tab
       setState(() => _selected = GoalType.achieved);
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Goal "${goal.title}" logged successfully as expense!')),
       );
     } catch (dbError) {
-      // Rollback if failed
-      final user = await supabase
-          .from('User_Profile')
-          .select('current_balance')
-          .eq('profile_id', profileId)
-          .maybeSingle();
-      final double currentBalance = (user?['current_balance'] ?? 0).toDouble();
-      
-      await supabase
-          .from('User_Profile')
-          .update({'current_balance': currentBalance})
-          .eq('profile_id', profileId);
-      
       debugPrint('❌ Rolled back due to: $dbError');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error logging expense: $dbError')),
@@ -970,48 +1174,83 @@ Widget build(BuildContext context) {
                         const SizedBox(width: 6),
                         GestureDetector(
                           onTap: () {
-                            showDialog(
+                            
+                            showModalBottomSheet(
                               context: context,
-                              builder: (ctx) => AlertDialog(
-                                backgroundColor: AppColors.card,
-                                shape: RoundedRectangleBorder(
+                              backgroundColor: Colors.transparent,   // lets the rounded card keep its own background
+                              builder: (ctx) => Container(
+                                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+                                padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+                                decoration: BoxDecoration(
+                                  color: AppColors.card,
                                   borderRadius: BorderRadius.circular(16),
                                 ),
-                                title: const Text(
-                                  'What is Total Savings?',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w800,
-                                    fontSize: 18,
-                                  ),
-                                ),
-                                content: const Text(
-                                  'Total Savings includes all the money you\'ve saved across previous months, showing your overall accumulated savings.',
-                                  style: TextStyle(
-                                    color: Colors.white70,
-                                    height: 1.4,
-                                    fontSize: 13,
-                                  ),
-                                ),
-                                actions: [
-                                  TextButton(
-                                    onPressed: () => Navigator.pop(ctx),
-                                    child: Text(
-                                      'Got it',
-                                      style: TextStyle(color: AppColors.accent),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    // Title row with the info icon
+                                    Row(
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.all(4),
+                                          decoration: BoxDecoration(
+                                            color: AppColors.accent.withOpacity(0.2),
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: const Icon(
+                                            Icons.info_outline_rounded,
+                                            color: AppColors.accent,
+                                            size: 18,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        const Text(
+                                          'About this chart',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: 16,
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                  ),
-                                ],
+                                    const SizedBox(height: 12),
+
+                                    // Description
+                                    const Text(
+                                      'Shows this month: spending vs what you have (earnings + income).',
+                                      style: TextStyle(
+                                        color: Colors.white70,
+                                        height: 1.4,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 20),
+
+                                    // Dismiss line (the white line at the bottom of the screenshot)
+                                    Center(
+                                      child: Container(
+                                        width: 40,
+                                        height: 4,
+                                        decoration: BoxDecoration(
+                                          color: Colors.white24,
+                                          borderRadius: BorderRadius.circular(2),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                             );
                           },
-                          child: Icon(
+                          child: const Icon(
                             Icons.info_outline_rounded,
                             color: AppColors.textGrey,
                             size: 18,
                           ),
                         ),
-                      ],
+                                              ],
                     ),
                     const SizedBox(height: 4),
                     Text(
@@ -2050,7 +2289,7 @@ class _GoalTile extends StatelessWidget {
                               goal.type == GoalType.completed) ...[
                             _EnhancedIconButton(
                               icon: Icons.edit_rounded,
-                              color: const Color(0xFF6366F1), // Consistent indigo for edit
+                              color: Colors.white,
                               onTap: _openEdit,
                             ),
                             const SizedBox(width: 8),

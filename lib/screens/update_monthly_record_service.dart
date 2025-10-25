@@ -130,42 +130,42 @@ class UpdateMonthlyRecordService {
           .eq('record_id', recordId);
       final totalExpense = (catSum as List? ?? [])
           .fold<double>(0, (sum, e) => sum + (e['total_expense'] ?? 0).toDouble());
-// ---------- INCOME ----------
-final fi = await _supabase
-    .from('Fixed_Income')
-    .select('monthly_income, payday, start_time, end_time')
-    .eq('profile_id', profileId);
+      // ---------- INCOME ----------
+      final fi = await _supabase
+          .from('Fixed_Income')
+          .select('monthly_income, payday, start_time, end_time')
+          .eq('profile_id', profileId);
 
-double totalIncome = 0;
-for (final i in (fi as List? ?? [])) {
-  final monthlyIncome = (i['monthly_income'] ?? 0).toDouble();
-  final payday = (i['payday'] ?? 1) as int;
+      double totalIncome = 0;
+      for (final i in (fi as List? ?? [])) {
+        final monthlyIncome = (i['monthly_income'] ?? 0).toDouble();
+        final payday = (i['payday'] ?? 1) as int;
 
-  // Parse date boundaries
-  final start = i['start_time'] != null
-      ? DateTime.parse(i['start_time'])
-      : DateTime(1900);
-  final end = i['end_time'] != null
-      ? DateTime.parse(i['end_time'])
-      : DateTime(9999);
+        // Parse date boundaries
+        final start = i['start_time'] != null
+            ? DateTime.parse(i['start_time'])
+            : DateTime(1900);
+        final end = i['end_time'] != null
+            ? DateTime.parse(i['end_time'])
+            : DateTime(9999);
 
-  // Compute month boundaries (start <= current month <= end)
-  final sameOrAfterStartMonth =
-      (now.year > start.year) ||
-      (now.year == start.year && now.month >= start.month);
-  final sameOrBeforeEndMonth =
-      (now.year < end.year) ||
-      (now.year == end.year && now.month <= end.month);
+        // Compute month boundaries (start <= current month <= end)
+        final sameOrAfterStartMonth =
+            (now.year > start.year) ||
+            (now.year == start.year && now.month >= start.month);
+        final sameOrBeforeEndMonth =
+            (now.year < end.year) ||
+            (now.year == end.year && now.month <= end.month);
 
-  final isInRange = sameOrAfterStartMonth && sameOrBeforeEndMonth;
+        final isInRange = sameOrAfterStartMonth && sameOrBeforeEndMonth;
 
-  // Compute payday check for current month
-  final paydayThisMonth = DateTime(now.year, now.month, payday);
-  final paydayReached = !now.isBefore(paydayThisMonth);
+        // Compute payday check for current month
+        final paydayThisMonth = DateTime(now.year, now.month, payday);
+        final paydayReached = !now.isBefore(paydayThisMonth);
 
-  if (isInRange && paydayReached) {
-    totalIncome += monthlyIncome;
-  }
+        if (isInRange && paydayReached) {
+          totalIncome += monthlyIncome;
+        }
 }
 
       // ---------- EARNING ----------
@@ -211,7 +211,12 @@ static Future<void> startWithoutContext(String profileId) async {
     debugPrint('⚠️ startWithoutContext failed: $e');
   }
 }
-
+static void _debugRealtimeStatus() {
+  final rt = _supabase.realtime;
+  debugPrint('[Realtime] Connected: ${rt.isConnected}');
+  debugPrint('[Realtime] Channels: ${rt.channels.map((c) => c.topic).toList()}');
 }
+}
+
 
 

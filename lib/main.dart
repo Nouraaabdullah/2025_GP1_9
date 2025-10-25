@@ -1,11 +1,13 @@
+// lib/main.dart
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-// Monthly Record Updater
+// 🟣 Background updaters
 import 'screens/update_monthly_record_service.dart';
 import 'screens/category_summary_service.dart';
+import 'utils/auth_helpers.dart'; // for getProfileId(context)
 
-// Screens
+// ✅ Screens
 import 'screens/Registeration/welcome_screen.dart';
 import 'screens/Registeration/login_screen.dart';
 import 'screens/Registeration/signup_screen.dart';
@@ -45,6 +47,7 @@ class _SurraAppState extends State<SurraApp> {
 
   User? _user;
   bool _isLoading = true;
+  bool _servicesStarted = false;
 
   @override
   void initState() {
@@ -60,25 +63,22 @@ class _SurraAppState extends State<SurraApp> {
         _isLoading = false;
       });
 
-      // 🔹 Start updater *after* app is shown (delay avoids startup lag)
+      // ✅ If already logged in, ensure services start once
       if (session?.user != null) {
-        Future.delayed(const Duration(seconds: 3), () {
-          UpdateMonthlyRecordService.start(context);
-          UpdateCategorySummaryService.start(context);
-          debugPrint('🟢 Monthly record service started in background');
-        });
+        debugPrint('🟢 User already logged in – ensuring background updaters start once.');
+        await _ensureMonthlyAndCategoryServices(context);
       }
 
-      // 🔹 Also listen for login/logout
-      _supabase.auth.onAuthStateChange.listen((event) {
+      // 🔹 Handle login/logout transitions
+      _supabase.auth.onAuthStateChange.listen((event) async {
         final session = event.session;
         if (session != null) {
-          UpdateMonthlyRecordService.start(context);
-          debugPrint('🟢 Monthly record service started after login');
+          await _ensureMonthlyAndCategoryServices(context);
         } else {
           UpdateMonthlyRecordService.stop();
           UpdateCategorySummaryService.stop();
-          debugPrint('🔴 Monthly record service stopped after logout');
+          _servicesStarted = false;
+          debugPrint('🔴 Updaters stopped after logout');
         }
       });
     } catch (e) {
@@ -86,7 +86,46 @@ class _SurraAppState extends State<SurraApp> {
         _user = null;
         _isLoading = false;
       });
+      debugPrint('❌ Error initializing session: $e');
     }
+  }
+
+  /// Ensures that Monthly + Category summary updaters start exactly once
+  Future<void> _ensureMonthlyAndCategoryServices(BuildContext context) async {
+    if (_servicesStarted) {
+      debugPrint('⚙️ Updaters already running – skipping duplicate start.');
+      return;
+    }
+    _servicesStarted = true;
+
+    String? profileId;
+    int retries = 0;
+
+    // 🔁 Try up to 5 times to get profile (in case context not ready yet)
+    while (profileId == null && retries < 5) {
+      profileId = await getProfileId(context);
+      if (profileId == null) {
+        debugPrint('[main.dart] ⚠️ Profile not ready (retry $retries)');
+        await Future.delayed(const Duration(seconds: 1));
+        retries++;
+      }
+    }
+
+    if (profileId == null) {
+      debugPrint('[main.dart] ❌ Failed to fetch profile ID after retries.');
+      _servicesStarted = false;
+      return;
+    }
+
+    // 🟢 Guarantee a record exists before realtime starts
+    await UpdateMonthlyRecordService.startWithoutContext(profileId);
+    debugPrint('🟢 Ensured monthly record exists for $profileId');
+
+    // 🟢 Start live background updaters
+    await UpdateMonthlyRecordService.start(context);
+    await UpdateCategorySummaryService.start(context);
+
+    debugPrint('✅ Background updaters started successfully.');
   }
 
   @override

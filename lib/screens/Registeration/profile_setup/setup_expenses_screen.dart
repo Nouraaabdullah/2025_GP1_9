@@ -50,7 +50,7 @@ class _SetupExpensesScreenState extends State<SetupExpensesScreen> {
     });
   }
 
-  // ✅ Inline validator for each field
+  // ✅ Validation: only checks filled rows
   bool _validateFields() {
     bool isValid = true;
 
@@ -58,29 +58,27 @@ class _SetupExpensesScreenState extends State<SetupExpensesScreen> {
       final errors = e['errors'] as Map<String, String?>;
       errors.updateAll((key, value) => null);
 
+      // skip if all fields empty
+      if (e['name'].text.trim().isEmpty &&
+          e['amount'].text.trim().isEmpty &&
+          e['dueDate'] == null &&
+          e['category'] == null &&
+          e['customCategory'].text.trim().isEmpty) {
+        continue;
+      }
+
       if (e['name'].text.trim().isEmpty) {
         errors['name'] = "Required";
         isValid = false;
       }
 
       final amountText = e['amount'].text.trim();
-      if (amountText.isEmpty) {
-        errors['amount'] = "Required";
-        isValid = false;
-      } else if (double.tryParse(amountText) == null) {
+      if (amountText.isNotEmpty && double.tryParse(amountText) == null) {
         errors['amount'] = "Enter numbers only";
         isValid = false;
       }
 
-      if (e['dueDate'] == null) {
-        errors['dueDate'] = "Select a day";
-        isValid = false;
-      }
-
-      if (e['category'] == null) {
-        errors['category'] = "Select category";
-        isValid = false;
-      } else if (e['category'] == 'Custom' &&
+      if (e['category'] == 'Custom' &&
           e['customCategory'].text.trim().isEmpty) {
         errors['customCategory'] = "Enter name";
         isValid = false;
@@ -109,15 +107,27 @@ class _SetupExpensesScreenState extends State<SetupExpensesScreen> {
       if (profileResponse == null) throw Exception("User profile not found.");
       final profileId = profileResponse['profile_id'];
 
-      final categoryResponse =
-          await supabase.from('Category').select('category_id, name, type');
+      // ✅ Filter out empty rows
+      final filledExpenses = expenses.where((e) =>
+          e['name'].text.trim().isNotEmpty ||
+          e['amount'].text.trim().isNotEmpty ||
+          e['dueDate'] != null ||
+          e['category'] != null).toList();
 
+      // ✅ If none filled, skip saving and move on
+      if (filledExpenses.isEmpty) {
+        Navigator.pushNamed(context, '/setupBalance');
+        return;
+      }
+
+      final categoryResponse =
+          await supabase.from('Category').select('category_id, name');
       final categoryMap = {
         for (var cat in categoryResponse)
           cat['name'].toString(): cat['category_id']
       };
 
-      final expenseRecords = expenses.map((e) {
+      final expenseRecords = filledExpenses.map((e) {
         final categoryName = e['category'] == 'Custom'
             ? e['customCategory'].text
             : e['category'];
@@ -133,9 +143,11 @@ class _SetupExpensesScreenState extends State<SetupExpensesScreen> {
         };
       }).toList();
 
-      await supabase.from('Fixed_Expense').insert(expenseRecords);
+      if (expenseRecords.isNotEmpty) {
+        await supabase.from('Fixed_Expense').insert(expenseRecords);
+      }
 
-      for (final e in expenses) {
+      for (final e in filledExpenses) {
         final categoryName = e['category'] == 'Custom'
             ? e['customCategory'].text
             : e['category'];
@@ -209,8 +221,7 @@ class _SetupExpensesScreenState extends State<SetupExpensesScreen> {
               style: const TextStyle(color: Colors.white),
               decoration: _inputDecoration('Expense name (e.g., Rent)'),
             ),
-            if (errors['name'] != null)
-              _errorText(errors['name']!),
+            if (errors['name'] != null) _errorText(errors['name']!),
             const SizedBox(height: 12),
 
             // ==== AMOUNT ====
@@ -221,8 +232,7 @@ class _SetupExpensesScreenState extends State<SetupExpensesScreen> {
               style: const TextStyle(color: Colors.white),
               decoration: _inputDecoration('Amount (SAR)'),
             ),
-            if (errors['amount'] != null)
-              _errorText(errors['amount']!),
+            if (errors['amount'] != null) _errorText(errors['amount']!),
             const SizedBox(height: 12),
 
             // ==== CATEGORY ====
@@ -236,8 +246,8 @@ class _SetupExpensesScreenState extends State<SetupExpensesScreen> {
                 ...categoryNames.map(
                   (cat) => DropdownMenuItem(
                     value: cat,
-                    child: Text(cat,
-                        style: const TextStyle(color: Colors.white)),
+                    child:
+                        Text(cat, style: const TextStyle(color: Colors.white)),
                   ),
                 ),
                 const DropdownMenuItem(
@@ -248,16 +258,14 @@ class _SetupExpensesScreenState extends State<SetupExpensesScreen> {
               ],
               onChanged: (value) => setState(() => expense['category'] = value),
             ),
-            if (errors['category'] != null)
-              _errorText(errors['category']!),
+            if (errors['category'] != null) _errorText(errors['category']!),
 
             if (expense['category'] == 'Custom') ...[
               const SizedBox(height: 12),
               TextField(
                 controller: expense['customCategory'],
                 style: const TextStyle(color: Colors.white),
-                decoration:
-                    _inputDecoration('Enter custom category name'),
+                decoration: _inputDecoration('Enter custom category name'),
               ),
               if (errors['customCategory'] != null)
                 _errorText(errors['customCategory']!),
@@ -271,8 +279,7 @@ class _SetupExpensesScreenState extends State<SetupExpensesScreen> {
               decoration: BoxDecoration(
                 color: const Color(0xFF1F1B3A),
                 borderRadius: BorderRadius.circular(12),
-                border:
-                    Border.all(color: Colors.white.withOpacity(0.2)),
+                border: Border.all(color: Colors.white.withOpacity(0.2)),
               ),
               child: DropdownButton<int>(
                 value: expense['dueDate'],
@@ -289,8 +296,7 @@ class _SetupExpensesScreenState extends State<SetupExpensesScreen> {
                   (i) => DropdownMenuItem<int>(
                     value: i + 1,
                     child: Text('${i + 1}',
-                        style:
-                            const TextStyle(color: Colors.white)),
+                        style: const TextStyle(color: Colors.white)),
                   ),
                 ),
                 onChanged: (val) =>
@@ -299,19 +305,17 @@ class _SetupExpensesScreenState extends State<SetupExpensesScreen> {
                 style: const TextStyle(color: Colors.white),
               ),
             ),
-            if (errors['dueDate'] != null)
-              _errorText(errors['dueDate']!),
+            if (errors['dueDate'] != null) _errorText(errors['dueDate']!),
           ],
         ),
       ),
     );
   }
 
-  // ✅ Grey inline error helper
   Widget _errorText(String text) => Padding(
         padding: const EdgeInsets.only(top: 4, left: 4),
-        child: Text(text,
-            style: const TextStyle(color: Colors.grey, fontSize: 12)),
+        child:
+            Text(text, style: const TextStyle(color: Colors.grey, fontSize: 12)),
       );
 
   @override
@@ -327,10 +331,7 @@ class _SetupExpensesScreenState extends State<SetupExpensesScreen> {
               // ===== PROGRESS BAR =====
               Stack(
                 children: [
-                  Container(
-                      height: 4,
-                      width: double.infinity,
-                      color: Colors.white12),
+                  Container(height: 4, width: double.infinity, color: Colors.white12),
                   Container(
                     height: 4,
                     width: MediaQuery.of(context).size.width * 0.85,
@@ -346,8 +347,7 @@ class _SetupExpensesScreenState extends State<SetupExpensesScreen> {
 
               // ===== STEP INDICATOR =====
               Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 14, vertical: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
                 decoration: BoxDecoration(
                   color: const Color(0xFF7959F5).withOpacity(0.15),
                   borderRadius: BorderRadius.circular(20),
@@ -372,7 +372,7 @@ class _SetupExpensesScreenState extends State<SetupExpensesScreen> {
               ),
               const SizedBox(height: 8),
               const Text(
-                "Add your regular monthly expenses, due dates, and categories.",
+                "Add your regular monthly expenses, due dates, and categories (optional).",
                 style: TextStyle(color: Color(0xFFB3B3C7), fontSize: 15),
               ),
               const SizedBox(height: 20),
@@ -380,8 +380,7 @@ class _SetupExpensesScreenState extends State<SetupExpensesScreen> {
               Expanded(
                 child: ListView.builder(
                   itemCount: expenses.length,
-                  itemBuilder: (context, index) =>
-                      buildExpenseCard(index),
+                  itemBuilder: (context, index) => buildExpenseCard(index),
                 ),
               ),
               const SizedBox(height: 10),
@@ -405,13 +404,12 @@ class _SetupExpensesScreenState extends State<SetupExpensesScreen> {
                   Expanded(
                     child: OutlinedButton(
                       style: OutlinedButton.styleFrom(
-                        side: BorderSide(
-                            color: Colors.white.withOpacity(0.3)),
+                        side: BorderSide(color: Colors.white.withOpacity(0.3)),
                         foregroundColor: Colors.white,
                         backgroundColor:
                             const Color(0xFF2E2C4A).withOpacity(0.5),
-                        padding: const EdgeInsets.symmetric(
-                            vertical: 14),
+                        padding:
+                            const EdgeInsets.symmetric(vertical: 14),
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12)),
                       ),
@@ -425,16 +423,15 @@ class _SetupExpensesScreenState extends State<SetupExpensesScreen> {
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF7959F5),
-                        padding: const EdgeInsets.symmetric(
-                            vertical: 14),
+                        padding:
+                            const EdgeInsets.symmetric(vertical: 14),
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12)),
                         elevation: 6,
                         shadowColor:
                             const Color(0xFF7959F5).withOpacity(0.4),
                       ),
-                      onPressed:
-                          loading ? null : saveExpensesToSupabase,
+                      onPressed: loading ? null : saveExpensesToSupabase,
                       child: loading
                           ? const CircularProgressIndicator(
                               color: Colors.white)
@@ -459,19 +456,16 @@ class _SetupExpensesScreenState extends State<SetupExpensesScreen> {
   InputDecoration _inputDecoration(String hint) {
     return InputDecoration(
       hintText: hint,
-      hintStyle:
-          const TextStyle(color: Color(0xFFB0AFC5)),
+      hintStyle: const TextStyle(color: Color(0xFFB0AFC5)),
       filled: true,
       fillColor: const Color(0xFF1F1B3A),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide:
-            BorderSide(color: Colors.white.withOpacity(0.2)),
+        borderSide: BorderSide(color: Colors.white.withOpacity(0.2)),
       ),
       focusedBorder: const OutlineInputBorder(
         borderRadius: BorderRadius.all(Radius.circular(12)),
-        borderSide:
-            BorderSide(color: Color(0xFF7959F5), width: 2),
+        borderSide: BorderSide(color: Color(0xFF7959F5), width: 2),
       ),
     );
   }

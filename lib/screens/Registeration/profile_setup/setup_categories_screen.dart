@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'add_edit_category_page.dart';
 import 'shared_profile_data.dart';
@@ -62,6 +63,49 @@ class _SetupCategoriesScreenState extends State<SetupCategoriesScreen> {
 
   final List<Map<String, dynamic>> customCategories = [];
 
+  // ✅ Validation for duplicate name/color
+  bool _isCategoryValid(String name, Color color) {
+    final lowerName = name.trim().toLowerCase();
+
+    final fixedNameExists = fixedCategories.any(
+      (c) => (c['name'] as String).toLowerCase() == lowerName,
+    );
+
+    final fixedColorExists = fixedCategories.any(
+      (c) => c['color'].value == color.value,
+    );
+
+    final customNameExists = customCategories.any(
+      (c) => (c['name'] as String).toLowerCase() == lowerName,
+    );
+
+    final customColorExists = customCategories.any(
+      (c) => c['color'].value == color.value,
+    );
+
+    if (fixedNameExists || customNameExists) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("⚠️ Category name already exists."),
+          backgroundColor:  Color.fromARGB(255, 128, 120, 120),
+        ),
+      );
+      return false;
+    }
+
+    if (fixedColorExists || customColorExists) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("⚠️ Category color already in use."),
+          backgroundColor: Color.fromARGB(255, 128, 120, 120),
+        ),
+      );
+      return false;
+    }
+
+    return true;
+  }
+
   Future<void> addCustomCategory() async {
     final usedColors = [
       ...fixedCategories.map((c) => c['color'].toString()),
@@ -76,10 +120,15 @@ class _SetupCategoriesScreenState extends State<SetupCategoriesScreen> {
     );
 
     if (newCategory != null && newCategory is Map<String, dynamic>) {
-      setState(() {
-        newCategory['limit'] = TextEditingController();
-        customCategories.add(newCategory);
-      });
+      final name = newCategory['name'] as String;
+      final color = newCategory['color'] as Color;
+
+      if (_isCategoryValid(name, color)) {
+        setState(() {
+          newCategory['limit'] = TextEditingController();
+          customCategories.add(newCategory);
+        });
+      }
     }
   }
 
@@ -89,102 +138,122 @@ class _SetupCategoriesScreenState extends State<SetupCategoriesScreen> {
     });
   }
 
-Future<void> saveCategoriesToSupabase() async {
-  setState(() => loading = true);
-  try {
-    final user = supabase.auth.currentUser;
-    if (user == null) throw Exception("No logged-in user found");
-
-    final profileResponse = await supabase
-        .from('User_Profile')
-        .select('profile_id')
-        .eq('user_id', user.id)
-        .maybeSingle();
-
-    if (profileResponse == null) throw Exception("User profile not found");
-    final profileId = profileResponse['profile_id'];
-
-    final allCategories = [...fixedCategories, ...customCategories];
-
-    // ✅ Retrieve monthly income BEFORE saving
-    final incomeResponse = await supabase
-        .from('Fixed_Income')
-        .select('monthly_income')
-        .eq('is_primary', true)
-        .eq('profile_id', profileId)
-        .maybeSingle();
-
-    final monthlyIncome = (incomeResponse?['monthly_income'] ?? 0).toDouble();
-
-    // ✅ Calculate total limits
-    final totalLimits = allCategories.fold<double>(
-      0,
-      (sum, c) => sum + (int.tryParse(c['limit'].text.trim()) ?? 0),
-    );
-
-    // ✅ Warn if limits exceed income
-    if (totalLimits > monthlyIncome) {
-      final proceed = await showDialog<bool>(
-        context: context,
-        builder: (_) => AlertDialog(
-          backgroundColor: const Color(0xFF1D1B32),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Text("⚠️ Limit Warning",
-              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-          content: Text(
-            "Your total limits (SAR $totalLimits) exceed your monthly income (SAR $monthlyIncome). "
-            "Would you like to continue or adjust them?",
-            style: const TextStyle(color: Colors.white70, height: 1.4),
+  // ✅ Validate numeric input before saving
+  bool _validateNumericInputs(List<Map<String, dynamic>> categories) {
+    for (final c in categories) {
+      final text = c['limit'].text.trim();
+      if (text.isNotEmpty && int.tryParse(text) == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("⚠️ '${c['name']}' limit must be a number."),
+            backgroundColor: const Color.fromARGB(255, 149, 144, 144),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text("Adjust", style: TextStyle(color: Colors.white70)),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text("Continue", style: TextStyle(color: Color(0xFF7959F5))),
-            ),
-          ],
-        ),
-      );
+        );
+        return false;
+      }
+    }
+    return true;
+  }
 
-      // 🟣 If user wants to adjust, stop saving
-      if (proceed != true) {
+  Future<void> saveCategoriesToSupabase() async {
+    setState(() => loading = true);
+    try {
+      final user = supabase.auth.currentUser;
+      if (user == null) throw Exception("No logged-in user found");
+
+      final profileResponse = await supabase
+          .from('User_Profile')
+          .select('profile_id')
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+      if (profileResponse == null) throw Exception("User profile not found");
+      final profileId = profileResponse['profile_id'];
+
+      final allCategories = [...fixedCategories, ...customCategories];
+
+      // 🟢 Validate numeric inputs before continuing
+      if (!_validateNumericInputs(allCategories)) {
         setState(() => loading = false);
         return;
       }
+
+      // ✅ Retrieve monthly income BEFORE saving
+      final incomeResponse = await supabase
+          .from('Fixed_Income')
+          .select('monthly_income')
+          .eq('is_primary', true)
+          .eq('profile_id', profileId)
+          .maybeSingle();
+
+      final monthlyIncome = (incomeResponse?['monthly_income'] ?? 0).toDouble();
+
+      // ✅ Calculate total limits
+      final totalLimits = allCategories.fold<double>(
+        0,
+        (sum, c) => sum + (int.tryParse(c['limit'].text.trim()) ?? 0),
+      );
+
+      // ✅ Warn if limits exceed income
+      if (totalLimits > monthlyIncome) {
+        final proceed = await showDialog<bool>(
+          context: context,
+          builder: (_) => AlertDialog(
+            backgroundColor: const Color(0xFF1D1B32),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: const Text("⚠️ Limit Warning",
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            content: Text(
+              "Your total limits (SAR $totalLimits) exceed your monthly income (SAR $monthlyIncome). "
+              "Would you like to continue or adjust them?",
+              style: const TextStyle(color: Colors.white70, height: 1.4),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text("Adjust", style: TextStyle(color: Colors.white70)),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text("Continue", style: TextStyle(color: Color(0xFF7959F5))),
+              ),
+            ],
+          ),
+        );
+
+        if (proceed != true) {
+          setState(() => loading = false);
+          return;
+        }
+      }
+
+      // ✅ Prepare records for saving
+      final categoryRecords = allCategories.map((c) {
+        final limit = c['limit'].text.trim().isEmpty
+            ? null
+            : int.tryParse(c['limit'].text.trim()) ?? 0;
+        return {
+          'profile_id': profileId,
+          'name': c['name'],
+          'type': c['type'] ?? 'Custom',
+          'monthly_limit': limit,
+          'icon': c['icon'].toString().split('.').last,
+          'icon_color': c['color'].value.toRadixString(16),
+          'is_archived': false,
+        };
+      }).toList();
+
+      await supabase.from('Category').insert(categoryRecords);
+      ProfileData.categories = categoryRecords;
+
+      Navigator.pushNamed(context, '/setupExpenses');
+    } catch (e) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text("Error saving: $e")));
+    } finally {
+      setState(() => loading = false);
     }
-
-    // ✅ Prepare records for saving
-    final categoryRecords = allCategories.map((c) {
-      final limit = c['limit'].text.trim().isEmpty
-          ? null
-          : int.tryParse(c['limit'].text.trim()) ?? 0;
-      return {
-        'profile_id': profileId,
-        'name': c['name'],
-        'type': c['type'] ?? 'Custom',
-        'monthly_limit': limit,
-        'icon': c['icon'].toString().split('.').last,
-        'icon_color': c['color'].value.toRadixString(16),
-        'is_archived': false,
-      };
-    }).toList();
-
-    // ✅ Insert only after confirmation
-    await supabase.from('Category').insert(categoryRecords);
-    ProfileData.categories = categoryRecords;
-
-    Navigator.pushNamed(context, '/setupBalance');
-  } catch (e) {
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text("Error saving: $e")));
-  } finally {
-    setState(() => loading = false);
   }
-}
-
 
   Widget _buildCompactRow(Map<String, dynamic> category,
       {bool isCustom = false, int? index}) {
@@ -220,9 +289,10 @@ Future<void> saveCategoriesToSupabase() async {
             child: TextField(
               controller: category['limit'],
               keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly], // ✅ Allow only numbers
               style: const TextStyle(color: Colors.white, fontSize: 14),
               decoration: InputDecoration(
-                hintText: isFixed ? "Limit" : "Limit",
+                hintText: "Limit",
                 hintStyle: const TextStyle(color: Colors.white54, fontSize: 13),
                 isDense: true,
                 contentPadding:
@@ -261,7 +331,6 @@ Future<void> saveCategoriesToSupabase() async {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // ===== Progress Bar =====
               Stack(
                 children: [
                   Container(height: 4, width: double.infinity, color: Colors.white12),
@@ -277,10 +346,8 @@ Future<void> saveCategoriesToSupabase() async {
               ),
               const SizedBox(height: 28),
 
-              // ===== Step Title =====
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
                 decoration: BoxDecoration(
                   color: const Color(0xFF7959F5).withOpacity(0.15),
                   borderRadius: BorderRadius.circular(20),
@@ -294,7 +361,7 @@ Future<void> saveCategoriesToSupabase() async {
               const SizedBox(height: 14),
 
               const Text(
-                "Set Category Limits",
+                "Set Categories",
                 style: TextStyle(
                     color: Colors.white,
                     fontSize: 26,
@@ -302,7 +369,7 @@ Future<void> saveCategoriesToSupabase() async {
               ),
               const SizedBox(height: 6),
               const Text(
-                "Add limits for each category. Fixed ones are optional.",
+                "Set custom categories and optionally add limits for each category.",
                 style: TextStyle(color: Color(0xFFB3B3C7), fontSize: 15),
               ),
               const SizedBox(height: 22),
@@ -347,14 +414,12 @@ Future<void> saveCategoriesToSupabase() async {
                 ),
               ),
               const SizedBox(height: 10),
-              // ===== Bottom Buttons =====
               Row(
                 children: [
                   Expanded(
                     child: OutlinedButton(
                       style: OutlinedButton.styleFrom(
-                        side:
-                            BorderSide(color: Colors.white.withOpacity(0.3)),
+                        side: BorderSide(color: Colors.white.withOpacity(0.3)),
                         foregroundColor: Colors.white,
                         backgroundColor:
                             const Color(0xFF2E2C4A).withOpacity(0.5),
@@ -383,8 +448,7 @@ Future<void> saveCategoriesToSupabase() async {
                       ),
                       onPressed: loading ? null : saveCategoriesToSupabase,
                       child: loading
-                          ? const CircularProgressIndicator(
-                              color: Colors.white)
+                          ? const CircularProgressIndicator(color: Colors.white)
                           : const Text(
                               "Continue",
                               style: TextStyle(

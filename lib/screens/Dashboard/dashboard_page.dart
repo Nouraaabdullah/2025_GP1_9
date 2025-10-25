@@ -1,4 +1,3 @@
-// /Users/lamee/Documents/GitHub/2025_GP1_9/lib/screens/Dashboard/dashboard_page.dart
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -10,9 +9,9 @@ import '../../widgets/bottom_nav_bar.dart';
 import 'income_chart.dart';
 import 'trends_chart.dart';
 import 'savings_chart.dart';
-import 'category_chart.dart'; // exposes CategorySlice + colorFromIconOrSeed
+import 'category_chart.dart'; 
 
-// ✅ Auth helper (redirects to /login if not signed in and returns null)
+// Auth helper (redirects to /login if not signed in and returns null)
 import '../../utils/auth_helpers.dart';
 
 class DashboardPage extends StatefulWidget {
@@ -25,9 +24,8 @@ class _DashboardPageState extends State<DashboardPage> {
   int _periodIndex = 1; // 0 Weekly, 1 Monthly, 2 Yearly
   bool _showAllCategories = false; // for monthly/yearly grid
   bool _showAllWeekly = false;     // for weekly legend grid
-
-  // NEW: controls monthly/yearly expand/collapse when center is tapped
-  bool _donutExpanded = false; // default hidden as requested
+  bool _isRefreshing = false;
+  bool _donutExpanded = false; 
 
   // Accent palette
   static const _violet = Color(0xFF8B5CF6);
@@ -71,6 +69,19 @@ class _DashboardPageState extends State<DashboardPage> {
     _loadAll();
   }
 
+  Future<void> _refreshData() async {
+    if (_isRefreshing) return;
+    setState(() { _isRefreshing = true; });
+    try {
+      await _loadAll(); 
+    } catch (e) {
+      debugPrint('Error refreshing data: $e');
+    } finally {
+      if (!mounted) return;
+      setState(() { _isRefreshing = false; });
+    }
+  }
+
   Future<void> _loadAll() async {
     setState(() { _loading = true; _error = null; });
 
@@ -92,7 +103,7 @@ class _DashboardPageState extends State<DashboardPage> {
     }
 
     try {
-      // ✅ Get profileId via shared auth helper (handles redirect if signed out)
+      // Get profileId via shared auth helper (handles redirect if signed out)
       final profileId = await getProfileId(context);
       if (profileId == null) {
         if (!mounted) return;
@@ -805,12 +816,16 @@ class _DashboardPageState extends State<DashboardPage> {
     final String savingsYAxisTitle =
         _periodIndex == 0 ? 'Weekly savings' : _periodIndex == 1 ? 'Monthly savings' : 'Yearly savings';
 
-    return SingleChildScrollView(
-      physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, kBottomNavigationBarHeight + 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+return RefreshIndicator(
+  color: AppColors.accent,
+  backgroundColor: AppColors.card,
+  onRefresh: _refreshData,
+  child: SingleChildScrollView(
+    physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+    padding: const EdgeInsets.fromLTRB(20, 16, 20, kBottomNavigationBarHeight + 24),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
           Stack(
             children: [
               Positioned(
@@ -857,7 +872,7 @@ class _DashboardPageState extends State<DashboardPage> {
           const _BlockTitle('Income Overview'),
           const SizedBox(height: _betweenTitleAndCard),
           _SectionCard(
-            onInfo: () => _showInfo(context, 'Shows this ${_periodIndex==0?'week':_periodIndex==1?'month':'year'}: spending vs what you have (earnings + income).'),
+            onInfo: () => _showInfo(context, 'This chart tracks how efficiently you’re managing your income this month. It shows what portion of your total funds (earnings + income) is still available after spending. The purple gauge shows how much of your income remains after all expenses.'), 
             child: Column(
               children: [
                 const SizedBox(height: 8),
@@ -879,7 +894,7 @@ class _DashboardPageState extends State<DashboardPage> {
           const _BlockTitle('Financial Trends'),
           const SizedBox(height: _betweenTitleAndCard),
           _SectionCard(
-            onInfo: () => _showInfo(context, 'Bars compare expenses against earnings and income. Only available periods are shown.'),
+            onInfo: () => _showInfo(context, 'This chart compares your total expenses, earnings, and income for each available period. It helps you identify whether your spending is growing or decreasing over time.'),
             child: Column(
               children: [
                 const SizedBox(height: 8),
@@ -902,7 +917,7 @@ class _DashboardPageState extends State<DashboardPage> {
           const _BlockTitle('Savings Over Time'),
           const SizedBox(height: _betweenTitleAndCard),
           _SectionCard(
-            onInfo: () => _showInfo(context, 'Y axis adapts to the selected period. Tap points for details.'),
+            onInfo: () => _showInfo(context, 'This chart visualizes how your savings evolve across each ${_periodIndex==0?'week':_periodIndex==1?'month':'year'}. By connecting these points, the chart highlights your overall savings trend; whether you’re improving, staying steady, or overspending. Use it to spot changes in your saving habits.'),
             child: Padding(
               padding: const EdgeInsets.only(top: 30, bottom: 10),
               child: SavingsSparkline(
@@ -918,9 +933,12 @@ class _DashboardPageState extends State<DashboardPage> {
           const _BlockTitle('Category Breakdown'),
           const SizedBox(height: _betweenTitleAndCard),
           _SectionCard(
-            onInfo: () => _showInfo(context, _periodIndex==0
-                ? 'Four mini charts one per week. Future weeks show No data yet. Past weeks with no spending show 0 SAR spent.'
-                : 'Tap inside the donut center text to expand or collapse the full list.'),
+            onInfo: () => _showInfo(
+              context,
+              _periodIndex == 0
+                  ? 'Four mini charts show spending by category for each week.Future weeks display No data yet. Past weeks with no recorded spending display 0 SAR spent. Tap any mini chart to view category details for that week.'
+                  : 'This donut chart shows how your total expenses are divided among different categories. Each colored slice represents a spending area, sized by its share of total expenses. Tap a slice to view details or tap inside the donut center to expand or collapse the full category list.'
+            ),
             child: Padding(
               padding: const EdgeInsets.only(bottom: 10),
               child: Column(
@@ -977,9 +995,7 @@ class _DashboardPageState extends State<DashboardPage> {
                           },
                         ),
                         const SizedBox(height: 12),
-
-                        // Removed the extra selected category pill under the chart as requested
-
+                        
                         // Expandable full list controlled only by chart tap
                         AnimatedSize(
                           duration: const Duration(milliseconds: 220),
@@ -994,7 +1010,12 @@ class _DashboardPageState extends State<DashboardPage> {
                         ),
 
                         const SizedBox(height: 12),
-                        if (_categorySlices.isEmpty)
+                        if (_isFutureWeek(DateTime.now()))
+                          Center(child: Text(
+                            'No data yet',
+                            style: TextStyle(color: AppColors.textGrey),
+                          ))
+                        else if (_categorySlices.isEmpty)
                           Center(child: Text('No money spent', style: TextStyle(color: AppColors.textGrey)))
                         else
                           _CategoryGrid(
@@ -1027,11 +1048,19 @@ class _DashboardPageState extends State<DashboardPage> {
           const SizedBox(height: 18),
 
           const _MotivationCard(
-            title: 'Small Wins, Big Future',
-            subtitle: 'Keep making the little moves those are the ones that quietly build your future.',
+            title: 'Small Wins, Big Future!',
+            subtitle: 'Keep making the little moves; those are the ones that quietly build your future.',
           ),
         ],
       ),
+     ),
+    );
+  }
+
+  bool _isFutureWeek(DateTime weekDate) {
+    final now = DateTime.now();
+    return weekDate.isAfter(
+      DateTime(now.year, now.month, now.day),
     );
   }
 
@@ -1051,12 +1080,12 @@ class _DashboardPageState extends State<DashboardPage> {
             Row(
               children: [
                 Icon(Icons.info_outline, color: AppColors.accent),
-                const SizedBox(width: 8),
-                const Text('About this chart', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700)),
+                const SizedBox(width: 6),
+                const Text('About this chart', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
               ],
             ),
             const SizedBox(height: 10),
-            Text(text, style: TextStyle(color: AppColors.textGrey, fontSize: 14, height: 1.4)),
+            Text(text, style: TextStyle(color: AppColors.textGrey, fontSize: 13, height: 1.4)),
             const SizedBox(height: 10),
           ],
         ),
@@ -1352,9 +1381,9 @@ class _MotivationCard extends StatelessWidget {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w800)),
+                Text(title, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w800)),
                 const SizedBox(height: 4),
-                Text(subtitle, style: TextStyle(color: AppColors.textGrey, fontSize: 12, fontWeight: FontWeight.w600)),
+                Text(subtitle, style: TextStyle(color: AppColors.textGrey, fontSize: 11, fontWeight: FontWeight.w600)),
               ],
             ),
           ),

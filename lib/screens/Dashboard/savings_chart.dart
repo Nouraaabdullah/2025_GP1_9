@@ -1,10 +1,9 @@
-// /Users/lamee/Documents/GitHub/2025_GP1_9/lib/screens/Dashboard/savings_chart.dart
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../theme/app_colors.dart';
 
-// ✅ Auth helper import (redirects to /login if not signed in)
+// Auth helper import (redirects to /login if not signed in)
 import '../../utils/auth_helpers.dart';
 
 /// Line sparkline for Savings with tap tooltip next to the point.
@@ -43,7 +42,7 @@ class _SavingsSparklineState extends State<SavingsSparkline> {
   @override
   void initState() {
     super.initState();
-    // ✅ Lightweight auth check; if signed out, helper will navigate to /login.
+    // Lightweight auth check; if signed out, helper will navigate to /login.
     // Does not alter chart behavior otherwise.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       getProfileId(context);
@@ -288,9 +287,45 @@ class _SparkPainter extends CustomPainter {
 class _Bubble extends StatelessWidget {
   final String text;
   const _Bubble({required this.text});
+  
   @override
   Widget build(BuildContext context) {
-    // Purple bubble (unified style)
+    
+    // Expect input like:
+    // line 0 -> label (e.g., October)
+    // line 1 -> title or "title: value" (e.g., Monthly savings OR Monthly savings: 120 SAR)
+    // line 2 -> optional value (e.g., 120 SAR)
+    final parts = text.split('\n');
+
+    // Expand short month names to full names
+    final months = {
+      'Jan': 'January',
+      'Feb': 'February',
+      'Mar': 'March',
+      'Apr': 'April',
+      'May': 'May',
+      'Jun': 'June',
+      'Jul': 'July',
+      'Aug': 'August',
+      'Sep': 'September',
+      'Oct': 'October',
+      'Nov': 'November',
+      'Dec': 'December',
+    };
+
+    final rawLabel = parts.isNotEmpty ? parts[0].trim() : '';
+    final label = months[rawLabel] ?? rawLabel;
+
+    String title = parts.length > 1 ? parts[1].trim() : '';
+    String value = parts.length > 2 ? parts[2].trim() : '';
+
+    // If the second line was "title: value", split it.
+    if (value.isEmpty && title.contains(':')) {
+      final idx = title.indexOf(':');
+      value = title.substring(idx + 1).trim();
+      title = title.substring(0, idx).trim();
+    }
+
     return AnimatedOpacity(
       opacity: 1,
       duration: const Duration(milliseconds: 120),
@@ -309,14 +344,42 @@ class _Bubble extends StatelessWidget {
             ),
           ],
         ),
-        child: Text(
-          text,
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            color: AppColors.textGrey,
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
-          ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (label.isNotEmpty)
+              Text(
+                label,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: AppColors.textGrey,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            if (title.isNotEmpty) const SizedBox(height: 4),
+            if (title.isNotEmpty)
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            if (value.isNotEmpty) const SizedBox(height: 4),
+            if (value.isNotEmpty)
+              Text(
+                value,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: AppColors.textGrey,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+          ],
         ),
       ),
     );

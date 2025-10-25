@@ -173,10 +173,15 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
   void _navigateToAddEditCategory({Map<String, dynamic>? category}) async {
     try {
+      final profileId = await _getProfileId(); // Get profileId here
+
       final result = await Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) => AddEditCategoryPage(category: category),
+          builder: (context) => AddEditCategoryPage(
+            category: category,
+            profileId: profileId, // Pass the required profileId
+          ),
         ),
       );
 
@@ -303,7 +308,8 @@ class _EditProfilePageState extends State<EditProfilePage> {
                                 ),
                                 child: Row(
                                   children: [
-                                    _roundIcon(
+                                    // UPDATED: Square icon styling
+                                    _squareIcon(
                                       const Color(0xFF4CAF50),
                                       Icons.account_balance_wallet,
                                     ),
@@ -503,7 +509,8 @@ class _EditProfilePageState extends State<EditProfilePage> {
       padding: const EdgeInsets.symmetric(horizontal: 12),
       child: Row(
         children: [
-          _roundIcon(const Color(0xFF5E52E6), Icons.attach_money),
+          // UPDATED: Square icon styling
+          _squareIcon(const Color(0xFF5E52E6), Icons.attach_money),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -579,7 +586,8 @@ class _EditProfilePageState extends State<EditProfilePage> {
       padding: const EdgeInsets.symmetric(horizontal: 12),
       child: Row(
         children: [
-          _roundIcon(const Color(0xFFB388FF), Icons.receipt_long),
+          // UPDATED: Square icon styling
+          _squareIcon(const Color(0xFFB388FF), Icons.receipt_long),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -635,7 +643,16 @@ class _EditProfilePageState extends State<EditProfilePage> {
       padding: const EdgeInsets.symmetric(horizontal: 12),
       child: Row(
         children: [
-          _roundIcon(color, iconData),
+          // UPDATED: Square icon styling
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(iconData, color: color, size: 18),
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -671,11 +688,15 @@ class _EditProfilePageState extends State<EditProfilePage> {
   }
 
   // ----------------- Small UI helpers -----------------
-  Widget _roundIcon(Color c, IconData i) => Container(
+  // UPDATED: Square icon styling (replaces _roundIcon)
+  Widget _squareIcon(Color c, IconData i) => Container(
     height: 32,
     width: 32,
-    decoration: BoxDecoration(color: c, shape: BoxShape.circle),
-    child: Icon(i, color: Colors.white, size: 18),
+    decoration: BoxDecoration(
+      color: c.withOpacity(0.12),
+      borderRadius: BorderRadius.circular(12),
+    ),
+    child: Icon(i, color: c, size: 18),
   );
 
   Widget _editBtn(VoidCallback onTap) => InkWell(

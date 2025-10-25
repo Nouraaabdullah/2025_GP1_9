@@ -2,12 +2,12 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-// 🟣 Background updaters
+// Background updaters
 import 'screens/update_monthly_record_service.dart';
 import 'screens/category_summary_service.dart';
-import 'utils/auth_helpers.dart'; // for getProfileId(context)
+import 'utils/auth_helpers.dart'; 
 
-// ✅ Screens
+//  Screens
 import 'screens/Registeration/welcome_screen.dart';
 import 'screens/Registeration/login_screen.dart';
 import 'screens/Registeration/signup_screen.dart';
@@ -63,7 +63,7 @@ class _SurraAppState extends State<SurraApp> {
         _isLoading = false;
       });
 
-      // ✅ If already logged in, ensure services start once
+      // If already logged in, ensure services start once
       if (session?.user != null) {
         debugPrint('🟢 User already logged in – ensuring background updaters start once.');
         await _ensureMonthlyAndCategoryServices(context);
@@ -101,7 +101,7 @@ class _SurraAppState extends State<SurraApp> {
     String? profileId;
     int retries = 0;
 
-    // 🔁 Try up to 5 times to get profile (in case context not ready yet)
+    
     while (profileId == null && retries < 5) {
       profileId = await getProfileId(context);
       if (profileId == null) {
@@ -112,20 +112,20 @@ class _SurraAppState extends State<SurraApp> {
     }
 
     if (profileId == null) {
-      debugPrint('[main.dart] ❌ Failed to fetch profile ID after retries.');
+      debugPrint('[main.dart]  Failed to fetch profile ID after retries.');
       _servicesStarted = false;
       return;
     }
 
-    // 🟢 Guarantee a record exists before realtime starts
+    //  Guarantee a record exists before realtime starts
     await UpdateMonthlyRecordService.startWithoutContext(profileId);
-    debugPrint('🟢 Ensured monthly record exists for $profileId');
+    debugPrint(' Ensured monthly record exists for $profileId');
 
-    // 🟢 Start live background updaters
+    //  Start live background updaters
     await UpdateMonthlyRecordService.start(context);
     await UpdateCategorySummaryService.start(context);
 
-    debugPrint('✅ Background updaters started successfully.');
+    debugPrint(' Background updaters started successfully.');
   }
 
   @override

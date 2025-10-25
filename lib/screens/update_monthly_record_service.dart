@@ -136,43 +136,49 @@ _fixedIncomeListener = _supabase
           .eq('record_id', recordId);
       final totalExpense = (catSum as List? ?? [])
           .fold<double>(0, (sum, e) => sum + (e['total_expense'] ?? 0).toDouble());
+// ---------- INCOME ----------
+final fi = await _supabase
+    .from('Fixed_Income')
+    .select('monthly_income, payday, start_time, end_time')
+    .eq('profile_id', profileId);
 
-      // ---------- INCOME ----------
-      final fi = await _supabase
-          .from('Fixed_Income')
-          .select('monthly_income, payday, start_time, end_time')
-          .eq('profile_id', profileId);
+double totalIncome = 0;
 
-      double totalIncome = 0;
-      for (final i in (fi as List? ?? [])) {
-        final monthlyIncome = (i['monthly_income'] ?? 0).toDouble();
-        final payday = (i['payday'] ?? 1) as int;
+bool _isSameDay(DateTime a, DateTime b) =>
+    a.year == b.year && a.month == b.month && a.day == b.day;
 
-        // Parse date boundaries
-        final start = i['start_time'] != null
-            ? DateTime.parse(i['start_time'])
-            : DateTime(1900);
-        final end = i['end_time'] != null
-            ? DateTime.parse(i['end_time'])
-            : DateTime(9999);
+for (final i in (fi as List? ?? [])) {
+  final monthlyIncome = (i['monthly_income'] ?? 0).toDouble();
+  final payday = (i['payday'] ?? 1) as int;
 
-        // Compute month boundaries (start <= current month <= end)
-        final sameOrAfterStartMonth =
-            (now.year > start.year) ||
-            (now.year == start.year && now.month >= start.month);
-        final sameOrBeforeEndMonth =
-            (now.year < end.year) ||
-            (now.year == end.year && now.month <= end.month);
+  final start = i['start_time'] != null
+      ? DateTime.parse(i['start_time'])
+      : DateTime(1900);
+  final end = i['end_time'] != null
+      ? DateTime.parse(i['end_time'])
+      : DateTime(9999);
 
-        final isInRange = sameOrAfterStartMonth && sameOrBeforeEndMonth;
+  // 🧩 Skip invalid or same-day archived records
+  if (end.isBefore(start)) continue;
+  if (_isSameDay(end, now)) continue;
 
-        // Compute payday check for current month
-        final paydayThisMonth = DateTime(now.year, now.month, payday);
-        final paydayReached = !now.isBefore(paydayThisMonth);
+  // Only count active income within current month
+  final sameOrAfterStartMonth =
+      (now.year > start.year) ||
+      (now.year == start.year && now.month >= start.month);
+  final sameOrBeforeEndMonth =
+      (now.year < end.year) ||
+      (now.year == end.year && now.month <= end.month);
 
-        if (isInRange && paydayReached) {
-          totalIncome += monthlyIncome;
-        }
+  final isInRange = sameOrAfterStartMonth && sameOrBeforeEndMonth;
+
+  // Check if payday for current month has passed
+  final paydayThisMonth = DateTime(now.year, now.month, payday);
+  final paydayReached = !now.isBefore(paydayThisMonth);
+
+  if (isInRange && paydayReached) {
+    totalIncome += monthlyIncome;
+  }
 }
 
       // ---------- EARNING ----------

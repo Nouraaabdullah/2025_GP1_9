@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-// 🟣 Import the monthly record service
+// Monthly Record Updater
 import 'screens/update_monthly_record_service.dart';
+import 'screens/category_summary_service.dart';
 
-// ✅ Screens
+// Screens
 import 'screens/Registeration/welcome_screen.dart';
 import 'screens/Registeration/login_screen.dart';
 import 'screens/Registeration/signup_screen.dart';
@@ -48,10 +49,10 @@ class _SurraAppState extends State<SurraApp> {
   @override
   void initState() {
     super.initState();
-    _initializeAuthAndRecordUpdater();
+    _getInitialSession();
   }
 
-  Future<void> _initializeAuthAndRecordUpdater() async {
+  Future<void> _getInitialSession() async {
     try {
       final session = _supabase.auth.currentSession;
       setState(() {
@@ -59,25 +60,28 @@ class _SurraAppState extends State<SurraApp> {
         _isLoading = false;
       });
 
-      // 🟣 Start updater if already logged in
-      if (_user != null) {
-        UpdateMonthlyRecord.start();
+      // 🔹 Start updater *after* app is shown (delay avoids startup lag)
+      if (session?.user != null) {
+        Future.delayed(const Duration(seconds: 3), () {
+          UpdateMonthlyRecordService.start(context);
+          UpdateCategorySummaryService.start(context);
+          debugPrint('🟢 Monthly record service started in background');
+        });
       }
 
-      // 🟣 Listen for login/logout events and handle background updater
-      _supabase.auth.onAuthStateChange.listen((AuthState data) {
-        final session = data.session;
+      // 🔹 Also listen for login/logout
+      _supabase.auth.onAuthStateChange.listen((event) {
+        final session = event.session;
         if (session != null) {
-          debugPrint('✅ User logged in → starting UpdateMonthlyRecord');
-          UpdateMonthlyRecord.start();
+          UpdateMonthlyRecordService.start(context);
+          debugPrint('🟢 Monthly record service started after login');
         } else {
-          debugPrint('🚪 User logged out → stopping UpdateMonthlyRecord');
-          UpdateMonthlyRecord.stop();
+          UpdateMonthlyRecordService.stop();
+          UpdateCategorySummaryService.stop();
+          debugPrint('🔴 Monthly record service stopped after logout');
         }
-        setState(() => _user = session?.user);
       });
     } catch (e) {
-      debugPrint('❌ Auth initialization error: $e');
       setState(() {
         _user = null;
         _isLoading = false;
@@ -98,8 +102,8 @@ class _SurraAppState extends State<SurraApp> {
       );
     }
 
-    final isLoggedIn = _user != null;
-    final initialRoute = isLoggedIn ? '/dashboard' : '/welcome';
+    final bool isLoggedIn = _user != null;
+    final String initialRoute = isLoggedIn ? '/dashboard' : '/welcome';
 
     return MaterialApp(
       debugShowCheckedModeBanner: false,

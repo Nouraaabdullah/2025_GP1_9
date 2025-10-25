@@ -128,14 +128,14 @@ class _ProfileMainPageState extends State<ProfileMainPage> {
       // 1) PROFILE INFO
       final prof = await _sb
           .from('User_Profile')
-          .select('full_name,current_balance')
+          .select('full_name, current_balance')
           .eq('profile_id', profileId)
           .maybeSingle();
 
       final fullName = (prof?['full_name'] as String?) ?? 'User';
       final currentBalance = _toDouble(prof?['current_balance']) ?? 0.0;
 
-      // 2) MONTHLY FINANCIAL RECORD (earnings from total_earning)
+      // 2) MONTHLY FINANCIAL RECORD (for income and expense)
       final monthlyRecord = await _sb
           .from('Monthly_Financial_Record')
           .select('total_income, total_expense, total_earning')
@@ -148,11 +148,29 @@ class _ProfileMainPageState extends State<ProfileMainPage> {
       double totalExpense = _toDouble(monthlyRecord?['total_expense']) ?? 0.0;
       double totalEarnings = _toDouble(monthlyRecord?['total_earning']) ?? 0.0;
 
-      // Fallback if no active monthly record: compute from transactions
+      // 3) GET EARNINGS FROM TRANSACTION TABLE (current month only)
+      final earnings = await _sb
+          .from('Transaction')
+          .select('amount, date')
+          .eq('profile_id', profileId)
+          .eq('type', 'Earning')
+          .gte('date', firstIso)
+          .lte('date', todayIso);
+
+      double totalEarningsFromTransactions = 0.0;
+      for (final earning in earnings) {
+        totalEarningsFromTransactions += _toDouble(earning['amount']) ?? 0.0;
+      }
+
+      debugPrint(
+        '💰 Earnings this month: $totalEarningsFromTransactions SAR (from ${earnings.length} transactions)',
+      );
+
+      // Fallback if no active monthly record: compute income and expense from transactions
       if (monthlyRecord == null) {
         final expenses = await _sb
             .from('Transaction')
-            .select('amount,date,type')
+            .select('amount, date, type')
             .eq('profile_id', profileId)
             .eq('type', 'Expense')
             .gte('date', firstIso)
@@ -160,9 +178,9 @@ class _ProfileMainPageState extends State<ProfileMainPage> {
 
         final incomes = await _sb
             .from('Transaction')
-            .select('amount,date,type')
+            .select('amount, date, type')
             .eq('profile_id', profileId)
-            .eq('type', 'Earning')
+            .eq('type', 'Income')
             .gte('date', firstIso)
             .lte('date', todayIso);
 
@@ -175,19 +193,23 @@ class _ProfileMainPageState extends State<ProfileMainPage> {
         for (final r in incomes) {
           totalIncome += _toDouble(r['amount']) ?? 0.0;
         }
+
+        debugPrint(
+          '📊 Fallback calculation - Income: $totalIncome, Expense: $totalExpense',
+        );
       }
 
-      // 3) CATEGORIES
+      // 4) CATEGORIES
       final cats = await _sb
           .from('Category')
-          .select('category_id,name,monthly_limit,icon,icon_color')
+          .select('category_id, name, monthly_limit, icon, icon_color')
           .eq('profile_id', profileId)
           .eq('is_archived', false)
           .order('name');
 
       final trxThisMonth = await _sb
           .from('Transaction')
-          .select('category_id,amount,type,date')
+          .select('category_id, amount, type, date')
           .eq('profile_id', profileId)
           .eq('type', 'Expense')
           .gte('date', firstIso)
@@ -231,7 +253,8 @@ class _ProfileMainPageState extends State<ProfileMainPage> {
         currentBalance: currentBalance,
         totalIncome: totalIncome,
         totalExpense: totalExpense,
-        totalEarnings: totalEarnings,
+        totalEarnings:
+            totalEarningsFromTransactions, // Use earnings from transactions
         categories: items,
       );
     } catch (e) {

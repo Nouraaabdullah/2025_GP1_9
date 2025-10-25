@@ -44,15 +44,21 @@ class UpdateMonthlyRecordService {
         )
         .subscribe();
 
-    _fixedIncomeListener = _supabase
-        .channel('public:Fixed_Income')
-        .onPostgresChanges(
-          event: PostgresChangeEvent.all,
-          schema: 'public',
-          table: 'Fixed_Income',
-          callback: (_) async => await _generateOrUpdateRecord(profileId),
-        )
-        .subscribe();
+        
+_fixedIncomeListener = _supabase
+    .channel('public:Fixed_Income')
+    .onPostgresChanges(
+      event: PostgresChangeEvent.all,
+      schema: 'public',
+      table: 'Fixed_Income',
+      callback: (_) async {
+        // ⏳ small delay ensures new payday/start_time are committed
+        await Future.delayed(const Duration(milliseconds: 800));
+        await _generateOrUpdateRecord(profileId);
+      },
+    )
+    .subscribe();
+
 
     _fixedExpenseListener = _supabase
         .channel('public:Fixed_Expense')
@@ -130,6 +136,7 @@ class UpdateMonthlyRecordService {
           .eq('record_id', recordId);
       final totalExpense = (catSum as List? ?? [])
           .fold<double>(0, (sum, e) => sum + (e['total_expense'] ?? 0).toDouble());
+
       // ---------- INCOME ----------
       final fi = await _supabase
           .from('Fixed_Income')

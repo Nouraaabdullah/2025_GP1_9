@@ -138,29 +138,37 @@ class UpdateCategorySummaryService {
         add(t['category_id'] as String?, (t['amount'] ?? 0).toDouble());
       }
 
-      // 💰 B) Add active Fixed_Expense
-      final fx = await _supabase
-          .from('Fixed_Expense')
-          .select('category_id, amount, start_time, end_time, due_date')
-          .eq('profile_id', _profileId!);
+// 💰 B) Add active Fixed_Expense (only after due date)
+final fx = await _supabase
+    .from('Fixed_Expense')
+    .select('category_id, amount, start_time, end_time, due_date')
+    .eq('profile_id', _profileId!);
 
-      final monthEnd = DateTime(now.year, now.month + 1, 0);
-      final lastDay = monthEnd.day;
+final lastDay = DateTime(now.year, now.month + 1, 0).day;
 
-      for (final f in (fx as List? ?? [])) {
-        final cid = f['category_id'] as String?;
-        final amt = (f['amount'] ?? 0).toDouble();
-        final due = (f['due_date'] ?? 1).clamp(1, lastDay);
-        final dueDate = DateTime(now.year, now.month, due);
+for (final f in (fx as List? ?? [])) {
+  final cid = f['category_id'] as String?;
+  final amount = (f['amount'] ?? 0).toDouble();
+  final dueDay = (f['due_date'] ?? 1) as int;
 
-        final start = f['start_time'] != null ? DateTime.parse(f['start_time']) : null;
-        final end = f['end_time'] != null ? DateTime.parse(f['end_time']) : null;
+  final start = f['start_time'] != null ? DateTime.parse(f['start_time']) : DateTime(1900);
+  final end = f['end_time'] != null ? DateTime.parse(f['end_time']) : DateTime(9999);
 
-        final active = (start == null || !dueDate.isBefore(start)) &&
-            (end == null || !dueDate.isAfter(end));
+  // Skip invalid ranges
+  if (end.isBefore(start)) continue;
 
-        if (active) add(cid, amt);
-      }
+  // Expense is active this month
+  final isActive = (now.isAfter(start) || now.isAtSameMomentAs(start)) &&
+                   (now.isBefore(end.add(const Duration(days: 1))) || now.isAtSameMomentAs(end));
+  if (!isActive) continue;
+
+  // Only include once due date has passed
+  final dueDate = DateTime(now.year, now.month, dueDay.clamp(1, lastDay));
+  final dueReached = !now.isBefore(dueDate);
+
+  if (dueReached) add(cid, amount);
+}
+
 
       // 🟣 Upsert Category_Summary
       for (final entry in totals.entries) {

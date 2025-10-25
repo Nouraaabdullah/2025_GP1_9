@@ -35,6 +35,9 @@ class _ProfileMainPageState extends State<ProfileMainPage> {
   Future<String> _getProfileId() async {
     final profileId = await getProfileId(context);
     if (profileId == null) {
+      if (mounted) {
+        Navigator.pushNamedAndRemoveUntil(context, '/login', (_) => false);
+      }
       throw Exception('User not authenticated');
     }
     return profileId;
@@ -43,23 +46,14 @@ class _ProfileMainPageState extends State<ProfileMainPage> {
   Future<void> _refreshData() async {
     if (_isRefreshing) return;
 
-    setState(() {
-      _isRefreshing = true;
-    });
-
+    setState(() => _isRefreshing = true);
     try {
       final newData = await _fetchDashboard();
-      setState(() {
-        _future = Future.value(newData);
-      });
+      setState(() => _future = Future.value(newData));
     } catch (e) {
       debugPrint('Error refreshing data: $e');
     } finally {
-      if (mounted) {
-        setState(() {
-          _isRefreshing = false;
-        });
-      }
+      if (mounted) setState(() => _isRefreshing = false);
     }
   }
 
@@ -111,21 +105,160 @@ class _ProfileMainPageState extends State<ProfileMainPage> {
     }
   }
 
+  // ===== Helpers
+  double _toDouble(dynamic v) {
+    if (v == null) return 0.0;
+    if (v is num) return v.toDouble();
+    if (v is String) {
+      if (v.isEmpty) return 0.0;
+      return double.tryParse(v) ?? 0.0;
+    }
+    return 0.0;
+  }
+
+  String _isoDate(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}-'
+      '${d.month.toString().padLeft(2, '0')}-'
+      '${d.day.toString().padLeft(2, '0')}';
+
+  // ===== NEW: Reset is_transacted on day 1 for active rows only
+  Future<void> _resetIsTransactedIfFirstOfMonth(String profileId) async {
+    final now = DateTime.now();
+    if (now.day != 1) return;
+
+    try {
+      // Incomes
+      await _sb
+          .from('Fixed_Income')
+          .update({'is_transacted': false})
+          .eq('profile_id', profileId)
+          .filter('end_time', 'is', null)
+          .eq('is_transacted', true);
+
+      // Expenses
+      await _sb
+          .from('Fixed_Expense')
+          .update({'is_transacted': false})
+          .eq('profile_id', profileId)
+          .filter('end_time', 'is', null)
+          .eq('is_transacted', true);
+
+      debugPrint('✅ is_transacted reset for active incomes/expenses (day 1).');
+    } catch (e) {
+      debugPrint('❌ reset is_transacted failed: $e');
+    }
+  }
+
+  // ===== NEW: Apply today movements exactly once per month using is_transacted
+  Future<void> _applyTodayFixedMovements(String profileId) async {
+    final now = DateTime.now();
+    final todayDay = now.day;
+
+    try {
+      // 1) Sum active incomes due today & not transacted
+      final incomes = await _sb
+          .from('Fixed_Income')
+          .select('income_id, monthly_income')
+          .eq('profile_id', profileId)
+          .eq('payday', todayDay)
+          .filter('end_time', 'is', null)
+          .eq('is_transacted', false);
+
+      double incomeSum = 0.0;
+      final List<String> incomeIdsToMark = [];
+      if (incomes is List) {
+        for (final row in incomes) {
+          incomeSum += _toDouble(row['monthly_income']);
+          final id = row['income_id'];
+          if (id != null) incomeIdsToMark.add(id.toString());
+        }
+      }
+
+      // 2) Sum active expenses due today & not transacted
+      final expenses = await _sb
+          .from('Fixed_Expense')
+          .select('expense_id, amount')
+          .eq('profile_id', profileId)
+          .eq('due_date', todayDay)
+          .filter('end_time', 'is', null)
+          .eq('is_transacted', false);
+
+      double expenseSum = 0.0;
+      final List<String> expenseIdsToMark = [];
+      if (expenses is List) {
+        for (final row in expenses) {
+          expenseSum += _toDouble(row['amount']);
+          final id = row['expense_id'];
+          if (id != null) expenseIdsToMark.add(id.toString());
+        }
+      }
+
+      // Nothing to do
+      if (incomeSum == 0.0 && expenseSum == 0.0) {
+        debugPrint('ℹ️ No fixed movements to apply today.');
+        return;
+      }
+
+      // 3) Read current balance
+      final prof = await _sb
+          .from('User_Profile')
+          .select('current_balance')
+          .eq('profile_id', profileId)
+          .maybeSingle();
+
+      if (prof == null) {
+        debugPrint('⚠️ User_Profile not found. Skip apply.');
+        return;
+      }
+
+      final currentBalance = _toDouble(prof['current_balance']);
+      final delta = incomeSum - expenseSum;
+      final newBalance = currentBalance + delta;
+
+      // 4) Update balance
+      await _sb
+          .from('User_Profile')
+          .update({'current_balance': newBalance})
+          .eq('profile_id', profileId);
+
+      // 5) Mark the rows as transacted for this month (so they don't repeat)
+      if (incomeIdsToMark.isNotEmpty) {
+        await _sb
+            .from('Fixed_Income')
+            .update({'is_transacted': true})
+            .inFilter('income_id', incomeIdsToMark);
+      }
+      if (expenseIdsToMark.isNotEmpty) {
+        await _sb
+            .from('Fixed_Expense')
+            .update({'is_transacted': true})
+            .inFilter('expense_id', expenseIdsToMark);
+      }
+
+      debugPrint(
+        '✅ Applied today: +$incomeSum (income), -$expenseSum (expense) → Δ=$delta',
+      );
+    } catch (e) {
+      debugPrint('❌ _applyTodayFixedMovements failed: $e');
+    }
+  }
+
   Future<_DashboardData> _fetchDashboard() async {
     try {
       final profileId = await _getProfileId();
-
-      String _isoDate(DateTime d) =>
-          '${d.year.toString().padLeft(4, '0')}-'
-          '${d.month.toString().padLeft(2, '0')}-'
-          '${d.day.toString().padLeft(2, '0')}';
 
       final now = DateTime.now();
       final firstOfMonth = DateTime(now.year, now.month, 1);
       final todayIso = _isoDate(now);
       final firstIso = _isoDate(firstOfMonth);
 
-      // 1) PROFILE INFO
+      // 1) Reset flags if day 1 (active rows only)
+      await _resetIsTransactedIfFirstOfMonth(profileId);
+
+      // 2) Apply today's fixed movements once per month using is_transacted
+      await _applyTodayFixedMovements(profileId);
+
+      // 3) PROFILE INFO (after possible balance update)
       final prof = await _sb
           .from('User_Profile')
           .select('full_name, current_balance')
@@ -133,9 +266,11 @@ class _ProfileMainPageState extends State<ProfileMainPage> {
           .maybeSingle();
 
       final fullName = (prof?['full_name'] as String?) ?? 'User';
-      final currentBalance = _toDouble(prof?['current_balance']) ?? 0.0;
+      final currentBalance = _toDouble(prof?['current_balance']);
 
-      // 2) MONTHLY FINANCIAL RECORD (for income and expense)
+      // ===== The rest is unchanged (like your existing page) =====
+
+      // MONTHLY FINANCIAL RECORD (for the mini cards)
       final monthlyRecord = await _sb
           .from('Monthly_Financial_Record')
           .select('total_income, total_expense, total_earning')
@@ -144,11 +279,11 @@ class _ProfileMainPageState extends State<ProfileMainPage> {
           .gte('period_end', todayIso)
           .maybeSingle();
 
-      double totalIncome = _toDouble(monthlyRecord?['total_income']) ?? 0.0;
-      double totalExpense = _toDouble(monthlyRecord?['total_expense']) ?? 0.0;
-      double totalEarnings = _toDouble(monthlyRecord?['total_earning']) ?? 0.0;
+      double totalIncome = _toDouble(monthlyRecord?['total_income']);
+      double totalExpense = _toDouble(monthlyRecord?['total_expense']);
+      double totalEarnings = _toDouble(monthlyRecord?['total_earning']);
 
-      // 3) GET EARNINGS FROM TRANSACTION TABLE (current month only)
+      // Earnings from Transaction (as-is)
       final earnings = await _sb
           .from('Transaction')
           .select('amount, date')
@@ -158,15 +293,13 @@ class _ProfileMainPageState extends State<ProfileMainPage> {
           .lte('date', todayIso);
 
       double totalEarningsFromTransactions = 0.0;
-      for (final earning in earnings) {
-        totalEarningsFromTransactions += _toDouble(earning['amount']) ?? 0.0;
+      if (earnings is List) {
+        for (final earning in earnings) {
+          totalEarningsFromTransactions += _toDouble(earning['amount']);
+        }
       }
 
-      debugPrint(
-        '💰 Earnings this month: $totalEarningsFromTransactions SAR (from ${earnings.length} transactions)',
-      );
-
-      // Fallback if no active monthly record: compute income and expense from transactions
+      // Fallback if no monthly record
       if (monthlyRecord == null) {
         final expenses = await _sb
             .from('Transaction')
@@ -185,21 +318,21 @@ class _ProfileMainPageState extends State<ProfileMainPage> {
             .lte('date', todayIso);
 
         totalExpense = 0.0;
-        for (final r in expenses) {
-          totalExpense += _toDouble(r['amount']) ?? 0.0;
+        if (expenses is List) {
+          for (final r in expenses) {
+            totalExpense += _toDouble(r['amount']);
+          }
         }
 
         totalIncome = 0.0;
-        for (final r in incomes) {
-          totalIncome += _toDouble(r['amount']) ?? 0.0;
+        if (incomes is List) {
+          for (final r in incomes) {
+            totalIncome += _toDouble(r['amount']);
+          }
         }
-
-        debugPrint(
-          '📊 Fallback calculation - Income: $totalIncome, Expense: $totalExpense',
-        );
       }
 
-      // 4) CATEGORIES
+      // CATEGORIES
       final cats = await _sb
           .from('Category')
           .select('category_id, name, monthly_limit, icon, icon_color')
@@ -216,36 +349,40 @@ class _ProfileMainPageState extends State<ProfileMainPage> {
           .lte('date', todayIso);
 
       final Map<String, double> totalByCat = {};
-      for (final t in trxThisMonth) {
-        final cid = t['category_id'] as String?;
-        if (cid == null) continue;
-        final amount = _toDouble(t['amount']) ?? 0.0;
-        totalByCat[cid] = (totalByCat[cid] ?? 0) + amount;
+      if (trxThisMonth is List) {
+        for (final t in trxThisMonth) {
+          final cid = t['category_id'] as String?;
+          if (cid == null) continue;
+          final amount = _toDouble(t['amount']);
+          totalByCat[cid] = (totalByCat[cid] ?? 0) + amount;
+        }
       }
 
       final items = <_CategoryDash>[];
-      for (final c in cats) {
-        final id = c['category_id'] as String;
-        final name = (c['name'] as String?) ?? 'Category';
-        final limit = _toDouble(c['monthly_limit']);
-        final spent = totalByCat[id] ?? 0.0;
+      if (cats is List) {
+        for (final c in cats) {
+          final id = c['category_id'] as String;
+          final name = (c['name'] as String?) ?? 'Category';
+          final limit = _toDouble(c['monthly_limit']);
+          final spent = totalByCat[id] ?? 0.0;
 
-        final pct = (limit != null && limit > 0)
-            ? ((spent / limit) * 100.0).clamp(0.0, 100.0)
-            : null;
+          final pct = (limit > 0)
+              ? ((spent / limit) * 100.0).clamp(0.0, 100.0)
+              : null;
 
-        final icon = c['icon'] as String? ?? 'category';
-        final color = c['icon_color'] as String? ?? '#7D5EF6';
+          final icon = c['icon'] as String? ?? 'category';
+          final color = c['icon_color'] as String? ?? '#7D5EF6';
 
-        items.add(
-          _CategoryDash(
-            name: name,
-            amount: spent,
-            percent: pct,
-            icon: icon,
-            color: color,
-          ),
-        );
+          items.add(
+            _CategoryDash(
+              name: name,
+              amount: spent,
+              percent: pct,
+              icon: icon,
+              color: color,
+            ),
+          );
+        }
       }
 
       return _DashboardData(
@@ -253,8 +390,7 @@ class _ProfileMainPageState extends State<ProfileMainPage> {
         currentBalance: currentBalance,
         totalIncome: totalIncome,
         totalExpense: totalExpense,
-        totalEarnings:
-            totalEarningsFromTransactions, // Use earnings from transactions
+        totalEarnings: totalEarningsFromTransactions,
         categories: items,
       );
     } catch (e) {
@@ -270,17 +406,7 @@ class _ProfileMainPageState extends State<ProfileMainPage> {
     }
   }
 
-  double _toDouble(dynamic v) {
-    if (v == null) return 0.0;
-    if (v is num) return v.toDouble();
-    if (v is String) {
-      if (v.isEmpty) return 0.0;
-      return double.tryParse(v) ?? 0.0;
-    }
-    return 0.0;
-  }
-
-  // Show two decimals everywhere for currency values
+  // ===== UI (unchanged)
   String _fmt2(double v) => v.toStringAsFixed(2);
 
   @override
@@ -800,7 +926,7 @@ class _CategoryCard extends StatelessWidget {
 
           const SizedBox(height: 6),
 
-          // Percent badge (kept integer to reduce overflow risk)
+          // Percent badge
           const _PercentBadgeSpacer(),
           _PercentBadge(
             text: percent == '—' ? 'No limit set' : '$percent budget used',

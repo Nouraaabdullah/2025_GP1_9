@@ -4,7 +4,6 @@ import 'package:surra_application/utils/auth_helpers.dart';
 
 class AddEditIncomePage extends StatefulWidget {
   final Map<String, dynamic>? income;
-
   const AddEditIncomePage({super.key, this.income});
 
   @override
@@ -21,12 +20,9 @@ class _AddEditIncomePageState extends State<AddEditIncomePage> {
   bool _loading = false;
   List<Map<String, dynamic>> _existingIncomes = [];
 
-  // ======= GET PROFILE ID USING UTILITY FUNCTION =======
   Future<String> _getProfileId() async {
     final profileId = await getProfileId(context);
-    if (profileId == null) {
-      throw Exception('User not authenticated');
-    }
+    if (profileId == null) throw Exception('User not authenticated');
     return profileId;
   }
 
@@ -34,53 +30,14 @@ class _AddEditIncomePageState extends State<AddEditIncomePage> {
   void initState() {
     super.initState();
     _loadExistingIncomes();
-    // Pre-fill data if editing
     if (widget.income != null) {
       _nameController.text = widget.income!['name'] ?? '';
       _amountController.text = (widget.income!['monthly_income'] ?? 0.0)
           .toString();
       _paydayController.text = (widget.income!['payday'] ?? 27).toString();
     } else {
-      _paydayController.text = '27'; // Default value
+      _paydayController.text = '27';
     }
-  }
-
-  Future<void> _loadExistingIncomes() async {
-    try {
-      final profileId = await _getProfileId();
-      final incomesData = await _sb
-          .from('Fixed_Income')
-          .select('name, income_id')
-          .eq('profile_id', profileId)
-          .isFilter('end_time', null);
-
-      if (mounted) {
-        setState(() {
-          _existingIncomes = (incomesData as List).cast<Map<String, dynamic>>();
-        });
-      }
-    } catch (e) {
-      // Silently fail, we'll still have basic validation
-    }
-  }
-
-  // Check if income name already exists (excluding current income if editing)
-  bool _isIncomeNameDuplicate(String name) {
-    final trimmedName = name.trim().toLowerCase();
-    for (final income in _existingIncomes) {
-      final existingName = (income['name'] as String?)?.toLowerCase() ?? '';
-      final existingId = income['income_id'] as String?;
-
-      // If editing, exclude the current income from duplicate check
-      if (widget.income != null && existingId == widget.income!['income_id']) {
-        continue;
-      }
-
-      if (existingName == trimmedName) {
-        return true;
-      }
-    }
-    return false;
   }
 
   @override
@@ -91,117 +48,189 @@ class _AddEditIncomePageState extends State<AddEditIncomePage> {
     super.dispose();
   }
 
-  // Helper method to check if payday has passed in current month
+  // ---------- Load active incomes (end_time IS NULL) ----------
+  Future<void> _loadExistingIncomes() async {
+    try {
+      final profileId = await _getProfileId();
+      final response = await _sb
+          .from('Fixed_Income')
+          .select('name, income_id')
+          .eq('profile_id', profileId)
+          .filter('end_time', 'is', null);
+
+      setState(() {
+        _existingIncomes = response is List
+            ? response.cast<Map<String, dynamic>>()
+            : [];
+      });
+    } catch (e) {
+      setState(() => _existingIncomes = []);
+    }
+  }
+
+  bool _isIncomeNameDuplicate(String name) {
+    final t = name.trim().toLowerCase();
+    for (final inc in _existingIncomes) {
+      final existingName = (inc['name'] as String?)?.toLowerCase() ?? '';
+      final existingId = inc['income_id'] as String?;
+      if (widget.income != null && existingId == widget.income!['income_id']) {
+        continue;
+      }
+      if (existingName == t) return true;
+    }
+    return false;
+  }
+
+  // ---------- Helpers ----------
   bool _isPaydayPassed(int payDay) {
     final now = DateTime.now();
-
-    // Get the actual payday date for current month
-    final currentMonthPayday = _getPaydayDate(now.year, now.month, payDay);
-
-    return now.isAfter(currentMonthPayday);
+    final d = _getPaydayDate(now.year, now.month, payDay);
+    return now.isAfter(d);
   }
 
-  // Helper method to get the actual payday date (handles invalid dates like Feb 30)
   DateTime _getPaydayDate(int year, int month, int payDay) {
-    // Get the last day of the month
-    final lastDayOfMonth = DateTime(year, month + 1, 0).day;
-
-    // If payday is greater than last day of month, use last day
-    final actualPayDay = payDay > lastDayOfMonth ? lastDayOfMonth : payDay;
-
-    return DateTime(year, month, actualPayDay);
+    final lastDay = DateTime(year, month + 1, 0).day;
+    final actual = payDay > lastDay ? lastDay : payDay;
+    return DateTime(year, month, actual);
   }
 
-  // Helper method to check if we're between paydays
   bool _isBetweenPaydays(int oldPayDay, int newPayDay) {
     final now = DateTime.now();
-
-    final currentMonth = now.month;
-    final currentYear = now.year;
-
-    // Get actual payday dates considering month boundaries
-    final oldPaydayDate = _getPaydayDate(currentYear, currentMonth, oldPayDay);
-    final newPaydayDate = _getPaydayDate(currentYear, currentMonth, newPayDay);
-
-    return now.isAfter(oldPaydayDate) && now.isBefore(newPaydayDate);
+    final dOld = _getPaydayDate(now.year, now.month, oldPayDay);
+    final dNew = _getPaydayDate(now.year, now.month, newPayDay);
+    return now.isAfter(dOld) && now.isBefore(dNew);
   }
 
-  // Get current monthly record ID
   Future<String?> _getCurrentMonthlyRecordId() async {
     final profileId = await _getProfileId();
     final now = DateTime.now();
-    final monthlyRecords = await _sb
+    final rows = await _sb
         .from('Monthly_Financial_Record')
         .select('record_id, period_start, period_end')
         .eq('profile_id', profileId)
         .order('period_start', ascending: false);
 
-    for (final record in monthlyRecords) {
-      final periodStart = DateTime.parse(record['period_start'] as String);
-      final periodEnd = DateTime.parse(record['period_end'] as String);
-
-      if (now.isAfter(periodStart) && now.isBefore(periodEnd)) {
-        return record['record_id'] as String;
-      }
+    for (final r in rows) {
+      final ps = DateTime.parse(r['period_start'] as String);
+      final pe = DateTime.parse(r['period_end'] as String);
+      if (now.isAfter(ps) && now.isBefore(pe)) return r['record_id'] as String;
     }
     return null;
   }
 
-  // Update monthly record with income change
   Future<void> _updateMonthlyRecordIncome(
     double amountChange,
     bool isAdding,
   ) async {
     try {
       final recordId = await _getCurrentMonthlyRecordId();
-      if (recordId == null) {
-        print('No current monthly record found');
-        return;
-      }
+      if (recordId == null) return;
 
-      // Get current monthly record
-      final monthlyRecord = await _sb
+      final rec = await _sb
           .from('Monthly_Financial_Record')
           .select('total_income, total_balance, total_expense')
           .eq('record_id', recordId)
           .single();
 
-      final currentIncome = _toDouble(monthlyRecord['total_income']) ?? 0.0;
-      final currentBalance = _toDouble(monthlyRecord['total_balance']) ?? 0.0;
-      final currentExpense = _toDouble(monthlyRecord['total_expense']) ?? 0.0;
+      final currInc = _toDouble(rec['total_income']) ?? 0.0;
+      final currBal = _toDouble(rec['total_balance']) ?? 0.0;
+      final currExp = _toDouble(rec['total_expense']) ?? 0.0;
 
-      double newIncome;
-      double newBalance;
+      final newInc = isAdding ? currInc + amountChange : currInc - amountChange;
+      final newBal = isAdding ? currBal + amountChange : currBal - amountChange;
 
-      if (isAdding) {
-        newIncome = currentIncome + amountChange;
-        newBalance = currentBalance + amountChange;
-      } else {
-        newIncome = currentIncome - amountChange;
-        newBalance = currentBalance - amountChange;
-      }
-
-      // Update monthly record
       await _sb
           .from('Monthly_Financial_Record')
           .update({
-            'total_income': newIncome,
-            'total_balance': newBalance,
-            'monthly_saving': newIncome - currentExpense,
+            'total_income': newInc,
+            'total_balance': newBal,
+            'monthly_saving': newInc - currExp,
           })
           .eq('record_id', recordId);
+    } catch (_) {}
+  }
 
-      print(
-        'Monthly record updated: Income ${isAdding ? 'increased' : 'decreased'} by $amountChange',
-      );
-    } catch (e) {
-      print('Error updating monthly record: $e');
+  Future<bool> _blockedThisMonthForPaydayChange(String incomeId) async {
+    try {
+      final row = await _sb
+          .from('Fixed_Income')
+          .select('last_update')
+          .eq('income_id', incomeId)
+          .single();
+
+      final lu = row['last_update'];
+      if (lu == null) return false;
+
+      final lastUpdate = DateTime.tryParse(lu.toString());
+      if (lastUpdate == null) return false;
+
+      final now = DateTime.now();
+      return lastUpdate.year == now.year && lastUpdate.month == now.month;
+    } catch (_) {
+      return false;
     }
   }
 
+  String _iso(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  double? _toDouble(dynamic v) {
+    if (v == null) return null;
+    if (v is num) return v.toDouble();
+    if (v is String) return v.isEmpty ? null : double.tryParse(v);
+    return null;
+  }
+
+  String _fmtMoney(double? v) => (v ?? 0).toStringAsFixed(2);
+
+  String? _validatePayDay(String? v) {
+    if (v == null || v.isEmpty) return 'Please enter pay day';
+    final d = int.tryParse(v);
+    if (d == null) return 'Please enter a valid number';
+    if (d < 1 || d > 31) return 'Pay day must be between 1 and 31';
+    return null;
+  }
+
+  // ---------- NEW: is_transacted decision helpers ----------
+  bool _decideIsTransactedOnAdd({required int newPayday}) {
+    final todayDay = DateTime.now().day;
+    if (newPayday == todayDay) return true; // Add rule #1
+    if (newPayday < todayDay) return false; // Add rule #2 (past → keep false)
+    return false; // future
+  }
+
+  bool _decideIsTransactedOnEdit({
+    required bool currentIsTransacted,
+    required int newPayday,
+  }) {
+    final todayDay = DateTime.now().day;
+    if (currentIsTransacted) return true; // Keep true, only date changes
+    if (newPayday == todayDay) return true; // Edit rule #1
+    if (newPayday < todayDay) return true; // Edit rule #2 (past & false → true)
+    return false; // future
+  }
+
+  // ---------- NEW: apply amount to User_Profile.current_balance (income adds) ----------
+  Future<void> _applyIncomeToBalance({
+    required String profileId,
+    required double amount,
+  }) async {
+    final prof = await _sb
+        .from('User_Profile')
+        .select('current_balance')
+        .eq('profile_id', profileId)
+        .maybeSingle();
+
+    final curr = _toDouble(prof?['current_balance']) ?? 0.0;
+    await _sb
+        .from('User_Profile')
+        .update({'current_balance': curr + amount})
+        .eq('profile_id', profileId);
+  }
+
+  // ---------- SAVE ----------
   Future<void> _saveIncome() async {
     if (!_formKey.currentState!.validate()) return;
-
     setState(() => _loading = true);
 
     try {
@@ -209,54 +238,82 @@ class _AddEditIncomePageState extends State<AddEditIncomePage> {
       final name = _nameController.text.trim();
       final amount = double.tryParse(_amountController.text.trim()) ?? 0.0;
       final payDay = int.tryParse(_paydayController.text.trim()) ?? 27;
-      final now = DateTime.now();
-
-      // Debug logging
-      print('=== Income Update Debug ===');
-      print('Current date: $now');
-      print('Current day: ${now.day}');
-      print('Payday: $payDay');
-      print('Payday passed: ${_isPaydayPassed(payDay)}');
+      final today = _iso(DateTime.now()); // YYYY-MM-DD date string
 
       if (widget.income == null) {
-        // Add new income
+        // =============== ADD NEW INCOME ===============
+        final isTransactedNow = _decideIsTransactedOnAdd(newPayday: payDay);
+
+        // IMPORTANT: update balance first if we will set is_transacted=true
+        if (isTransactedNow) {
+          await _applyIncomeToBalance(profileId: profileId, amount: amount);
+        }
+
         await _sb.from('Fixed_Income').insert({
           'name': name,
           'monthly_income': amount,
           'payday': payDay,
           'profile_id': profileId,
-          'start_time': _iso(now),
+          'start_time': today,
           'end_time': null,
           'is_primary': false,
+          'last_update': today,
+          'is_transacted': isTransactedNow,
         });
 
-        // Update monthly record with new income
+        // keep your previous behavior for monthly record income adjustment on add
         await _updateMonthlyRecordIncome(amount, true);
       } else {
-        // Update existing income - Handle all cases
+        // =============== EDIT EXISTING ===============
         final incomeId = widget.income!['income_id'];
         final originalAmount =
             (widget.income!['monthly_income'] as num?)?.toDouble() ?? 0.0;
         final originalPayDay = widget.income!['payday'] ?? 27;
         final isPrimary = widget.income!['is_primary'] ?? false;
 
+        // fetch current is_transacted
+        final fresh = await _sb
+            .from('Fixed_Income')
+            .select('is_transacted')
+            .eq('income_id', incomeId)
+            .maybeSingle();
+        final currentIsTransacted =
+            (fresh?['is_transacted'] ??
+                widget.income!['is_transacted'] ??
+                false) ==
+            true;
+
         final amountChanged = amount != originalAmount;
         final payDayChanged = payDay != originalPayDay;
 
-        // Debug logging for edits
-        print('Original payday: $originalPayDay');
-        print('New payday: $payDay');
-        print('Amount changed: $amountChanged');
-        print('Payday changed: $payDayChanged');
-        print('Old payday passed: ${_isPaydayPassed(originalPayDay)}');
-        print('New payday passed: ${_isPaydayPassed(payDay)}');
+        if (payDayChanged) {
+          final blocked = await _blockedThisMonthForPaydayChange(incomeId);
+          if (blocked) {
+            await _showBlockedDialog();
+            setState(() => _loading = false);
+            return;
+          }
+        }
+
+        // decide new is_transacted based on rules
+        final decidedIsTransacted = _decideIsTransactedOnEdit(
+          currentIsTransacted: currentIsTransacted,
+          newPayday: payDay,
+        );
+
+        // If we're transitioning from false → true, push to balance FIRST
+        final willTransactNow = decidedIsTransacted && !currentIsTransacted;
+
+        if (willTransactNow) {
+          // Use the *new* amount for this month
+          await _applyIncomeToBalance(profileId: profileId, amount: amount);
+        }
 
         if (amountChanged) {
-          // Case 1: Amount changed - archive old record and create new one
-          print('Case 1: Amount changed - archiving old and creating new');
+          // archive old and insert new
           await _sb
               .from('Fixed_Income')
-              .update({'end_time': _iso(now)})
+              .update({'end_time': today})
               .eq('income_id', incomeId);
 
           await _sb.from('Fixed_Income').insert({
@@ -264,41 +321,37 @@ class _AddEditIncomePageState extends State<AddEditIncomePage> {
             'monthly_income': amount,
             'payday': payDay,
             'profile_id': profileId,
-            'start_time': _iso(now),
+            'start_time': today,
             'end_time': null,
             'is_primary': isPrimary,
+            'last_update': today,
+            'is_transacted': decidedIsTransacted,
           });
 
-          // Update monthly record with amount difference
-          final amountDifference = amount - originalAmount;
-          if (amountDifference != 0) {
-            await _updateMonthlyRecordIncome(
-              amountDifference.abs(),
-              amountDifference > 0,
-            );
+          // Adjust monthly record with the difference (existing behavior)
+          final diff = amount - originalAmount;
+          if (diff != 0) {
+            await _updateMonthlyRecordIncome(diff.abs(), diff > 0);
           }
         } else if (payDayChanged) {
-          // Case 2: Pay day changed
+          // keep your existing branching, but always write decided is_transacted
           final oldPayDayPassed = _isPaydayPassed(originalPayDay);
-          final newPayDayPassed = _isPaydayPassed(payDay);
 
           if (!oldPayDayPassed && payDay > originalPayDay) {
-            // Case 2a: Old payday NOT passed AND new payday > old payday
             if (_isBetweenPaydays(originalPayDay, payDay)) {
-              print('Case 2a: Between paydays - updating same row');
-              // Just update the payday in the same row
               await _sb
                   .from('Fixed_Income')
-                  .update({'name': name, 'payday': payDay})
+                  .update({
+                    'name': name,
+                    'payday': payDay,
+                    'last_update': today,
+                    'is_transacted': decidedIsTransacted,
+                  })
                   .eq('income_id', incomeId);
             } else {
-              print(
-                'Case 2a: Not between paydays - archiving and creating new',
-              );
-              // Current day is before old payday, archive and create new
               await _sb
                   .from('Fixed_Income')
-                  .update({'end_time': _iso(now)})
+                  .update({'end_time': today})
                   .eq('income_id', incomeId);
 
               await _sb.from('Fixed_Income').insert({
@@ -306,18 +359,17 @@ class _AddEditIncomePageState extends State<AddEditIncomePage> {
                 'monthly_income': amount,
                 'payday': payDay,
                 'profile_id': profileId,
-                'start_time': _iso(now),
+                'start_time': today,
                 'end_time': null,
                 'is_primary': isPrimary,
+                'last_update': today,
+                'is_transacted': decidedIsTransacted,
               });
             }
           } else if (oldPayDayPassed) {
-            // Case 2b: Old payday has passed (income already added this month)
-            print('Case 2b: Old payday passed - archiving and creating new');
-            // Update payday for future income only - archive current and create new
             await _sb
                 .from('Fixed_Income')
-                .update({'end_time': _iso(now)})
+                .update({'end_time': today})
                 .eq('income_id', incomeId);
 
             await _sb.from('Fixed_Income').insert({
@@ -325,17 +377,17 @@ class _AddEditIncomePageState extends State<AddEditIncomePage> {
               'monthly_income': amount,
               'payday': payDay,
               'profile_id': profileId,
-              'start_time': _iso(now),
+              'start_time': today,
               'end_time': null,
               'is_primary': isPrimary,
+              'last_update': today,
+              'is_transacted': decidedIsTransacted,
             });
-          } else if (!oldPayDayPassed && payDay < now.day) {
-            // Case 2c: Payday NOT passed AND user updates payday to be in the past
-            print('Case 2c: New payday in past - archiving and creating new');
-            // Archive current and create new with updated payday
+          } else if (!oldPayDayPassed && payDay < DateTime.now().day) {
+            // moved payday earlier in the month
             await _sb
                 .from('Fixed_Income')
-                .update({'end_time': _iso(now)})
+                .update({'end_time': today})
                 .eq('income_id', incomeId);
 
             await _sb.from('Fixed_Income').insert({
@@ -343,31 +395,38 @@ class _AddEditIncomePageState extends State<AddEditIncomePage> {
               'monthly_income': amount,
               'payday': payDay,
               'profile_id': profileId,
-              'start_time': _iso(now),
+              'start_time': today,
               'end_time': null,
               'is_primary': isPrimary,
+              'last_update': today,
+              'is_transacted': decidedIsTransacted,
             });
           } else {
-            // Default case: Just update name and payday
-            print('Default case: Updating same row');
+            // simple same-row update
             await _sb
                 .from('Fixed_Income')
-                .update({'name': name, 'payday': payDay})
+                .update({
+                  'name': name,
+                  'payday': payDay,
+                  'last_update': today,
+                  'is_transacted': decidedIsTransacted,
+                })
                 .eq('income_id', incomeId);
           }
         } else {
-          // Only name changed - simple update
-          print('Only name changed - updating same row');
+          // Only name changed → still respect decided is_transacted (keeps true if it was true)
           await _sb
               .from('Fixed_Income')
-              .update({'name': name})
+              .update({
+                'name': name,
+                'last_update': today,
+                'is_transacted': decidedIsTransacted,
+              })
               .eq('income_id', incomeId);
         }
       }
 
-      if (mounted) {
-        Navigator.pop(context, true); // Return success
-      }
+      if (mounted) Navigator.pop(context, true);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -378,27 +437,39 @@ class _AddEditIncomePageState extends State<AddEditIncomePage> {
         );
       }
     } finally {
-      if (mounted) {
-        setState(() => _loading = false);
-      }
+      if (mounted) setState(() => _loading = false);
     }
   }
 
-  void _showConfirmationDialog() {
+  // ---------- Dialogs ----------
+  void _showConfirmationDialog() async {
     if (!_formKey.currentState!.validate()) return;
 
     final name = _nameController.text.trim();
     final amount = double.tryParse(_amountController.text.trim());
     final payDay = int.tryParse(_paydayController.text.trim());
-
     if (amount == null || payDay == null) return;
 
     final originalAmount = widget.income != null
         ? (widget.income!['monthly_income'] as num?)?.toDouble() ?? 0.0
         : 0.0;
+    final originalPayDay = widget.income != null
+        ? (widget.income!['payday'] ?? 27)
+        : 27;
 
     final amountChanged = widget.income != null && amount != originalAmount;
-    final double difference = amount - originalAmount;
+    final payDayChanged = widget.income != null && payDay != originalPayDay;
+    final diff = amount - originalAmount;
+
+    if (widget.income != null && payDayChanged) {
+      final blocked = await _blockedThisMonthForPaydayChange(
+        widget.income!['income_id'],
+      );
+      if (blocked) {
+        await _showBlockedDialog();
+        return;
+      }
+    }
 
     showDialog(
       context: context,
@@ -426,17 +497,30 @@ class _AddEditIncomePageState extends State<AddEditIncomePage> {
             _buildConfirmationRow('Income Name', name),
             _buildConfirmationRow('Monthly Amount', '${_fmtMoney(amount)} SAR'),
             _buildConfirmationRow('Pay Day', '$payDay'),
-            if (amountChanged && widget.income != null) ...[
-              const SizedBox(height: 8),
+            if (amountChanged && widget.income != null)
               _buildConfirmationRow(
                 'Amount Change',
-                '${_fmtMoney(difference.abs())} SAR',
+                '${_fmtMoney(diff.abs())} SAR',
                 isHighlighted: true,
-                color: difference > 0
+                color: diff > 0
                     ? const Color(0xFF4CAF50)
                     : const Color(0xFFF44336),
               ),
-            ],
+            if (payDayChanged)
+              Padding(
+                padding: const EdgeInsets.only(top: 16),
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF3A3960),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Text(
+                    'Note: You will not be able to change your pay day again until next month.',
+                    style: TextStyle(color: Colors.white, fontSize: 13),
+                  ),
+                ),
+              ),
           ],
         ),
         actions: [
@@ -459,7 +543,7 @@ class _AddEditIncomePageState extends State<AddEditIncomePage> {
               _saveIncome();
             },
             child: Text(
-              widget.income == null ? 'Add Income' : 'Update Income',
+              widget.income == null ? 'Add Income' : 'Save Changes',
               style: const TextStyle(color: Colors.white),
             ),
           ),
@@ -468,6 +552,31 @@ class _AddEditIncomePageState extends State<AddEditIncomePage> {
     );
   }
 
+  Future<void> _showBlockedDialog() async {
+    return showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF2B2B48),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Pay Day Locked',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        content: const Text(
+          'You have already updated this income this month. You can change the pay day again next month.',
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('OK', style: TextStyle(color: Colors.white70)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ---------- UI helpers ----------
   Widget _buildConfirmationRow(
     String label,
     String value, {
@@ -479,7 +588,10 @@ class _AddEditIncomePageState extends State<AddEditIncomePage> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: TextStyle(color: Colors.white70, fontSize: 14)),
+          Text(
+            label,
+            style: const TextStyle(color: Colors.white70, fontSize: 14),
+          ),
           Text(
             value,
             style: TextStyle(
@@ -495,63 +607,42 @@ class _AddEditIncomePageState extends State<AddEditIncomePage> {
     );
   }
 
-  String _iso(DateTime d) =>
-      '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+  InputDecoration _inputDecoration() => const InputDecoration(
+    contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+    filled: true,
+    fillColor: Colors.white,
+    border: OutlineInputBorder(
+      borderRadius: BorderRadius.all(Radius.circular(18)),
+      borderSide: BorderSide.none,
+    ),
+  );
 
-  double? _toDouble(dynamic v) {
-    if (v == null) return null;
-    if (v is num) return v.toDouble();
-    if (v is String) {
-      if (v.isEmpty) return null;
-      return double.tryParse(v);
-    }
-    return null;
-  }
-
-  String _fmtMoney(double value) {
-    return value.toStringAsFixed(2);
-  }
-
-  // Payday validation
-  String? _validatePayDay(String? value) {
-    if (value == null || value.isEmpty) {
-      return 'Please enter pay day';
-    }
-
-    final payDay = int.tryParse(value);
-    if (payDay == null) {
-      return 'Please enter a valid number';
-    }
-
-    if (payDay < 1 || payDay > 31) {
-      return 'Pay day must be between 1 and 31';
-    }
-
-    return null;
-  }
+  Widget _rounded({required Widget child}) => Container(
+    decoration: BoxDecoration(
+      borderRadius: BorderRadius.circular(18),
+      color: Colors.white,
+    ),
+    child: child,
+  );
 
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
-
     return Scaffold(
       backgroundColor: const Color(0xFF1F1F33),
       body: Stack(
         children: [
-          // Top gradient background
           Container(
             height: 230,
             width: double.infinity,
-            decoration: BoxDecoration(
-              color: const Color(0xFF704EF4),
-              borderRadius: const BorderRadius.only(
+            decoration: const BoxDecoration(
+              color: Color(0xFF704EF4),
+              borderRadius: BorderRadius.only(
                 bottomLeft: Radius.circular(40),
                 bottomRight: Radius.circular(40),
               ),
             ),
           ),
-
-          // Back button
           SafeArea(
             child: Align(
               alignment: Alignment.topLeft,
@@ -561,8 +652,6 @@ class _AddEditIncomePageState extends State<AddEditIncomePage> {
               ),
             ),
           ),
-
-          // Main content
           Positioned(
             top: 150,
             left: 0,
@@ -592,7 +681,6 @@ class _AddEditIncomePageState extends State<AddEditIncomePage> {
                       ),
                       const SizedBox(height: 20),
 
-                      // Income Name
                       const _FieldLabel('Income Name'),
                       const SizedBox(height: 8),
                       _rounded(
@@ -601,11 +689,11 @@ class _AddEditIncomePageState extends State<AddEditIncomePage> {
                           decoration: _inputDecoration().copyWith(
                             hintText: 'Enter income name',
                           ),
-                          validator: (value) {
-                            if (value == null || value.isEmpty) {
+                          validator: (v) {
+                            if (v == null || v.isEmpty) {
                               return 'Please enter income name';
                             }
-                            if (_isIncomeNameDuplicate(value)) {
+                            if (_isIncomeNameDuplicate(v)) {
                               return 'This income name already exists';
                             }
                             return null;
@@ -614,23 +702,22 @@ class _AddEditIncomePageState extends State<AddEditIncomePage> {
                       ),
                       const SizedBox(height: 18),
 
-                      // Monthly Amount
                       const _FieldLabel('Monthly Amount (SAR)'),
                       const SizedBox(height: 8),
                       _rounded(
                         child: TextFormField(
                           controller: _amountController,
-                          keyboardType: TextInputType.numberWithOptions(
+                          keyboardType: const TextInputType.numberWithOptions(
                             decimal: true,
                           ),
                           decoration: _inputDecoration().copyWith(
                             hintText: '0.00',
                           ),
-                          validator: (value) {
-                            if (value == null || value.isEmpty) {
+                          validator: (v) {
+                            if (v == null || v.isEmpty) {
                               return 'Please enter amount';
                             }
-                            final amt = double.tryParse(value);
+                            final amt = double.tryParse(v);
                             if (amt == null || amt <= 0) {
                               return 'Please enter valid amount';
                             }
@@ -640,7 +727,6 @@ class _AddEditIncomePageState extends State<AddEditIncomePage> {
                       ),
                       const SizedBox(height: 18),
 
-                      // Pay Day (Text Field)
                       const _FieldLabel('Pay Day (1-31)'),
                       const SizedBox(height: 8),
                       _rounded(
@@ -653,9 +739,8 @@ class _AddEditIncomePageState extends State<AddEditIncomePage> {
                           validator: _validatePayDay,
                         ),
                       ),
-                      const SizedBox(height: 28),
 
-                      // Save Button
+                      const SizedBox(height: 28),
                       Center(
                         child: SizedBox(
                           width: 200,
@@ -702,28 +787,6 @@ class _AddEditIncomePageState extends State<AddEditIncomePage> {
           ),
         ],
       ),
-    );
-  }
-
-  InputDecoration _inputDecoration() {
-    return const InputDecoration(
-      contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      filled: true,
-      fillColor: Colors.white,
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.all(Radius.circular(18)),
-        borderSide: BorderSide.none,
-      ),
-    );
-  }
-
-  Widget _rounded({required Widget child}) {
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(18),
-        color: Colors.white,
-      ),
-      child: child,
     );
   }
 }

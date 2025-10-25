@@ -24,18 +24,11 @@ class _AddEditExpensePageState extends State<AddEditExpensePage> {
   late List<Map<String, dynamic>> _uniqueCategories;
   List<Map<String, dynamic>> _existingExpenses = [];
 
-  // DEBUG: Override current date for testing (set to null for production)
+  // DEBUG override (keep null in production)
   DateTime? _debugCurrentDate = null;
-  // DateTime? _debugCurrentDate = DateTime(2024, 3, 20); // Test Case 2a
-  // DateTime? _debugCurrentDate = DateTime(2024, 3, 28); // Test Case 2b
-  // DateTime? _debugCurrentDate = DateTime(2024, 3, 20); // Test Case 2c
+  DateTime get _currentDate => _debugCurrentDate ?? DateTime.now();
 
-  // Helper method to get current date (uses debug override if set)
-  DateTime get _currentDate {
-    return _debugCurrentDate ?? DateTime.now();
-  }
-
-  // ======= GET PROFILE ID USING UTILITY FUNCTION =======
+  // ======= GET PROFILE ID =======
   Future<String> _getProfileId() async {
     final profileId = await getProfileId(context);
     if (profileId == null) {
@@ -48,43 +41,23 @@ class _AddEditExpensePageState extends State<AddEditExpensePage> {
   void initState() {
     super.initState();
 
-    // REMOVE DUPLICATE CATEGORIES - FIX FOR DROPDOWN ERROR
     _uniqueCategories = _removeDuplicateCategories(widget.categories);
-
-    // Load existing expenses for duplicate name validation
     _loadExistingExpenses();
 
-    // Pre-fill data if editing - COMPLETELY SAFE APPROACH
     if (widget.expense != null) {
-      // Safely get name
       final name = widget.expense!['name'];
-      if (name != null) {
-        _nameController.text = name.toString();
-      }
+      if (name != null) _nameController.text = name.toString();
 
-      // Safely get amount
       final amount = widget.expense!['amount'];
-      if (amount != null) {
-        _amountController.text = amount.toString();
-      } else {
-        _amountController.text = '0.0';
-      }
+      _amountController.text = amount != null ? amount.toString() : '0.0';
 
-      // Safely get due date
       final dueDate = widget.expense!['due_date'];
-      if (dueDate != null) {
-        _dueDayController.text = (dueDate is int ? dueDate : 27).toString();
-      } else {
-        _dueDayController.text = '27';
-      }
+      _dueDayController.text = (dueDate is int ? dueDate : 27).toString();
 
-      // Safely get category ID - THIS IS THE MAIN FIX
       final categoryId = widget.expense!['category_id'];
-      if (categoryId != null) {
-        _selectedCategoryId = categoryId.toString();
-      }
+      if (categoryId != null) _selectedCategoryId = categoryId.toString();
     } else {
-      _dueDayController.text = '27'; // Default value
+      _dueDayController.text = '27';
     }
   }
 
@@ -95,61 +68,53 @@ class _AddEditExpensePageState extends State<AddEditExpensePage> {
           .from('Fixed_Expense')
           .select('name, expense_id')
           .eq('profile_id', profileId)
-          .isFilter('end_time', null);
+          .filter('end_time', 'is', null);
 
       if (mounted) {
         setState(() {
-          _existingExpenses = (expensesData as List)
-              .cast<Map<String, dynamic>>();
+          _existingExpenses =
+              (expensesData as List?)?.cast<Map<String, dynamic>>() ?? [];
         });
       }
-    } catch (e) {
-      // Silently fail, we'll still have basic validation
+    } catch (_) {
+      // keep silent
     }
   }
 
-  // Check if expense name already exists (excluding current expense if editing)
   bool _isExpenseNameDuplicate(String name) {
     final trimmedName = name.trim().toLowerCase();
     for (final expense in _existingExpenses) {
       final existingName = (expense['name'] as String?)?.toLowerCase() ?? '';
       final existingId = expense['expense_id'] as String?;
 
-      // If editing, exclude the current expense from duplicate check
       if (widget.expense != null) {
         final currentExpenseId = widget.expense!['expense_id'];
-        if (existingId == currentExpenseId?.toString()) {
-          continue;
-        }
+        if (existingId == currentExpenseId?.toString()) continue;
       }
 
-      if (existingName == trimmedName) {
-        return true;
-      }
+      if (existingName == trimmedName) return true;
     }
     return false;
   }
 
-  // Check if amount exceeds category limit
   bool _isAmountExceedingLimit(double amount) {
     if (_selectedCategoryId == null) return false;
 
     try {
-      final category = _uniqueCategories.firstWhere((cat) {
-        final catId = cat['category_id']?.toString();
-        return catId == _selectedCategoryId;
-      }, orElse: () => <String, dynamic>{});
+      final category = _uniqueCategories.firstWhere(
+        (cat) => cat['category_id']?.toString() == _selectedCategoryId,
+        orElse: () => <String, dynamic>{},
+      );
 
       if (category.isEmpty) return false;
 
       final monthlyLimit = (category['monthly_limit'] as num?)?.toDouble();
       return monthlyLimit != null && monthlyLimit > 0 && amount > monthlyLimit;
-    } catch (e) {
+    } catch (_) {
       return false;
     }
   }
 
-  // Get category name by ID
   String _getCategoryName(String? categoryId) {
     if (categoryId == null) return '';
     try {
@@ -158,12 +123,11 @@ class _AddEditExpensePageState extends State<AddEditExpensePage> {
         orElse: () => <String, dynamic>{},
       );
       return category.isNotEmpty ? (category['name'] as String? ?? '') : '';
-    } catch (e) {
+    } catch (_) {
       return '';
     }
   }
 
-  // Get category limit by ID
   double? _getCategoryLimit(String? categoryId) {
     if (categoryId == null) return null;
     try {
@@ -174,46 +138,32 @@ class _AddEditExpensePageState extends State<AddEditExpensePage> {
       return category.isNotEmpty
           ? (category['monthly_limit'] as num?)?.toDouble()
           : null;
-    } catch (e) {
+    } catch (_) {
       return null;
     }
   }
 
-  // Helper method to check if due day has passed in current month
+  // Dates helpers
   bool _isDueDayPassed(int dueDay) {
     final now = _currentDate;
-
-    // Get the actual due day date for current month
-    final currentMonthDueDay = _getDueDayDate(now.year, now.month, dueDay);
-
-    return now.isAfter(currentMonthDueDay);
+    final d = _getDueDayDate(now.year, now.month, dueDay);
+    return now.isAfter(d);
   }
 
-  // Helper method to get the actual due day date (handles invalid dates like Feb 30)
   DateTime _getDueDayDate(int year, int month, int dueDay) {
-    // Get the last day of the month
-    final lastDayOfMonth = DateTime(year, month + 1, 0).day;
-
-    // If due day is greater than last day of month, use last day
-    final actualDueDay = dueDay > lastDayOfMonth ? lastDayOfMonth : dueDay;
-
-    return DateTime(year, month, actualDueDay);
+    final lastDay = DateTime(year, month + 1, 0).day;
+    final actual = dueDay > lastDay ? lastDay : dueDay;
+    return DateTime(year, month, actual);
   }
 
-  // Helper method to check if we're between due days
   bool _isBetweenDueDays(int oldDueDay, int newDueDay) {
     final now = _currentDate;
-
-    final currentMonth = now.month;
-    final currentYear = now.year;
-
-    // Get actual due day dates considering month boundaries
-    final oldDueDayDate = _getDueDayDate(currentYear, currentMonth, oldDueDay);
-    final newDueDayDate = _getDueDayDate(currentYear, currentMonth, newDueDay);
-
-    return now.isAfter(oldDueDayDate) && now.isBefore(newDueDayDate);
+    final dOld = _getDueDayDate(now.year, now.month, oldDueDay);
+    final dNew = _getDueDayDate(now.year, now.month, newDueDay);
+    return now.isAfter(dOld) && now.isBefore(dNew);
   }
 
+  // Show limit exceeded dialog
   void _showLimitExceededDialog(double amount, Function onConfirm) {
     final categoryName = _getCategoryName(_selectedCategoryId);
     final categoryLimit = _getCategoryLimit(_selectedCategoryId);
@@ -247,15 +197,6 @@ class _AddEditExpensePageState extends State<AddEditExpensePage> {
               isHighlighted: true,
               color: const Color(0xFFF44336),
             ),
-            const SizedBox(height: 8),
-            const Text(
-              '',
-              style: TextStyle(
-                color: Colors.orange,
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
           ],
         ),
         actions: [
@@ -281,17 +222,13 @@ class _AddEditExpensePageState extends State<AddEditExpensePage> {
     List<Map<String, dynamic>> categories,
   ) {
     final uniqueCategories = <String, Map<String, dynamic>>{};
-
     for (final category in categories) {
       final categoryId = category['category_id'];
       if (categoryId != null) {
-        final categoryIdString = categoryId.toString();
-        if (!uniqueCategories.containsKey(categoryIdString)) {
-          uniqueCategories[categoryIdString] = category;
-        }
+        final key = categoryId.toString();
+        uniqueCategories.putIfAbsent(key, () => category);
       }
     }
-
     return uniqueCategories.values.toList();
   }
 
@@ -319,7 +256,6 @@ class _AddEditExpensePageState extends State<AddEditExpensePage> {
     final name = _nameController.text.trim();
     final amount = double.tryParse(_amountController.text.trim()) ?? 0.0;
 
-    // Check if amount exceeds category limit
     if (_isAmountExceedingLimit(amount)) {
       _showLimitExceededDialog(amount, () {
         _performSave(name, amount);
@@ -327,6 +263,50 @@ class _AddEditExpensePageState extends State<AddEditExpensePage> {
     } else {
       _performSave(name, amount);
     }
+  }
+
+  // ====== NEW: is_transacted decisions for EXPENSE ======
+  bool _decideIsTransactedOnAdd({required int newDueDay}) {
+    final today = _currentDate.day;
+    if (newDueDay == today) return true; // transact now
+    if (newDueDay < today) return false; // past → don't transact now
+    return false; // future
+  }
+
+  bool _decideIsTransactedOnEdit({
+    required bool currentIsTransacted,
+    required int newDueDay,
+  }) {
+    final today = _currentDate.day;
+    if (currentIsTransacted) return true; // keep true, only change date/fields
+    if (newDueDay == today) return true; // transact now
+    if (newDueDay < today) return true; // past & false → transact now
+    return false; // future
+  }
+
+  double? _toDouble(dynamic v) {
+    if (v == null) return null;
+    if (v is num) return v.toDouble();
+    if (v is String) return v.isEmpty ? null : double.tryParse(v);
+    return null;
+  }
+
+  // ====== NEW: apply EXPENSE to balance (subtract) ======
+  Future<void> _applyExpenseToBalance({
+    required String profileId,
+    required double amount,
+  }) async {
+    final prof = await _sb
+        .from('User_Profile')
+        .select('current_balance')
+        .eq('profile_id', profileId)
+        .maybeSingle();
+
+    final curr = _toDouble(prof?['current_balance']) ?? 0.0;
+    await _sb
+        .from('User_Profile')
+        .update({'current_balance': curr - amount})
+        .eq('profile_id', profileId);
   }
 
   Future<void> _performSave(String name, double amount) async {
@@ -337,47 +317,65 @@ class _AddEditExpensePageState extends State<AddEditExpensePage> {
       final now = _currentDate;
       final dueDay = int.tryParse(_dueDayController.text.trim()) ?? 27;
 
-      // Debug logging
-      print('=== Expense Update Debug ===');
-      print('Current date: $now');
-      print('Current day: ${now.day}');
-      print('Due day: $dueDay');
-      print('Due day passed: ${_isDueDayPassed(dueDay)}');
+      final todayIso = _iso(now);
 
       if (widget.expense == null) {
-        // Add new expense
+        // ============== ADD NEW EXPENSE ==============
+        final isTransactedNow = _decideIsTransactedOnAdd(newDueDay: dueDay);
+
+        if (isTransactedNow) {
+          // IMPORTANT: subtract from balance first
+          await _applyExpenseToBalance(profileId: profileId, amount: amount);
+        }
+
         await _sb.from('Fixed_Expense').insert({
           'name': name,
           'amount': amount,
           'due_date': dueDay,
           'category_id': _selectedCategoryId,
           'profile_id': profileId,
-          'start_time': _iso(now),
+          'start_time': todayIso,
           'end_time': null,
+          'is_transacted': isTransactedNow,
         });
       } else {
-        // Update existing expense - Handle all cases
+        // ============== EDIT EXISTING EXPENSE ==============
         final expenseId = widget.expense!['expense_id'];
         final originalAmount = _getSafeDouble(widget.expense!['amount']);
         final originalDueDay = widget.expense!['due_date'] ?? 27;
 
+        final fresh = await _sb
+            .from('Fixed_Expense')
+            .select('is_transacted')
+            .eq('expense_id', expenseId)
+            .maybeSingle();
+
+        final currentIsTransacted =
+            (fresh?['is_transacted'] ??
+                widget.expense?['is_transacted'] ??
+                false) ==
+            true;
+
         final amountChanged = amount != originalAmount;
         final dueDayChanged = dueDay != originalDueDay;
 
-        // Debug logging for edits
-        print('Original due day: $originalDueDay');
-        print('New due day: $dueDay');
-        print('Amount changed: $amountChanged');
-        print('Due day changed: $dueDayChanged');
-        print('Old due day passed: ${_isDueDayPassed(originalDueDay)}');
-        print('New due day passed: ${_isDueDayPassed(dueDay)}');
+        // Decide new is_transacted
+        final decidedIsTransacted = _decideIsTransactedOnEdit(
+          currentIsTransacted: currentIsTransacted,
+          newDueDay: dueDay,
+        );
+
+        // If we’re transitioning from false → true, subtract FIRST
+        final willTransactNow = decidedIsTransacted && !currentIsTransacted;
+        if (willTransactNow) {
+          await _applyExpenseToBalance(profileId: profileId, amount: amount);
+        }
 
         if (amountChanged) {
-          // Case 1: Amount changed - archive old record and create new one
-          print('Case 1: Amount changed - archiving old and creating new');
+          // Archive old + insert new (carry is_transacted decision)
           await _sb
               .from('Fixed_Expense')
-              .update({'end_time': _iso(now)})
+              .update({'end_time': todayIso})
               .eq('expense_id', expenseId);
 
           await _sb.from('Fixed_Expense').insert({
@@ -386,35 +384,31 @@ class _AddEditExpensePageState extends State<AddEditExpensePage> {
             'due_date': dueDay,
             'category_id': _selectedCategoryId,
             'profile_id': profileId,
-            'start_time': _iso(now),
+            'start_time': todayIso,
             'end_time': null,
+            'is_transacted': decidedIsTransacted,
           });
         } else if (dueDayChanged) {
-          // Case 2: Due day changed
+          // Mirror your previous branching (using due day helpers), but always write is_transacted
           final oldDueDayPassed = _isDueDayPassed(originalDueDay);
-          final newDueDayPassed = _isDueDayPassed(dueDay);
 
           if (!oldDueDayPassed && dueDay > originalDueDay) {
-            // Case 2a: Old due day NOT passed AND new due day > old due day
             if (_isBetweenDueDays(originalDueDay, dueDay)) {
-              print('Case 2a: Between due days - updating same row');
-              // Just update the due day in the same row
+              // simple row update
               await _sb
                   .from('Fixed_Expense')
                   .update({
                     'name': name,
                     'due_date': dueDay,
                     'category_id': _selectedCategoryId,
+                    'is_transacted': decidedIsTransacted,
                   })
                   .eq('expense_id', expenseId);
             } else {
-              print(
-                'Case 2a: Not between due days - archiving and creating new',
-              );
-              // Current day is before old due day, archive and create new
+              // archive + insert
               await _sb
                   .from('Fixed_Expense')
-                  .update({'end_time': _iso(now)})
+                  .update({'end_time': todayIso})
                   .eq('expense_id', expenseId);
 
               await _sb.from('Fixed_Expense').insert({
@@ -423,17 +417,16 @@ class _AddEditExpensePageState extends State<AddEditExpensePage> {
                 'due_date': dueDay,
                 'category_id': _selectedCategoryId,
                 'profile_id': profileId,
-                'start_time': _iso(now),
+                'start_time': todayIso,
                 'end_time': null,
+                'is_transacted': decidedIsTransacted,
               });
             }
           } else if (oldDueDayPassed) {
-            // Case 2b: Old due day has passed (expense already occurred this month)
-            print('Case 2b: Old due day passed - archiving and creating new');
-            // Update due day for future expense only - archive current and create new
+            // archive + insert
             await _sb
                 .from('Fixed_Expense')
-                .update({'end_time': _iso(now)})
+                .update({'end_time': todayIso})
                 .eq('expense_id', expenseId);
 
             await _sb.from('Fixed_Expense').insert({
@@ -442,16 +435,15 @@ class _AddEditExpensePageState extends State<AddEditExpensePage> {
               'due_date': dueDay,
               'category_id': _selectedCategoryId,
               'profile_id': profileId,
-              'start_time': _iso(now),
+              'start_time': todayIso,
               'end_time': null,
+              'is_transacted': decidedIsTransacted,
             });
           } else if (!oldDueDayPassed && dueDay < now.day) {
-            // Case 2c: Due day NOT passed AND user updates due day to be in the past
-            print('Case 2c: New due day in past - archiving and creating new');
-            // Archive current and create new with updated due day
+            // moved due date earlier in the month → archive + insert
             await _sb
                 .from('Fixed_Expense')
-                .update({'end_time': _iso(now)})
+                .update({'end_time': todayIso})
                 .eq('expense_id', expenseId);
 
             await _sb.from('Fixed_Expense').insert({
@@ -460,33 +452,37 @@ class _AddEditExpensePageState extends State<AddEditExpensePage> {
               'due_date': dueDay,
               'category_id': _selectedCategoryId,
               'profile_id': profileId,
-              'start_time': _iso(now),
+              'start_time': todayIso,
               'end_time': null,
+              'is_transacted': decidedIsTransacted,
             });
           } else {
-            // Default case: Just update name, category and due day
-            print('Default case: Updating same row');
+            // simple row update
             await _sb
                 .from('Fixed_Expense')
                 .update({
                   'name': name,
                   'due_date': dueDay,
                   'category_id': _selectedCategoryId,
+                  'is_transacted': decidedIsTransacted,
                 })
                 .eq('expense_id', expenseId);
           }
         } else {
-          // Only name or category changed - simple update
-          print('Only name/category changed - updating same row');
+          // Name/category only — still persist decided is_transacted
           await _sb
               .from('Fixed_Expense')
-              .update({'name': name, 'category_id': _selectedCategoryId})
+              .update({
+                'name': name,
+                'category_id': _selectedCategoryId,
+                'is_transacted': decidedIsTransacted,
+              })
               .eq('expense_id', expenseId);
         }
       }
 
       if (mounted) {
-        Navigator.pop(context, true); // Return success
+        Navigator.pop(context, true);
       }
     } catch (e) {
       if (mounted) {
@@ -498,10 +494,60 @@ class _AddEditExpensePageState extends State<AddEditExpensePage> {
         );
       }
     } finally {
-      if (mounted) {
-        setState(() => _loading = false);
-      }
+      if (mounted) setState(() => _loading = false);
     }
+  }
+
+  // ---------- UI + helpers ----------
+  Widget _buildConfirmationRow(
+    String label,
+    String value, {
+    bool isHighlighted = false,
+    Color? color,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(color: Colors.white70, fontSize: 14),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              color:
+                  color ??
+                  (isHighlighted ? const Color(0xFF704EF4) : Colors.white),
+              fontSize: 14,
+              fontWeight: isHighlighted ? FontWeight.w600 : FontWeight.normal,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  double _getSafeDouble(dynamic value) {
+    if (value == null) return 0.0;
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
+    if (value is String) return double.tryParse(value) ?? 0.0;
+    return 0.0;
+  }
+
+  String _iso(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  String _fmtMoney(double value) => value.toStringAsFixed(2);
+
+  String? _validateDueDay(String? value) {
+    if (value == null || value.isEmpty) return 'Please enter due day';
+    final dueDay = int.tryParse(value);
+    if (dueDay == null) return 'Please enter a valid number';
+    if (dueDay < 1 || dueDay > 31) return 'Due day must be between 1 and 31';
+    return null;
   }
 
   void _showConfirmationDialog() {
@@ -512,7 +558,9 @@ class _AddEditExpensePageState extends State<AddEditExpensePage> {
     final dueDay = int.tryParse(_dueDayController.text.trim());
     final categoryName = _getCategoryName(_selectedCategoryId);
 
-    if (amount == null || dueDay == null || _selectedCategoryId == null) return;
+    if (amount == null || dueDay == null || _selectedCategoryId == null) {
+      return;
+    }
 
     final originalAmount = widget.expense != null
         ? _getSafeDouble(widget.expense!['amount'])
@@ -590,84 +638,21 @@ class _AddEditExpensePageState extends State<AddEditExpensePage> {
     );
   }
 
-  Widget _buildConfirmationRow(
-    String label,
-    String value, {
-    bool isHighlighted = false,
-    Color? color,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label, style: TextStyle(color: Colors.white70, fontSize: 14)),
-          Text(
-            value,
-            style: TextStyle(
-              color:
-                  color ??
-                  (isHighlighted ? const Color(0xFF704EF4) : Colors.white),
-              fontSize: 14,
-              fontWeight: isHighlighted ? FontWeight.w600 : FontWeight.normal,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // Helper method to safely get double values
-  double _getSafeDouble(dynamic value) {
-    if (value == null) return 0.0;
-    if (value is double) return value;
-    if (value is int) return value.toDouble();
-    if (value is String) return double.tryParse(value) ?? 0.0;
-    return 0.0;
-  }
-
-  String _iso(DateTime d) =>
-      '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
-
-  String _fmtMoney(double value) {
-    return value.toStringAsFixed(2);
-  }
-
-  // Due day validation
-  String? _validateDueDay(String? value) {
-    if (value == null || value.isEmpty) {
-      return 'Please enter due day';
-    }
-
-    final dueDay = int.tryParse(value);
-    if (dueDay == null) {
-      return 'Please enter a valid number';
-    }
-
-    if (dueDay < 1 || dueDay > 31) {
-      return 'Due day must be between 1 and 31';
-    }
-
-    return null;
-  }
-
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
 
-    // Check if categories are available
     if (widget.categories.isEmpty) {
       return Scaffold(
         backgroundColor: const Color(0xFF1F1F33),
         body: Stack(
           children: [
-            // Top gradient background
             Container(
               height: 230,
               width: double.infinity,
-              decoration: BoxDecoration(
-                color: const Color(0xFF704EF4),
-                borderRadius: const BorderRadius.only(
+              decoration: const BoxDecoration(
+                color: Color(0xFF704EF4),
+                borderRadius: BorderRadius.only(
                   bottomLeft: Radius.circular(40),
                   bottomRight: Radius.circular(40),
                 ),
@@ -728,13 +713,12 @@ class _AddEditExpensePageState extends State<AddEditExpensePage> {
       backgroundColor: const Color(0xFF1F1F33),
       body: Stack(
         children: [
-          // Top gradient background
           Container(
             height: 230,
             width: double.infinity,
-            decoration: BoxDecoration(
-              color: const Color(0xFF704EF4),
-              borderRadius: const BorderRadius.only(
+            decoration: const BoxDecoration(
+              color: Color(0xFF704EF4),
+              borderRadius: BorderRadius.only(
                 bottomLeft: Radius.circular(40),
                 bottomRight: Radius.circular(40),
               ),
@@ -829,7 +813,6 @@ class _AddEditExpensePageState extends State<AddEditExpensePage> {
                                 isCollapsed: true,
                               ),
                               items: [
-                                // "Choose a category" option
                                 const DropdownMenuItem<String>(
                                   value: null,
                                   child: Text(
@@ -837,7 +820,6 @@ class _AddEditExpensePageState extends State<AddEditExpensePage> {
                                     style: TextStyle(color: Color(0xFF7A7A7A)),
                                   ),
                                 ),
-                                // Category options
                                 ..._uniqueCategories
                                     .map<DropdownMenuItem<String>>((category) {
                                       final categoryId = category['category_id']
@@ -845,7 +827,6 @@ class _AddEditExpensePageState extends State<AddEditExpensePage> {
                                       final categoryName =
                                           category['name'] as String? ??
                                           'Unnamed Category';
-
                                       return DropdownMenuItem<String>(
                                         value: categoryId,
                                         child: Text(
@@ -879,7 +860,7 @@ class _AddEditExpensePageState extends State<AddEditExpensePage> {
                       _rounded(
                         child: TextFormField(
                           controller: _amountController,
-                          keyboardType: TextInputType.numberWithOptions(
+                          keyboardType: const TextInputType.numberWithOptions(
                             decimal: true,
                           ),
                           decoration: _inputDecoration().copyWith(
@@ -899,7 +880,7 @@ class _AddEditExpensePageState extends State<AddEditExpensePage> {
                       ),
                       const SizedBox(height: 18),
 
-                      // Due Day (Text Field)
+                      // Due Day
                       const _FieldLabel('Due Day (1-31)'),
                       const SizedBox(height: 8),
                       _rounded(
@@ -914,7 +895,7 @@ class _AddEditExpensePageState extends State<AddEditExpensePage> {
                       ),
                       const SizedBox(height: 28),
 
-                      // Save Button
+                      // Save
                       Center(
                         child: SizedBox(
                           width: 200,

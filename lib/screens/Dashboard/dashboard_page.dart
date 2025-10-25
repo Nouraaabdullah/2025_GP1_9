@@ -646,20 +646,21 @@ class _DashboardPageState extends State<DashboardPage> {
         }
 
         // E) completed weeks only
-        final today = DateTime.now();
-        final currentWeekIdx =
-            (today.day <= 7)  ? 0 :
-            (today.day <= 14) ? 1 :
-            (today.day <= 22) ? 2 : 3;
+        // E) include current week too but exclude future weeks
+final today = DateTime.now();
+final currentWeekIdx =
+    (today.day <= 7)  ? 0 :
+    (today.day <= 14) ? 1 :
+    (today.day <= 22) ? 2 : 3;
 
-        final lastCompleted = currentWeekIdx - 1;
-        const wLabels = ['W1','W2','W3','W4'];
-        for (int i = 0; i <= lastCompleted && i < 4; i++) {
-          if (weeklyVals[i] != 0) {
-            _savingsSeries.add(weeklyVals[i]);
-            _tmpSavingsLabels.add(wLabels[i]);
-          }
-        }
+const wLabels = ['W1','W2','W3','W4'];
+for (int i = 0; i <= currentWeekIdx && i < 4; i++) {
+  if (weeklyVals[i] != 0) {
+    _savingsSeries.add(weeklyVals[i]);
+    _tmpSavingsLabels.add(wLabels[i]);
+  }
+}
+
 
       } else if (_periodIndex == 1) {
         final byMonth = List<num>.filled(12, 0);
@@ -1010,7 +1011,7 @@ return RefreshIndicator(
                         ),
 
                         const SizedBox(height: 12),
-                        if (_isFutureWeek(DateTime.now()))
+                        if (_periodIndex == 0 && _isFutureWeek(DateTime.now()))
                           Center(child: Text(
                             'No data yet',
                             style: TextStyle(color: AppColors.textGrey),

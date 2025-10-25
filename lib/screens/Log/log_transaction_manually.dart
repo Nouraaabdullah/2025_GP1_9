@@ -145,32 +145,6 @@ class _LogTransactionManuallyPageState
     return insertRes as Map<String, dynamic>;
   }
 
-  Future<num> _sumAllMonthlySavingsExceptCurrent(
-    String profileId,
-    DateTime now,
-  ) async {
-    final first = DateTime(now.year, now.month, 1);
-
-    final dynamic res = await _sb
-        .from('Monthly_Financial_Record')
-        .select('monthly_saving,period_start')
-        .eq('profile_id', profileId);
-
-    num total = 0;
-    for (final row in (res as List)) {
-      final ps = DateTime.parse(row['period_start']);
-      if (ps.year == first.year && ps.month == first.month) continue;
-      final v = row['monthly_saving'];
-      if (v is num)
-        total += v;
-      else {
-        final parsed = num.tryParse('$v');
-        if (parsed != null) total += parsed;
-      }
-    }
-    return total;
-  }
-
   Future<num> _getCurrentBalance() async {
     final profileId = await _getProfileId();
     final dynamic res = await _sb
@@ -279,6 +253,26 @@ class _LogTransactionManuallyPageState
     final v = (rows.first as Map<String, dynamic>)['total_expense'];
     if (v is num) return v;
     return num.tryParse('$v') ?? 0;
+  }
+
+  // helpers for color hex normalization used in validation
+  String _normalizeDbHex(String s) {
+    var t = (s).trim();
+    if (t.startsWith('#')) t = t.substring(1);
+    t = t.toUpperCase();
+    if (t.length == 8) {
+      // if ARGB or AARRGGBB, drop leading alpha
+      t = t.substring(2);
+    }
+    if (t.length > 6) {
+      t = t.substring(t.length - 6);
+    }
+    return t.padLeft(6, '0');
+  }
+
+  String _hexFromColorRGB(Color c) {
+    final rgb = c.value & 0x00FFFFFF;
+    return rgb.toRadixString(16).toUpperCase().padLeft(6, '0');
   }
 
   // color picker helper opened via root navigator with hue and saturation wheel plus brightness
@@ -474,16 +468,18 @@ class _LogTransactionManuallyPageState
                       TextFormField(
                         controller: limitCtrl,
                         decoration: _inputDecoration().copyWith(
-                          hintText: 'Monthly limit',
+                          hintText: 'Monthly limit (optional)',
                         ),
-                        keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true,
-                        ),
-                        validator: (v) => (v == null || v.trim().isEmpty)
-                            ? 'Enter a limit'
-                            : (double.tryParse(v.trim()) == null
-                                  ? 'Enter a number'
-                                  : null),
+                        keyboardType:
+                            const TextInputType.numberWithOptions(decimal: true),
+                        validator: (v) {
+                          final t = v?.trim() ?? '';
+                          if (t.isEmpty) return null;
+                          final parsed = num.tryParse(t);
+                          if (parsed == null) return 'Enter a number';
+                          if (parsed < 0) return 'Enter a valid number';
+                          return null;
+                        },
                       ),
                       const SizedBox(height: 12),
                       Row(
@@ -513,9 +509,7 @@ class _LogTransactionManuallyPageState
                       ),
                       const SizedBox(height: 12),
                       SizedBox(
-                        width:
-                            5 * 50 +
-                            4 * 8, // 5 icons per row (tile width + spacing)
+                        width: 5 * 50 + 4 * 8,
                         child: Wrap(
                           spacing: 6,
                           runSpacing: 8,
@@ -567,23 +561,73 @@ class _LogTransactionManuallyPageState
                     }
 
                     final profileId = await _getProfileId();
+
+                    // tiny validation: chosen color must be unique among existing categories
+                    try {
+                      final List rows = await _sb
+                          .from('Category')
+                          .select('icon_color')
+                          .eq('profile_id', profileId)
+                          .eq('is_archived', false);
+
+                      final taken = <String>{
+                        for (final r in rows)
+                          _normalizeDbHex(
+                            ((r as Map<String, dynamic>)['icon_color'] ?? '')
+                                .toString(),
+                          ),
+                      };
+
+                      final chosenHex = _hexFromColorRGB(chosenColor);
+                      if (taken.contains(chosenHex)) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                              content: Text(
+                                  'This color is already used by another category. Pick a different color')),
+                        );
+                        return;
+                      }
+                    } catch (e) {
+                      // if validation query fails, fail safe and block creation
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                            content: Text(
+                                'Could not validate color uniqueness: $e')),
+                      );
+                      return;
+                    }
+
                     final name = nameCtrl.text.trim();
-                    final limit = num.parse(limitCtrl.text.trim());
+                    num? limit;
+                    final lt = limitCtrl.text.trim();
+                    if (lt.isNotEmpty) {
+                      final parsed = num.tryParse(lt);
+                      if (parsed == null || parsed < 0) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                              content:
+                                  Text('Enter a valid non negative limit')),
+                        );
+                        return;
+                      }
+                      limit = parsed;
+                    }
+
+                    final payload = {
+                      'name': name,
+                      'type': 'Custom',
+                      'monthly_limit': limit,
+                      'icon': chosenIcon.toString().split('.').last,
+                      'icon_color': chosenColor.value.toRadixString(16),
+                      'is_archived': false,
+                      'profile_id': profileId,
+                    };
 
                     final inserted = await _sb
                         .from('Category')
-                        .insert({
-                          'name': name,
-                          'type': 'Custom',
-                          'monthly_limit': limit,
-                          'icon': chosenIcon.toString().split('.').last,
-                          'icon_color': chosenColor.value.toRadixString(16),
-                          'is_archived': false,
-                          'profile_id': profileId,
-                        })
+                        .insert(payload)
                         .select('category_id,name')
                         .single();
-
                     createdCategoryName = inserted['name'] as String;
 
                     if (context.mounted) {
@@ -615,7 +659,7 @@ class _LogTransactionManuallyPageState
     void Function(Color) setColor,
     double brightness,
   ) {
-    const double radius = 125.0; // matches 250x250 wheel
+    const double radius = 125.0;
     final double dx = position.dx - radius;
     final double dy = position.dy - radius;
     final double distance = math.sqrt(dx * dx + dy * dy);
@@ -1120,8 +1164,8 @@ class _LogTransactionManuallyPageState
                                         ),
                                   validator: (v) =>
                                       _type == 'Expense' && v == null
-                                      ? 'Select a category'
-                                      : null,
+                                          ? 'Select a category'
+                                          : null,
                                 ),
                               ),
                               const SizedBox(width: 8),

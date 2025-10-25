@@ -1,8 +1,7 @@
 
 
 # Surra | صُرّة
-##AI-Powered Personal Finance Management App
-###Introduction (Goal)
+### Introduction (Goal)
 
 Surra is a mobile application designed to help individuals in Saudi Arabia manage their spending, track expenses, and strengthen their saving habits.
 
@@ -20,7 +19,7 @@ The goal of the project is to address overspending and limited financial awarene
 
 By integrating artificial intelligence, real-time analytics, and family-oriented budgeting, Surra promotes responsible spending and long-term financial stability across generations.
 
-###Technologies Used
+### Technologies Used
 
 Flutter : Used for developing the cross-platform mobile application.
 
@@ -38,14 +37,14 @@ GitHub : For version control and collaborative development.
 
 Jira : For sprint planning, task tracking, and project management.
 
-###Launch Instructions
+### Launch Instructions
 
 1- Clone the Repository
 2- Install Dependencies
-3-Connect to Supabase
+3- Connect to Supabase
   The project is already linked to the existing Supabase database.
   Ensure the Supabase credentials (supabaseUrl and supabaseAnonKey) are correctly set in the configuration file.
-4-Run the Application
+4- Run the Application
 
 The app will automatically connect to the existing Supabase backend, load user data, and enable features such as authentication, category tracking, goal management, and real-time updates.
 

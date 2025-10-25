@@ -1984,7 +1984,7 @@ class _GoalTypeSelector extends StatelessWidget {
             fancyTab('Active', Icons.flash_on_rounded, GoalType.active,
                 const Color(0xFF6C63FF)),
             fancyTab('Completed', Icons.check_circle_rounded,
-                GoalType.completed, const Color(0xFF4CAF50)),
+                GoalType.completed, const Color.fromARGB(255, 31, 160, 57)),
             fancyTab('Uncompleted', Icons.error_rounded,
                 GoalType.uncompleted, const Color(0xFFFF5252)),
             fancyTab('Achieved', Icons.emoji_events_rounded,
@@ -2043,9 +2043,9 @@ class _GoalTile extends StatelessWidget {
     final isUncompleted = goal.type == GoalType.uncompleted;
     final isAchieved = goal.type == GoalType.achieved;
 
-    // Color scheme matching the page theme (darker, more muted)
+
     final Color accentColor = isCompleted
-        ? const Color(0xFF059669) // Darker emerald green for completed
+        ? const Color.fromARGB(255, 30, 163, 57) 
         : isUncompleted
             ? const Color(0xFFEF4444) // Red
             : isAchieved
@@ -2266,7 +2266,7 @@ class _GoalTile extends StatelessWidget {
                               isActive
                                   ? 'In Progress'
                                   : isCompleted
-                                      ? 'Goal Reached'
+                                      ? 'Goal Completed'
                                       : isUncompleted
                                           ? 'Not Completed'
                                           : 'Achieved',

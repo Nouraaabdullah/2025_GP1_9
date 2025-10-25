@@ -873,7 +873,7 @@ return RefreshIndicator(
           const _BlockTitle('Income Overview'),
           const SizedBox(height: _betweenTitleAndCard),
           _SectionCard(
-            onInfo: () => _showInfo(context, 'This chart tracks how efficiently you’re managing your income this month. It shows what portion of your total funds (earnings + income) is still available after spending. The purple gauge shows how much of your income remains after all expenses.'), 
+            onInfo: () => _showInfo(context, 'This chart tracks how efficiently you’re managing your income this ${_periodIndex==0?'week':_periodIndex==1?'month':'year'}. It shows what portion of your total funds (earnings + income) is still available after spending. The purple gauge shows how much of your income remains after all expenses.'), 
             child: Column(
               children: [
                 const SizedBox(height: 8),

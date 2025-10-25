@@ -159,7 +159,7 @@ class _DashboardPageState extends State<DashboardPage> {
 
       final mfrRows = await _sb
           .from('Monthly_Financial_Record')
-          .select('period_start, monthly_saving, profile_id')
+          .select('period_start, total_income, monthly_saving, profile_id')
           .eq('profile_id', profileId)
           .gte('period_start', _iso(DateTime(now.year, 1, 1)))
           .lte('period_start', _iso(DateTime(now.year, 12, 31)));
@@ -228,44 +228,68 @@ class _DashboardPageState extends State<DashboardPage> {
         }
       }
 
-      // 7) fixed income
-      for (final r in fixedIncomeRows) {
-        final monthly = (r['monthly_income'] as num?) ?? 0;
-        final st = _parseOrNull(r['start_time']);
-        final en = _parseOrNull(r['end_time']);
-        final payday = (r['payday'] as int?) ?? 1;
+      // 7) income from Monthly_Financial_Record.total_income
+      // Monthly mode: use the month's total as is
+      // Yearly mode: sum totals for that year
+      // Weekly mode: take the current month's total and divide by 4
+      {
+        // helper to read total_income safely
+        num _totalIncomeFromMfrOn(DateTime d) {
+          // find records that belong to same month and year
+          num sum = 0;
+          for (final r in mfrRows) {
+            final pd = DateTime.parse(r['period_start'] as String);
+            if (pd.year == d.year && pd.month == d.month) {
+              sum += (r['total_income'] as num?) ?? 0;
+            }
+          }
+          return sum;
+        }
 
-        for (var i = 0; i < n; i++) {
-          if (_periodIndex == 2) {
-            final y = buckets[i].year!;
-            final monthsActive = _monthsActiveByPayday(st, en, y, payday);
-            if (monthsActive > 0) {
-              _rawIncome[i]   += monthly * monthsActive;
-              _seriesIncome[i] += monthly * monthsActive;
-            }
-          } else if (_periodIndex == 1) {
+        if (_periodIndex == 1) {
+          // monthly, one value per month
+          for (var i = 0; i < n; i++) {
             final y = buckets[i].year!, m = buckets[i].month!;
-            final firstDay = DateTime(y, m, 1);
-            final lastDay  = DateTime(y, m + 1, 0);
-            final overlaps =
-                (st == null || !lastDay.isBefore(st)) &&
-                (en == null || !firstDay.isAfter(en));
-            if (overlaps) {
-              _rawIncome[i]   += monthly;
-              _seriesIncome[i] += monthly;
-            }
-          } else {
-            final ref = buckets[i].middleDate!;
-            final pd = math.min(payday, _lastDayOfMonth(ref.year, ref.month));
-            final payDate = DateTime(ref.year, ref.month, pd);
-            final activeMonth = (st == null || !payDate.isBefore(st)) && (en == null || !payDate.isAfter(en));
-            if (activeMonth) {
-              _rawIncome[i]   += monthly / 4;
-              _seriesIncome[i] += monthly / 4;
-            }
+            final ti = _totalIncomeFromMfrOn(DateTime(y, m, 1));
+            _rawIncome[i]   = ti;
+            _seriesIncome[i] = ti;
+          }
+        } else if (_periodIndex == 2) {
+          // yearly, sum months in that year
+          // fetch MFR across the whole yearly range so we include multiple years
+          final mfrRange = await _sb
+              .from('Monthly_Financial_Record')
+              .select('period_start, total_income')
+              .eq('profile_id', profileId)
+              .gte('period_start', _iso(rangeStart))
+              .lte('period_start', _iso(rangeEnd));
+
+          // pre-aggregate by year
+          final byYear = <int, num>{};
+          for (final r in mfrRange) {
+            final d = DateTime.parse(r['period_start'] as String);
+            final ti = (r['total_income'] as num?) ?? 0;
+            byYear[d.year] = (byYear[d.year] ?? 0) + ti;
+          }
+
+          for (var i = 0; i < n; i++) {
+            final y = buckets[i].year!;
+            final ti = byYear[y] ?? 0;
+            _rawIncome[i]   = ti;
+            _seriesIncome[i] = ti;
+          }
+        } else {
+          // weekly, use current month total divided by 4
+          final nowW = DateTime.now();
+          final monthTotal = _totalIncomeFromMfrOn(DateTime(nowW.year, nowW.month, 1));
+          final perWeek = monthTotal / 4;
+          for (var i = 0; i < n; i++) {
+            _rawIncome[i]   = perWeek;
+            _seriesIncome[i] = perWeek;
           }
         }
       }
+
 
       // 8) fixed expenses
       for (final r in fixedExpenseRows) {

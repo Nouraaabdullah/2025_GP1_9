@@ -646,20 +646,21 @@ class _DashboardPageState extends State<DashboardPage> {
         }
 
         // E) completed weeks only
-        final today = DateTime.now();
-        final currentWeekIdx =
-            (today.day <= 7)  ? 0 :
-            (today.day <= 14) ? 1 :
-            (today.day <= 22) ? 2 : 3;
+        // E) include current week too but exclude future weeks
+final today = DateTime.now();
+final currentWeekIdx =
+    (today.day <= 7)  ? 0 :
+    (today.day <= 14) ? 1 :
+    (today.day <= 22) ? 2 : 3;
 
-        final lastCompleted = currentWeekIdx - 1;
-        const wLabels = ['W1','W2','W3','W4'];
-        for (int i = 0; i <= lastCompleted && i < 4; i++) {
-          if (weeklyVals[i] != 0) {
-            _savingsSeries.add(weeklyVals[i]);
-            _tmpSavingsLabels.add(wLabels[i]);
-          }
-        }
+const wLabels = ['W1','W2','W3','W4'];
+for (int i = 0; i <= currentWeekIdx && i < 4; i++) {
+  if (weeklyVals[i] != 0) {
+    _savingsSeries.add(weeklyVals[i]);
+    _tmpSavingsLabels.add(wLabels[i]);
+  }
+}
+
 
       } else if (_periodIndex == 1) {
         final byMonth = List<num>.filled(12, 0);
@@ -872,7 +873,7 @@ return RefreshIndicator(
           const _BlockTitle('Income Overview'),
           const SizedBox(height: _betweenTitleAndCard),
           _SectionCard(
-            onInfo: () => _showInfo(context, 'This chart tracks how efficiently you’re managing your income this month. It shows what portion of your total funds (earnings + income) is still available after spending. The purple gauge shows how much of your income remains after all expenses.'), 
+            onInfo: () => _showInfo(context, 'This chart tracks how efficiently you’re managing your income this ${_periodIndex==0?'week':_periodIndex==1?'month':'year'}. It shows what portion of your total funds (earnings + income) is still available after spending. The purple gauge shows how much of your income remains after all expenses.'), 
             child: Column(
               children: [
                 const SizedBox(height: 8),
@@ -1010,7 +1011,7 @@ return RefreshIndicator(
                         ),
 
                         const SizedBox(height: 12),
-                        if (_isFutureWeek(DateTime.now()))
+                        if (_periodIndex == 0 && _isFutureWeek(DateTime.now()))
                           Center(child: Text(
                             'No data yet',
                             style: TextStyle(color: AppColors.textGrey),

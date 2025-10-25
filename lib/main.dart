@@ -1,8 +1,11 @@
+// lib/main.dart
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-// 🟣 Import the monthly record service
+// 🟣 Background updaters
 import 'screens/update_monthly_record_service.dart';
+import 'screens/category_summary_service.dart';
+import 'utils/auth_helpers.dart'; // for getProfileId(context)
 
 // ✅ Screens
 import 'screens/Registeration/welcome_screen.dart';
@@ -44,14 +47,15 @@ class _SurraAppState extends State<SurraApp> {
 
   User? _user;
   bool _isLoading = true;
+  bool _servicesStarted = false;
 
   @override
   void initState() {
     super.initState();
-    _initializeAuthAndRecordUpdater();
+    _getInitialSession();
   }
 
-  Future<void> _initializeAuthAndRecordUpdater() async {
+  Future<void> _getInitialSession() async {
     try {
       final session = _supabase.auth.currentSession;
       setState(() {
@@ -59,30 +63,69 @@ class _SurraAppState extends State<SurraApp> {
         _isLoading = false;
       });
 
-      // 🟣 Start updater if already logged in
-      if (_user != null) {
-        UpdateMonthlyRecord.start();
+      // ✅ If already logged in, ensure services start once
+      if (session?.user != null) {
+        debugPrint('🟢 User already logged in – ensuring background updaters start once.');
+        await _ensureMonthlyAndCategoryServices(context);
       }
 
-      // 🟣 Listen for login/logout events and handle background updater
-      _supabase.auth.onAuthStateChange.listen((AuthState data) {
-        final session = data.session;
+      // 🔹 Handle login/logout transitions
+      _supabase.auth.onAuthStateChange.listen((event) async {
+        final session = event.session;
         if (session != null) {
-          debugPrint('✅ User logged in → starting UpdateMonthlyRecord');
-          UpdateMonthlyRecord.start();
+          await _ensureMonthlyAndCategoryServices(context);
         } else {
-          debugPrint('🚪 User logged out → stopping UpdateMonthlyRecord');
-          UpdateMonthlyRecord.stop();
+          UpdateMonthlyRecordService.stop();
+          UpdateCategorySummaryService.stop();
+          _servicesStarted = false;
+          debugPrint('🔴 Updaters stopped after logout');
         }
-        setState(() => _user = session?.user);
       });
     } catch (e) {
-      debugPrint('❌ Auth initialization error: $e');
       setState(() {
         _user = null;
         _isLoading = false;
       });
+      debugPrint('❌ Error initializing session: $e');
     }
+  }
+
+  /// Ensures that Monthly + Category summary updaters start exactly once
+  Future<void> _ensureMonthlyAndCategoryServices(BuildContext context) async {
+    if (_servicesStarted) {
+      debugPrint('⚙️ Updaters already running – skipping duplicate start.');
+      return;
+    }
+    _servicesStarted = true;
+
+    String? profileId;
+    int retries = 0;
+
+    // 🔁 Try up to 5 times to get profile (in case context not ready yet)
+    while (profileId == null && retries < 5) {
+      profileId = await getProfileId(context);
+      if (profileId == null) {
+        debugPrint('[main.dart] ⚠️ Profile not ready (retry $retries)');
+        await Future.delayed(const Duration(seconds: 1));
+        retries++;
+      }
+    }
+
+    if (profileId == null) {
+      debugPrint('[main.dart] ❌ Failed to fetch profile ID after retries.');
+      _servicesStarted = false;
+      return;
+    }
+
+    // 🟢 Guarantee a record exists before realtime starts
+    await UpdateMonthlyRecordService.startWithoutContext(profileId);
+    debugPrint('🟢 Ensured monthly record exists for $profileId');
+
+    // 🟢 Start live background updaters
+    await UpdateMonthlyRecordService.start(context);
+    await UpdateCategorySummaryService.start(context);
+
+    debugPrint('✅ Background updaters started successfully.');
   }
 
   @override
@@ -98,8 +141,8 @@ class _SurraAppState extends State<SurraApp> {
       );
     }
 
-    final isLoggedIn = _user != null;
-    final initialRoute = isLoggedIn ? '/dashboard' : '/welcome';
+    final bool isLoggedIn = _user != null;
+    final String initialRoute = isLoggedIn ? '/dashboard' : '/welcome';
 
     return MaterialApp(
       debugShowCheckedModeBanner: false,

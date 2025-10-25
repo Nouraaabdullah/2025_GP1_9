@@ -1,3 +1,4 @@
+// lib/pages/goals/create_goal_page.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -23,7 +24,7 @@ class _CreateGoalPageState extends State<CreateGoalPage> {
   String? _dateError;
   final supabase = Supabase.instance.client;
 
-  String _formatDate(DateTime d) =>
+  String _fmt(DateTime d) =>
       '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
   @override
@@ -34,41 +35,37 @@ class _CreateGoalPageState extends State<CreateGoalPage> {
     super.dispose();
   }
 
+  // ────────────────────────────────────── DATE PICKER (same as Log) ──────────────────────────────────────
   Future<void> _pickDate() async {
     final now = DateTime.now();
-    final earliest = DateTime(now.year - 5);
-    final latest = DateTime(now.year + 5);
-    final safeInitialDate = _targetDate ?? now.add(const Duration(days: 1));
-    final adjustedInitialDate =
-        safeInitialDate.isBefore(earliest) ? earliest : safeInitialDate;
-
     final picked = await showDatePicker(
       context: context,
-      firstDate: earliest,
-      lastDate: latest,
-      initialDate: adjustedInitialDate,
-      initialEntryMode: DatePickerEntryMode.calendarOnly,
-      builder: (ctx, child) => Theme(
-        data: Theme.of(ctx).copyWith(
-          colorScheme: ColorScheme.dark(
-            primary: AppColors.accent,
-            surface: AppColors.card,
-            onSurface: Colors.white,
+      initialDate: _targetDate ?? now,
+      firstDate: DateTime(now.year - 3),
+      lastDate: DateTime(now.year + 3),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: Color(0xFF704EF4),
+              onPrimary: Colors.white,
+              onSurface: Colors.black,
+            ),
           ),
-        ),
-        child: child!,
-      ),
+          child: child!,
+        );
+      },
     );
-
     if (picked != null) {
       setState(() {
-        _targetDate = DateTime(picked.year, picked.month, picked.day);
-        _dateCtrl.text = _formatDate(_targetDate!);
-        _validateDate(); // Validate date on selection
+        _targetDate = picked;
+        _dateCtrl.text = _fmt(_targetDate!);
+        _validateDate();
       });
     }
   }
 
+  // ────────────────────────────────────── VALIDATION ──────────────────────────────────────
   void _validateForm() {
     setState(() {
       _titleError = _titleCtrl.text.trim().isEmpty
@@ -76,11 +73,14 @@ class _CreateGoalPageState extends State<CreateGoalPage> {
           : _titleCtrl.text.trim().length < 2
               ? 'Name must be at least 2 characters'
               : null;
+
       _amountError = _amountCtrl.text.trim().isEmpty
           ? 'Amount is required'
-          : double.tryParse(_amountCtrl.text) == null || double.parse(_amountCtrl.text) <= 0
+          : double.tryParse(_amountCtrl.text) == null ||
+                  double.parse(_amountCtrl.text) <= 0
               ? 'Enter a valid amount'
               : null;
+
       _dateError = _validateDate();
     });
   }
@@ -93,9 +93,11 @@ class _CreateGoalPageState extends State<CreateGoalPage> {
     return d.isBefore(t) ? 'Target date cannot be in the past' : null;
   }
 
+  // ────────────────────────────────────── SUBMIT ──────────────────────────────────────
   Future<void> _submit() async {
     _validateForm();
     if (_titleError != null || _amountError != null || _dateError != null) return;
+
     setState(() => _submitting = true);
 
     final title = _titleCtrl.text.trim();
@@ -111,7 +113,7 @@ class _CreateGoalPageState extends State<CreateGoalPage> {
       if (profileId == null) return;
 
       final response = await supabase.from('Goal').insert({
-        'name': title.trim(),
+        'name': title,
         'target_amount': amount,
         'target_date': date.toIso8601String(),
         'status': 'Active',
@@ -119,14 +121,14 @@ class _CreateGoalPageState extends State<CreateGoalPage> {
         'profile_id': profileId,
       }).select();
 
-      if (response.isEmpty) throw Exception('Insert failed — no data returned.');
+      if (response.isEmpty) throw Exception('Insert failed');
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Goal created successfully!')),
       );
       Navigator.of(context).pop();
     } catch (e) {
-      debugPrint('Cannot create goal: $e');
+      debugPrint('CreateGoal error: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error creating goal: $e')),
       );
@@ -134,12 +136,16 @@ class _CreateGoalPageState extends State<CreateGoalPage> {
     }
   }
 
+  // ────────────────────────────────────── UI (identical to Log) ──────────────────────────────────────
   @override
   Widget build(BuildContext context) {
+    final size = MediaQuery.of(context).size;
+
     return Scaffold(
       backgroundColor: const Color(0xFF1F1F33),
       body: Stack(
         children: [
+          // ── Header (exact copy) ─────────────────────────────────────
           Container(
             height: 230,
             width: double.infinity,
@@ -176,16 +182,23 @@ class _CreateGoalPageState extends State<CreateGoalPage> {
               ),
             ),
           ),
+
+          // ── Back arrow (same colour/position) ─────────────────────────────────────
           SafeArea(
             child: Align(
               alignment: Alignment.topLeft,
               child: IconButton(
-                icon: const Icon(Icons.arrow_back_ios_new, color: Color(0xFF704EF4)),
+                icon: const Icon(
+                  Icons.arrow_back_ios_new,
+                  color: Color(0xFF704EF4),
+                ),
                 onPressed: () => Navigator.of(context).pop(),
                 tooltip: '',
               ),
             ),
           ),
+
+          // ── Form Card (identical radius, padding, colors) ───────────────────────
           Positioned(
             top: 150,
             left: 0,
@@ -194,10 +207,10 @@ class _CreateGoalPageState extends State<CreateGoalPage> {
             child: SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: Container(
-                width: MediaQuery.of(context).size.width,
+                width: size.width,
                 decoration: BoxDecoration(
                   color: AppColors.card,
-                  borderRadius: BorderRadius.circular(18),
+                  borderRadius: BorderRadius.circular(28),
                 ),
                 padding: const EdgeInsets.fromLTRB(24, 28, 24, 32),
                 child: Form(
@@ -205,6 +218,7 @@ class _CreateGoalPageState extends State<CreateGoalPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // Title (same size/weight)
                       const Text(
                         'Create Goal',
                         style: TextStyle(
@@ -214,6 +228,8 @@ class _CreateGoalPageState extends State<CreateGoalPage> {
                         ),
                       ),
                       const SizedBox(height: 20),
+
+                      // ── Goal Name ─────────────────────────────────────
                       const _FieldLabel('Goal Name'),
                       const SizedBox(height: 8),
                       _rounded(
@@ -228,12 +244,12 @@ class _CreateGoalPageState extends State<CreateGoalPage> {
                       if (_titleError != null)
                         Padding(
                           padding: const EdgeInsets.only(top: 4, left: 12),
-                          child: Text(
-                            _titleError!,
-                            style: const TextStyle(color: Colors.redAccent, fontSize: 12),
-                          ),
+                          child: Text(_titleError!,
+                              style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
                         ),
                       const SizedBox(height: 18),
+
+                      // ── Target Amount ─────────────────────────────────
                       const _FieldLabel('Target Amount'),
                       const SizedBox(height: 8),
                       _rounded(
@@ -243,11 +259,12 @@ class _CreateGoalPageState extends State<CreateGoalPage> {
                           inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                           style: const TextStyle(color: Colors.black),
                           decoration: _inputDecoration(hint: 'e.g., 2000').copyWith(
-                            suffixIcon: const Padding(
-                              padding: EdgeInsets.only(right: 12),
-                              child: Icon(Icons.attach_money, size: 18, color: Color(0xFF7A7A8C)),
+                            prefixText: 'SAR  ',
+                            prefixStyle: const TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFF7A7A8C),
+                              fontWeight: FontWeight.w600,
                             ),
-                            suffixIconConstraints: const BoxConstraints(minHeight: 24, minWidth: 24),
                           ),
                           onChanged: (_) => setState(() => _amountError = null),
                         ),
@@ -255,12 +272,12 @@ class _CreateGoalPageState extends State<CreateGoalPage> {
                       if (_amountError != null)
                         Padding(
                           padding: const EdgeInsets.only(top: 4, left: 12),
-                          child: Text(
-                            _amountError!,
-                            style: const TextStyle(color: Colors.redAccent, fontSize: 12),
-                          ),
+                          child: Text(_amountError!,
+                              style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
                         ),
                       const SizedBox(height: 18),
+
+                      // ── Target Date ───────────────────────────────────
                       const _FieldLabel('Target Date'),
                       const SizedBox(height: 8),
                       _rounded(
@@ -273,9 +290,7 @@ class _CreateGoalPageState extends State<CreateGoalPage> {
                               children: [
                                 Expanded(
                                   child: Text(
-                                    _dateCtrl.text.isEmpty
-                                        ? 'Select date'
-                                        : _dateCtrl.text,
+                                    _dateCtrl.text.isEmpty ? 'Select date' : _dateCtrl.text,
                                     style: TextStyle(
                                       color: _dateCtrl.text.isEmpty
                                           ? const Color(0xFF989898)
@@ -291,7 +306,8 @@ class _CreateGoalPageState extends State<CreateGoalPage> {
                                     borderRadius: BorderRadius.circular(10),
                                   ),
                                   padding: const EdgeInsets.all(8),
-                                  child: const Icon(Icons.calendar_month, color: Colors.white, size: 18),
+                                  child: const Icon(Icons.calendar_month,
+                                      color: Colors.white, size: 18),
                                 ),
                               ],
                             ),
@@ -301,12 +317,12 @@ class _CreateGoalPageState extends State<CreateGoalPage> {
                       if (_dateError != null)
                         Padding(
                           padding: const EdgeInsets.only(top: 4, left: 12),
-                          child: Text(
-                            _dateError!,
-                            style: const TextStyle(color: Colors.redAccent, fontSize: 12),
-                          ),
+                          child: Text(_dateError!,
+                              style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
                         ),
                       const SizedBox(height: 28),
+
+                      // ── Submit Button (same pill, elevation, size) ───────
                       Center(
                         child: SizedBox(
                           width: 150,
@@ -315,8 +331,7 @@ class _CreateGoalPageState extends State<CreateGoalPage> {
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AppColors.accent,
                               shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(72),
-                              ),
+                                  borderRadius: BorderRadius.circular(72)),
                               elevation: 10,
                               shadowColor: AppColors.accent,
                             ),
@@ -332,10 +347,9 @@ class _CreateGoalPageState extends State<CreateGoalPage> {
                                 : const Text(
                                     'Create Goal',
                                     style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.w600,
-                                    ),
+                                        color: Colors.white,
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.w600),
                                   ),
                           ),
                         ),
@@ -351,6 +365,7 @@ class _CreateGoalPageState extends State<CreateGoalPage> {
     );
   }
 
+  // ────────────────────────────────────── UI HELPERS (identical to Log) ──────────────────────────────────────
   InputDecoration _inputDecoration({String? hint}) {
     return InputDecoration(
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -385,10 +400,7 @@ class _FieldLabel extends StatelessWidget {
     return Text(
       text,
       style: const TextStyle(
-        color: Colors.white,
-        fontSize: 15,
-        fontWeight: FontWeight.w400,
-      ),
+          color: Colors.white, fontSize: 15, fontWeight: FontWeight.w400),
     );
   }
 }

@@ -1,3 +1,4 @@
+// edit_goal_page.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -87,7 +88,7 @@ class _EditGoalPageState extends State<EditGoalPage> {
       setState(() {
         _targetDate = DateTime(picked.year, picked.month, picked.day);
         _dateCtrl.text = _formatDate(_targetDate!);
-        _validateDate(); // Validate date on selection
+        _validateDate();
       });
     }
   }
@@ -138,24 +139,21 @@ class _EditGoalPageState extends State<EditGoalPage> {
 
       if (totalAssigned > newTarget) {
         final excess = totalAssigned - newTarget;
-
         await supabase.from('Goal_Transfer').insert({
           'goal_id': widget.id,
           'amount': excess,
           'direction': 'Unassign',
           'created_at': DateTime.now().toIso8601String(),
         });
-
         totalAssigned -= excess;
-        debugPrint('💸 Auto-unassigned $excess SAR from goal "${widget.id}"');
+        debugPrint('Auto-unassigned $excess SAR from goal "${widget.id}"');
       }
 
       final newStatus = totalAssigned >= newTarget ? 'Completed' : 'Active';
       await supabase.from('Goal').update({
         'name': newTitle,
         'target_amount': newTarget,
-        'target_date': _targetDate?.toIso8601String() ??
-            widget.initialTargetDate?.toIso8601String(),
+        'target_date': _targetDate?.toIso8601String() ?? widget.initialTargetDate?.toIso8601String(),
         'status': newStatus,
         'profile_id': profileId,
       }).eq('goal_id', widget.id);
@@ -170,18 +168,18 @@ class _EditGoalPageState extends State<EditGoalPage> {
           await dyn._generateMonthlySavings?.call();
           dyn._recalculateBalances?.call();
         } catch (e) {
-          debugPrint('⚠️ Parent refresh failed: $e');
+          debugPrint('Parent refresh failed: $e');
         }
       }
 
       if (mounted) {
         Navigator.pop(context, true);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('✅ Goal updated successfully!')),
+          const SnackBar(content: Text('Goal updated successfully!')),
         );
       }
     } catch (e) {
-      debugPrint('❌ Error updating goal: $e');
+      debugPrint('Error updating goal: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error updating goal: $e')),
       );
@@ -194,6 +192,7 @@ class _EditGoalPageState extends State<EditGoalPage> {
       backgroundColor: const Color(0xFF1F1F33),
       body: Stack(
         children: [
+          // Header
           Container(
             height: 230,
             width: double.infinity,
@@ -230,6 +229,8 @@ class _EditGoalPageState extends State<EditGoalPage> {
               ),
             ),
           ),
+
+          // Back arrow
           SafeArea(
             child: Align(
               alignment: Alignment.topLeft,
@@ -240,6 +241,8 @@ class _EditGoalPageState extends State<EditGoalPage> {
               ),
             ),
           ),
+
+          // Form Card
           Positioned(
             top: 150,
             left: 0,
@@ -251,7 +254,7 @@ class _EditGoalPageState extends State<EditGoalPage> {
                 width: MediaQuery.of(context).size.width,
                 decoration: BoxDecoration(
                   color: AppColors.card,
-                  borderRadius: BorderRadius.circular(18),
+                  borderRadius: BorderRadius.circular(28),
                 ),
                 padding: const EdgeInsets.fromLTRB(24, 28, 24, 32),
                 child: Form(
@@ -268,6 +271,7 @@ class _EditGoalPageState extends State<EditGoalPage> {
                         ),
                       ),
                       const SizedBox(height: 20),
+
                       const _FieldLabel('Goal Name'),
                       const SizedBox(height: 8),
                       _rounded(
@@ -281,12 +285,10 @@ class _EditGoalPageState extends State<EditGoalPage> {
                       if (_titleError != null)
                         Padding(
                           padding: const EdgeInsets.only(top: 4, left: 12),
-                          child: Text(
-                            _titleError!,
-                            style: const TextStyle(color: Colors.redAccent, fontSize: 12),
-                          ),
+                          child: Text(_titleError!, style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
                         ),
                       const SizedBox(height: 18),
+
                       const _FieldLabel('Target Amount'),
                       const SizedBox(height: 8),
                       _rounded(
@@ -308,12 +310,10 @@ class _EditGoalPageState extends State<EditGoalPage> {
                       if (_amountError != null)
                         Padding(
                           padding: const EdgeInsets.only(top: 4, left: 12),
-                          child: Text(
-                            _amountError!,
-                            style: const TextStyle(color: Colors.redAccent, fontSize: 12),
-                          ),
+                          child: Text(_amountError!, style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
                         ),
                       const SizedBox(height: 18),
+
                       const _FieldLabel('Target Date'),
                       const SizedBox(height: 8),
                       _rounded(
@@ -326,13 +326,9 @@ class _EditGoalPageState extends State<EditGoalPage> {
                               children: [
                                 Expanded(
                                   child: Text(
-                                    _dateCtrl.text.isEmpty
-                                        ? 'Select date'
-                                        : _dateCtrl.text,
+                                    _dateCtrl.text.isEmpty ? 'Select date' : _dateCtrl.text,
                                     style: TextStyle(
-                                      color: _dateCtrl.text.isEmpty
-                                          ? const Color(0xFF989898)
-                                          : Colors.black,
+                                      color: _dateCtrl.text.isEmpty ? const Color(0xFF989898) : Colors.black,
                                       fontSize: 16,
                                       fontWeight: FontWeight.w500,
                                     ),
@@ -354,12 +350,10 @@ class _EditGoalPageState extends State<EditGoalPage> {
                       if (_dateError != null)
                         Padding(
                           padding: const EdgeInsets.only(top: 4, left: 12),
-                          child: Text(
-                            _dateError!,
-                            style: const TextStyle(color: Colors.redAccent, fontSize: 12),
-                          ),
+                          child: Text(_dateError!, style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
                         ),
                       const SizedBox(height: 28),
+
                       Center(
                         child: SizedBox(
                           width: 150,
@@ -367,20 +361,14 @@ class _EditGoalPageState extends State<EditGoalPage> {
                           child: ElevatedButton(
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AppColors.accent,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(72),
-                              ),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(72)),
                               elevation: 10,
                               shadowColor: AppColors.accent,
                             ),
                             onPressed: _submitting ? null : _save,
                             child: const Text(
                               'Save',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 18,
-                                fontWeight: FontWeight.w600,
-                              ),
+                              style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
                             ),
                           ),
                         ),
@@ -396,6 +384,7 @@ class _EditGoalPageState extends State<EditGoalPage> {
     );
   }
 
+  // Shared UI Helpers
   InputDecoration _inputDecoration() {
     return const InputDecoration(
       contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -427,11 +416,7 @@ class _FieldLabel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       text,
-      style: const TextStyle(
-        color: Colors.white,
-        fontSize: 15,
-        fontWeight: FontWeight.w400,
-      ),
+      style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w400),
     );
   }
 }

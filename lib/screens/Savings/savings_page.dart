@@ -9,8 +9,6 @@ import 'dart:math';
 import '../../utils/auth_helpers.dart'; 
 
 
-
-
 /// ---------------- Domain ----------------
 enum GoalType { active, completed, uncompleted, achieved }
 class Goal {
@@ -67,7 +65,7 @@ class SavingsPage extends StatefulWidget {
   State<SavingsPage> createState() => _SavingsPageState();
 }
 
-class _SavingsPageState extends State<SavingsPage> {
+class _SavingsPageState extends State<SavingsPage> with WidgetsBindingObserver {
   final supabase = Supabase.instance.client;
   GoalType _selected = GoalType.active;
   final Map<String, double> _monthlySavings = {};
@@ -78,12 +76,42 @@ class _SavingsPageState extends State<SavingsPage> {
   double get _assignedBalance => _assignedBalanceCached;
   
 
-
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) => _initData());
     _setupRealtimeListeners();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    final supabase = Supabase.instance.client;
+    supabase.removeAllChannels();
+    super.dispose();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Refresh current month saving when page becomes visible again
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _refreshCurrentSavingFromRecord();
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant SavingsPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Refresh when navigating back to this page
+    _refreshCurrentSavingFromRecord();
+  }
+
+  @override
+  void didPopNext() {
+    // Called when returning to this page from another
+    _refreshCurrentSavingFromRecord();
   }
 
   Future<void> _initData() async {
@@ -91,82 +119,123 @@ class _SavingsPageState extends State<SavingsPage> {
     await _fetchGoals();
   }
 
+  Future<void> _refreshCurrentSavingFromRecord() async {
+    try {
+      final profileId = await getProfileId(context);
+      if (profileId == null) return;
+
+      final now = DateTime.now();
+      final monthStart = DateTime(now.year, now.month, 1);
+      final nextMonth = DateTime(now.year, now.month + 1, 1);
+
+      final currentRecord = await supabase
+          .from('Monthly_Financial_Record')
+          .select('monthly_saving')
+          .eq('profile_id', profileId)
+          .gte('period_start', monthStart.toIso8601String())
+          .lt('period_end', nextMonth.toIso8601String())
+          .maybeSingle();
+
+      if (currentRecord == null) {
+        debugPrint('⚠️ No Monthly_Financial_Record found for current month');
+        return;
+      }
+
+      final currentSaving = (currentRecord['monthly_saving'] ?? 0).toDouble();
+      final currentLabel = '${now.year}-${now.month.toString().padLeft(2, '0')}';
+      
+      debugPrint('✅ Refreshed current month saving from DB: $currentSaving');
+
+      if (mounted) {
+        setState(() {
+          _monthlySavings[currentLabel] = currentSaving;
+        });
+      }
+    } catch (e) {
+      debugPrint('❌ Error refreshing current saving: $e');
+    }
+  }
+
   void _setupRealtimeListeners() {
-    final supabase = Supabase.instance.client;
-    supabase
-        .channel('public:Transaction')
-        .onPostgresChanges(
-          event: PostgresChangeEvent.all,
-          schema: 'public',
-          table: 'Transaction',
-          callback: (payload) async {
-            debugPrint('Transaction updated: ${payload.eventType}');
-            await _generateMonthlySavings();
-          },
-        )
-        .subscribe();
-    supabase
-        .channel('public:Fixed_Income')
-        .onPostgresChanges(
-          event: PostgresChangeEvent.all,
-          schema: 'public',
-          table: 'Fixed_Income',
-          callback: (payload) async {
-            debugPrint('Fixed_Income updated: ${payload.eventType}');
-            await _generateMonthlySavings();
-          },
-        )
-        .subscribe();
-    supabase
-        .channel('public:Fixed_Expense')
-        .onPostgresChanges(
-          event: PostgresChangeEvent.all,
-          schema: 'public',
-          table: 'Fixed_Expense',
-          callback: (payload) async {
-            debugPrint('Fixed_Expense updated: ${payload.eventType}');
-            await _generateMonthlySavings();
-          },
-        )
-        .subscribe();
-    supabase
-        .channel('public:Monthly_Financial_Record')
-        .onPostgresChanges(
-          event: PostgresChangeEvent.all,
-          schema: 'public',
-          table: 'Monthly_Financial_Record',
-          callback: (payload) async {
-            debugPrint('MFR updated: ${payload.eventType}');
-            await _generateMonthlySavings();
-          },
-        )
-        .subscribe();
-    supabase
-        .channel('public:Goal_Transfer')
-        .onPostgresChanges(
-          event: PostgresChangeEvent.all,
-          schema: 'public',
-          table: 'Goal_Transfer',
-          callback: (payload) async {
-            debugPrint('Goal_Transfer updated: ${payload.eventType}');
+  final supabase = Supabase.instance.client;
+  supabase
+      .channel('public:Transaction')
+      .onPostgresChanges(
+        event: PostgresChangeEvent.all,
+        schema: 'public',
+        table: 'Transaction',
+        callback: (payload) async {
+          debugPrint('Transaction updated: ${payload.eventType}');
+          if (mounted) await _generateMonthlySavings();
+        },
+      )
+      .subscribe();
+  supabase
+      .channel('public:Fixed_Income')
+      .onPostgresChanges(
+        event: PostgresChangeEvent.all,
+        schema: 'public',
+        table: 'Fixed_Income',
+        callback: (payload) async {
+          debugPrint('Fixed_Income updated: ${payload.eventType}');
+          if (mounted) await _generateMonthlySavings();
+        },
+      )
+      .subscribe();
+  supabase
+      .channel('public:Fixed_Expense')
+      .onPostgresChanges(
+        event: PostgresChangeEvent.all,
+        schema: 'public',
+        table: 'Fixed_Expense',
+        callback: (payload) async {
+          debugPrint('Fixed_Expense updated: ${payload.eventType}');
+          if (mounted) await _generateMonthlySavings();
+        },
+      )
+      .subscribe();
+  supabase
+      .channel('public:Monthly_Financial_Record')
+      .onPostgresChanges(
+        event: PostgresChangeEvent.all,
+        schema: 'public',
+        table: 'Monthly_Financial_Record',
+        callback: (payload) async {
+          debugPrint('MFR updated: ${payload.eventType}');
+          if (mounted) await _generateMonthlySavings();
+        },
+      )
+      .subscribe();
+  supabase
+      .channel('public:Goal_Transfer')
+      .onPostgresChanges(
+        event: PostgresChangeEvent.all,
+        schema: 'public',
+        table: 'Goal_Transfer',
+        callback: (payload) async {
+          debugPrint('Goal_Transfer updated: ${payload.eventType}');
+          if (mounted) {
             await _fetchGoals();
             await _generateMonthlySavings();
-          },
-        )
-        .subscribe();
-    supabase
-        .channel('public:Goal')
-        .onPostgresChanges(
-          event: PostgresChangeEvent.all,
-          schema: 'public',
-          table: 'Goal',
-          callback: (payload) async {
-            debugPrint('Goal table changed: ${payload.eventType}');
+          }
+        },
+      )
+      .subscribe();
+  supabase
+      .channel('public:Goal')
+      .onPostgresChanges(
+        event: PostgresChangeEvent.all,
+        schema: 'public',
+        table: 'Goal',
+        callback: (payload) async {
+          debugPrint('Goal table changed: ${payload.eventType}');
+          if (mounted) {
             await _fetchGoals();
             await _markExpiredGoalsAsUncompleted();
-          },
-        )
-        .subscribe();
+          }
+        },
+      )
+      .subscribe();
 
         supabase
       .channel('public:Category')
@@ -181,36 +250,181 @@ class _SavingsPageState extends State<SavingsPage> {
         },
       )
       .subscribe();
+}
 
-  }
+// Future<void> _logCompletedGoalExpense(Goal goal) async {
+//   try {
+//     final profileId = await getProfileId(context);
+//     if (profileId == null) return; // not logged in
 
- Future<void> _logCompletedGoalExpense(Goal goal) async {
+//     final supabase = Supabase.instance.client;
+//     final amount = goal.targetAmount;
+
+
+
+//     // Step 1️⃣ — Fetch user-specific, active categories (fixed + custom)
+//     final categories = await supabase
+//         .from('Category')
+//         .select('category_id, name, type')
+//         .eq('profile_id', profileId)
+//         .eq('is_archived', false)
+//         .order('name', ascending: true);
+
+//     if (categories == null || categories.isEmpty) {
+//       ScaffoldMessenger.of(context).showSnackBar(
+//         const SnackBar(content: Text('No active categories available for this user.')),
+//       );
+//       return;
+//     }
+
+//     String? selectedCategory;
+//     final confirm = await showDialog<bool>(
+//       context: context,
+//       builder: (ctx) => AlertDialog(
+//         backgroundColor: AppColors.card,
+//         title: const Text('Confirm Goal Expense',
+//             style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800)),
+//         content: Column(
+//           mainAxisSize: MainAxisSize.min,
+//           children: [
+//             Text(
+//               'You\'re about to log "${goal.title}" as an expense of ${amount.toStringAsFixed(2)} SAR.',
+//               style: const TextStyle(color: Colors.white70),
+//             ),
+//             const SizedBox(height: 12),
+//             DropdownButtonFormField<String>(
+//               dropdownColor: AppColors.card,
+//               decoration: InputDecoration(
+//                 labelText: 'Select Category',
+//                 labelStyle: const TextStyle(color: Colors.white70),
+//                 enabledBorder: OutlineInputBorder(
+//                   borderSide: BorderSide(color: Colors.white24),
+//                   borderRadius: BorderRadius.circular(10),
+//                 ),
+//                 focusedBorder: OutlineInputBorder(
+//                   borderSide: BorderSide(color: AppColors.accent, width: 1.5),
+//                   borderRadius: BorderRadius.circular(10),
+//                 ),
+//               ),
+//               items: [
+//                 for (final c in categories)
+//                   DropdownMenuItem(
+//                     value: c['category_id'],
+//                     child: Text(c['name'], style: const TextStyle(color: Colors.white)),
+//                   ),
+//               ],
+//               onChanged: (v) => selectedCategory = v,
+//             ),
+//           ],
+//         ),
+//         actions: [
+//           TextButton(
+//             onPressed: () => Navigator.pop(ctx, false),
+//             child: const Text('Cancel', style: TextStyle(color: Colors.white70)),
+//           ),
+//           ElevatedButton(
+//             style: ElevatedButton.styleFrom(backgroundColor: AppColors.accent),
+//             onPressed: () {
+//               if (selectedCategory != null) Navigator.pop(ctx, true);
+//             },
+//             child: const Text('Confirm', style: TextStyle(color: Colors.white70)),
+//           ),
+//         ],
+//       ),
+//     );
+
+//     if (confirm != true || selectedCategory == null) return;
+
+//     // Step 2️⃣ — Start safe DB sequence
+//     try {
+//       // 1. Insert expense transaction (this will work even with negative balance)
+//       await supabase.from('Transaction').insert({
+//         'profile_id': profileId,
+//         'category_id': selectedCategory,
+//         'amount': amount,
+//         'type': 'Expense',
+//         'date': DateTime.now().toIso8601String(),
+//       });
+
+//       // 2. Get current balance and deduct the amount (can go negative)
+//       final user = await supabase
+//           .from('User_Profile')
+//           .select('current_balance')
+//           .eq('profile_id', profileId)
+//           .maybeSingle();
+
+//       final double currentBalance = (user?['current_balance'] ?? 0).toDouble();
+//       final double newBalance = currentBalance - amount;
+
+//       await supabase
+//           .from('User_Profile')
+//           .update({'current_balance': newBalance})
+//           .eq('profile_id', profileId);
+
+//       // 3️⃣ Keep assigned amount as historical
+//       // Optionally, add a special marker in the goal for clarity
+//       await supabase
+//           .from('Goal')
+//           .update({'status': 'Achieved'})
+//           .eq('goal_id', goal.id);
+
+//       // 4. Mark goal as achieved
+//       await supabase
+//           .from('Goal')
+//           .update({'status': 'Achieved'})
+//           .eq('goal_id', goal.id);
+
+//       // 5. Update total saving and assigned balance
+//       await _generateMonthlySavings(); // updates _totalSaving from DB
+//       await _fetchGoals();              // refreshes goal list
+//       _recalculateBalances();           // recompute assigned/unassigned
+
+//       // 6. Show success & move to achieved tab
+//       setState(() => _selected = GoalType.achieved);
+
+//       ScaffoldMessenger.of(context).showSnackBar(
+//         SnackBar(content: Text('Goal "${goal.title}" logged successfully as expense!')),
+//       );
+//     } catch (dbError) {
+//       // Rollback if failed
+//       final user = await supabase
+//           .from('User_Profile')
+//           .select('current_balance')
+//           .eq('profile_id', profileId)
+//           .maybeSingle();
+//       final double currentBalance = (user?['current_balance'] ?? 0).toDouble();
+      
+//       await supabase
+//           .from('User_Profile')
+//           .update({'current_balance': currentBalance})
+//           .eq('profile_id', profileId);
+      
+//       debugPrint('❌ Rolled back due to: $dbError');
+//       ScaffoldMessenger.of(context).showSnackBar(
+//         SnackBar(content: Text('Error logging expense: $dbError')),
+//       );
+//     }
+//   } catch (e) {
+//     debugPrint('❌ Unexpected error logging goal as expense: $e');
+//     ScaffoldMessenger.of(context).showSnackBar(
+//       SnackBar(content: Text('Error logging expense: $e')),
+//     );
+//   }
+// }
+
+
+Future<void> _logCompletedGoalExpense(Goal goal) async {
   try {
     final profileId = await getProfileId(context);
-  if (profileId == null) return; // not logged in
+    if (profileId == null) return; // not logged in
 
     final supabase = Supabase.instance.client;
     final amount = goal.targetAmount;
 
-    // Step 1️⃣ — Check available balance
-    final user = await supabase
-        .from('User_Profile')
-        .select('current_balance')
-        .eq('profile_id', profileId)
-        .maybeSingle();
-
-    final double currentBalance = (user?['current_balance'] ?? 0).toDouble();
-    if (currentBalance < amount) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Insufficient balance to log this goal as an expense.')),
-      );
-      return;
-    }
-
-    // Step 2️⃣ — Fetch user-specific, active categories (fixed + custom)
+    // Step 1️⃣ — Fetch user-specific, active categories (fixed + custom)
     final categories = await supabase
         .from('Category')
-        .select('category_id, name, type')
+        .select('category_id, name, type, monthly_limit')
         .eq('profile_id', profileId)
         .eq('is_archived', false)
         .order('name', ascending: true);
@@ -222,19 +436,20 @@ class _SavingsPageState extends State<SavingsPage> {
       return;
     }
 
-
     String? selectedCategory;
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.card,
-        title: const Text('Confirm Goal Expense',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800)),
+        title: const Text(
+          'Confirm Goal Expense',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800),
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              'You’re about to log "${goal.title}" as an expense of ${amount.toStringAsFixed(2)} SAR.',
+              'You\'re about to log "${goal.title}" as an expense of ${amount.toStringAsFixed(2)} SAR.',
               style: const TextStyle(color: Colors.white70),
             ),
             const SizedBox(height: 12),
@@ -281,9 +496,72 @@ class _SavingsPageState extends State<SavingsPage> {
 
     if (confirm != true || selectedCategory == null) return;
 
-    // Step 3️⃣ — Start safe DB sequence
+    // ✅ Step 1.5 — Check Category Limit Before Logging
+    final now = DateTime.now();
+    final monthStart = DateTime(now.year, now.month, 1);
+
+    // 1️⃣ Get current monthly record
+    final mfr = await supabase
+        .from('Monthly_Financial_Record')
+        .select('record_id')
+        .eq('profile_id', profileId)
+        .eq('period_start', monthStart.toIso8601String())
+        .maybeSingle();
+
+    if (mfr != null) {
+      final recordId = mfr['record_id'];
+
+      // 2️⃣ Get total spent in this category this month
+      final summary = await supabase
+          .from('Category_Summary')
+          .select('total_expense')
+          .eq('record_id', recordId)
+          .eq('category_id', selectedCategory!)
+          .maybeSingle();
+
+      final double currentExpense = (summary?['total_expense'] ?? 0).toDouble();
+
+      // 3️⃣ Get the category’s monthly limit
+      final cat = categories.firstWhere(
+        (c) => c['category_id'] == selectedCategory,
+        orElse: () => {},
+      );
+      final double limit = (cat['monthly_limit'] ?? 0).toDouble();
+
+      final double newTotal = currentExpense + amount;
+
+      // 4️⃣ Compare with limit
+      if (limit > 0 && newTotal > limit) {
+        await showDialog(
+          context: context,
+          builder: (_) => AlertDialog(
+            backgroundColor: AppColors.card,
+            title: const Text(
+              'Category Limit Exceeded',
+              style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800),
+            ),
+            content: Text(
+              '⚠️ You are exceeding the monthly limit for this category.\n\n'
+              'Limit: ${limit.toStringAsFixed(2)} SAR\n'
+              'Current: ${currentExpense.toStringAsFixed(2)} SAR\n'
+              'This expense would make it: ${newTotal.toStringAsFixed(2)} SAR.',
+              style: const TextStyle(color: Colors.white70),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('OK', style: TextStyle(color: Colors.white70)),
+              ),
+            ],
+          ),
+        );
+        return; // ❌ Stop here
+      }
+    }
+
+    // Step 2️⃣ — Start safe DB sequence
     try {
-      // 1. Insert expense transaction
+      // 1. Insert expense transaction (this will work even with negative balance)
       await supabase.from('Transaction').insert({
         'profile_id': profileId,
         'category_id': selectedCategory,
@@ -292,44 +570,39 @@ class _SavingsPageState extends State<SavingsPage> {
         'date': DateTime.now().toIso8601String(),
       });
 
-      // 2. Deduct from balance
-      final newBalance = (currentBalance - amount).clamp(0, double.infinity);
+      // 2. Get current balance and deduct the amount (can go negative)
+      final user = await supabase
+          .from('User_Profile')
+          .select('current_balance')
+          .eq('profile_id', profileId)
+          .maybeSingle();
+
+      final double currentBalance = (user?['current_balance'] ?? 0).toDouble();
+      final double newBalance = currentBalance - amount;
+
       await supabase
           .from('User_Profile')
           .update({'current_balance': newBalance})
           .eq('profile_id', profileId);
 
-  // 3️⃣ Keep assigned amount as historical
-  // Optionally, add a special marker in the goal for clarity
-  await supabase
-      .from('Goal')
-      .update({'status': 'Achieved'})
-      .eq('goal_id', goal.id);
-
-
-      // 4. Mark goal as achieved
+      // 3️⃣ Keep assigned amount as historical
       await supabase
           .from('Goal')
           .update({'status': 'Achieved'})
           .eq('goal_id', goal.id);
 
-      // 5. Update total saving and assigned balance
-      await _generateMonthlySavings(); // updates _totalSaving from DB
-      await _fetchGoals();              // refreshes goal list
-      _recalculateBalances();           // recompute assigned/unassigned
+      // 4️⃣ Refresh savings and goals
+      await _generateMonthlySavings();
+      await _fetchGoals();
+      _recalculateBalances();
 
-      // 6. Show success & move to achieved tab
+      // 5️⃣ Move to achieved tab
       setState(() => _selected = GoalType.achieved);
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Goal "${goal.title}" logged successfully as expense!')),
       );
     } catch (dbError) {
-      // Rollback if failed
-      await supabase
-          .from('User_Profile')
-          .update({'current_balance': currentBalance})
-          .eq('profile_id', profileId);
       debugPrint('❌ Rolled back due to: $dbError');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error logging expense: $dbError')),
@@ -346,7 +619,7 @@ class _SavingsPageState extends State<SavingsPage> {
 
   Future<void> _markExpiredGoalsAsUncompleted() async {
     try {
-      final now = DateTime.now(); // 02:00 AM +03, October 21, 2025
+      final now = DateTime.now(); 
       for (final goal in _goals) {
         if (goal.type == GoalType.active && goal.targetDate != null) {
           if (now.isAfter(goal.targetDate!)) {
@@ -364,6 +637,7 @@ class _SavingsPageState extends State<SavingsPage> {
     }
   }
 
+
 Future<void> _fetchGoals() async {
   try {
     final profileId = await getProfileId(context);
@@ -376,7 +650,7 @@ Future<void> _fetchGoals() async {
 
     if (response == null || response.isEmpty) {
       debugPrint('No goals found.');
-      setState(() => _goals.clear());
+      if (mounted) setState(() => _goals.clear());
       return;
     }
 
@@ -438,23 +712,26 @@ Future<void> _fetchGoals() async {
       );
     }).toList();
 
-    setState(() {
-      _goals
-        ..clear()
-        ..addAll(fetchedGoals);
-    });
+    if (mounted) {
+      setState(() {
+        _goals
+          ..clear()
+          ..addAll(fetchedGoals);
+      });
+    }
 
     // ✅ recalc after short pause to allow state to sync
     await Future.delayed(const Duration(milliseconds: 100));
-    _recalculateBalances();
+    if (mounted) {
+      _recalculateBalances();
+      await _markExpiredGoalsAsUncompleted();
+    }
 
-    await _markExpiredGoalsAsUncompleted();
     debugPrint('✅ Goals fetched successfully: ${_goals.length}');
   } catch (e) {
     debugPrint('Error fetching goals: $e');
   }
 }
-
 
   Future<void> _checkAndUpdateGoalStatus(String goalId) async {
     try {
@@ -569,7 +846,6 @@ void _recalculateBalances() {
 }
 
 
-
 Future<void> _generateMonthlySavings() async {
   try {
     final profileId = await getProfileId(context);
@@ -606,43 +882,39 @@ Future<void> _generateMonthlySavings() async {
     double currentDynamicIncome = 0;
     double currentDynamicExpense = 0;
 
-    // 💰 Fixed Income (respect payday)
+    // 💰 Fixed Income (check PAYDAY only)
     final fixedIncomes = await supabase
         .from('Fixed_Income')
-        .select('monthly_income, payday, start_time, end_time')
+        .select('monthly_income, payday')
         .eq('profile_id', profileId);
 
     for (final fi in (fixedIncomes as List? ?? [])) {
-      final start = fi['start_time'] != null ? DateTime.parse(fi['start_time']) : null;
-      final end = fi['end_time'] != null ? DateTime.parse(fi['end_time']) : null;
       final payday = (fi['payday'] ?? 1).toInt();
 
-      final bool isActive = (start == null || !now.isBefore(start)) &&
-          (end == null || now.isBefore(end));
-
-      // only count if we passed or are on payday this month
-      if (isActive && now.day >= payday) {
+      // ✅ Count income only if payday has occurred in current month
+      if (now.day >= payday) {
         currentFixedIncome += (fi['monthly_income'] ?? 0).toDouble();
+        debugPrint('💰 Fixed Income added: ${fi['monthly_income']} (Payday: $payday, Current Day: ${now.day})');
+      } else {
+        debugPrint('⏳ Fixed Income pending: ${fi['monthly_income']} (Payday: $payday, Current Day: ${now.day})');
       }
     }
 
-    // 💸 Fixed Expense (respect due_date)
+    // 💸 Fixed Expense (check DUE DATE only)
     final fixedExpenses = await supabase
         .from('Fixed_Expense')
-        .select('amount, due_date, start_time, end_time')
+        .select('amount, due_date')
         .eq('profile_id', profileId);
 
     for (final fe in (fixedExpenses as List? ?? [])) {
-      final start = fe['start_time'] != null ? DateTime.parse(fe['start_time']) : null;
-      final end = fe['end_time'] != null ? DateTime.parse(fe['end_time']) : null;
       final dueDate = (fe['due_date'] ?? 1).toInt();
 
-      final bool isActive = (start == null || !now.isBefore(start)) &&
-          (end == null || now.isBefore(end));
-
-      // only count if the due date has arrived or passed
-      if (isActive && now.day >= dueDate) {
+      // ✅ Count expense only if due date has occurred in current month
+      if (now.day >= dueDate) {
         currentFixedExpense += (fe['amount'] ?? 0).toDouble();
+        debugPrint('💸 Fixed Expense added: ${fe['amount']} (Due Date: $dueDate, Current Day: ${now.day})');
+      } else {
+        debugPrint('⏳ Fixed Expense pending: ${fe['amount']} (Due Date: $dueDate, Current Day: ${now.day})');
       }
     }
 
@@ -696,14 +968,16 @@ Future<void> _generateMonthlySavings() async {
     });
 
     await Future.delayed(const Duration(milliseconds: 200));
-    _recalculateBalances();
-    await _autoAdjustOverAssignedGoals();
+    if (mounted) {
+      _recalculateBalances();
+      await _autoAdjustOverAssignedGoals();
+      // Refresh current month from DB after generating monthly savings
+      await _refreshCurrentSavingFromRecord();
+    }
   } catch (e) {
     debugPrint('❌ Error in _generateMonthlySavings: $e');
   }
 }
-
-
 
   GoalType _statusToType(dynamic status) {
     if (status == null) return GoalType.active;
@@ -900,48 +1174,83 @@ Widget build(BuildContext context) {
                         const SizedBox(width: 6),
                         GestureDetector(
                           onTap: () {
-                            showDialog(
+                            
+                            showModalBottomSheet(
                               context: context,
-                              builder: (ctx) => AlertDialog(
-                                backgroundColor: AppColors.card,
-                                shape: RoundedRectangleBorder(
+                              backgroundColor: Colors.transparent,   // lets the rounded card keep its own background
+                              builder: (ctx) => Container(
+                                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+                                padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+                                decoration: BoxDecoration(
+                                  color: AppColors.card,
                                   borderRadius: BorderRadius.circular(16),
                                 ),
-                                title: const Text(
-                                  'What is Total Savings?',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w800,
-                                    fontSize: 18,
-                                  ),
-                                ),
-                                content: const Text(
-                                  'Total Savings includes all the money you’ve saved across previous months, showing your overall accumulated savings.',
-                                  style: TextStyle(
-                                    color: Colors.white70,
-                                    height: 1.4,
-                                    fontSize: 13,
-                                  ),
-                                ),
-                                actions: [
-                                  TextButton(
-                                    onPressed: () => Navigator.pop(ctx),
-                                    child: Text(
-                                      'Got it',
-                                      style: TextStyle(color: AppColors.accent),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    // Title row with the info icon
+                                    Row(
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.all(4),
+                                          decoration: BoxDecoration(
+                                            color: AppColors.accent.withOpacity(0.2),
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: const Icon(
+                                            Icons.info_outline_rounded,
+                                            color: AppColors.accent,
+                                            size: 18,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        const Text(
+                                          'About this chart',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: 16,
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                  ),
-                                ],
+                                    const SizedBox(height: 12),
+
+                                    // Description
+                                    const Text(
+                                      'Shows this month: spending vs what you have (earnings + income).',
+                                      style: TextStyle(
+                                        color: Colors.white70,
+                                        height: 1.4,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 20),
+
+                                    // Dismiss line (the white line at the bottom of the screenshot)
+                                    Center(
+                                      child: Container(
+                                        width: 40,
+                                        height: 4,
+                                        decoration: BoxDecoration(
+                                          color: Colors.white24,
+                                          borderRadius: BorderRadius.circular(2),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                             );
                           },
-                          child: Icon(
+                          child: const Icon(
                             Icons.info_outline_rounded,
                             color: AppColors.textGrey,
                             size: 18,
                           ),
                         ),
-                      ],
+                                              ],
                     ),
                     const SizedBox(height: 4),
                     Text(
@@ -1061,6 +1370,7 @@ Widget build(BuildContext context) {
                               MaterialPageRoute(builder: (_) => const CreateGoalPage()),
                             );
                             await _fetchGoals();
+                            await _refreshCurrentSavingFromRecord();
                           },
                           borderRadius: BorderRadius.circular(24),
                           child: const Icon(Icons.add_rounded, color: Colors.white, size: 24),
@@ -1096,7 +1406,7 @@ Widget build(BuildContext context) {
   );
 }
 void _openAssignSheet() {
-  // 🧮 1️⃣ Check if there’s any unassigned balance
+  // 🧮 1️⃣ Check if there's any unassigned balance
   if ((_unassignedBalance ?? 0) <= 0) {
     showDialog(
       context: context,
@@ -1108,7 +1418,7 @@ void _openAssignSheet() {
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800),
         ),
         content: const Text(
-          'You currently don’t have any unassigned savings to allocate.\n\n'
+          'You currently don\'t have any unassigned savings to allocate.\n\n'
           'Once you have unassigned money available, you can assign it to your goals.',
           style: TextStyle(color: Colors.white70, height: 1.4),
         ),
@@ -1139,7 +1449,7 @@ void _openAssignSheet() {
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800),
         ),
         content: const Text(
-          'You don’t have any active goals to assign savings to.\n\n'
+          'You don\'t have any active goals to assign savings to.\n\n'
           'Create a new goal first, then you can assign money to it.',
           style: TextStyle(color: Colors.white70, height: 1.4),
         ),
@@ -1160,6 +1470,7 @@ void _openAssignSheet() {
                 MaterialPageRoute(builder: (_) => const CreateGoalPage()),
               );
               await _fetchGoals(); // refresh goals after creating
+              await _refreshCurrentSavingFromRecord();
             },
             child: const Text('Create Goal',style: TextStyle(color: Colors.white70)),
           ),
@@ -1401,6 +1712,7 @@ void _openAssignSheet() {
       await supabase.from('Goal').delete().eq('goal_id', goal.id);
       await _fetchGoals();
       await _generateMonthlySavings();
+      await _refreshCurrentSavingFromRecord();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Deleted "${goal.title}" successfully!')),
@@ -1854,6 +2166,7 @@ class _GoalTile extends StatelessWidget {
         await parent._generateMonthlySavings();
         await parent._checkAndUpdateGoalStatus(goal.id);
         parent._recalculateBalances();
+        await parent._refreshCurrentSavingFromRecord();
 
         if (parent.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -1976,7 +2289,7 @@ class _GoalTile extends StatelessWidget {
                               goal.type == GoalType.completed) ...[
                             _EnhancedIconButton(
                               icon: Icons.edit_rounded,
-                              color: const Color(0xFF6366F1), // Consistent indigo for edit
+                              color: Colors.white,
                               onTap: _openEdit,
                             ),
                             const SizedBox(width: 8),

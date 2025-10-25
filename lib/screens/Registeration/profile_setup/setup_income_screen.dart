@@ -13,6 +13,7 @@ class SetupIncomeScreen extends StatefulWidget {
 class _SetupIncomeScreenState extends State<SetupIncomeScreen> {
   final supabase = Supabase.instance.client;
   bool loading = false;
+  bool _paydayConfirmed = false; // ✅ Prevents repeated confirmation
 
   final List<Map<String, dynamic>> incomes = [
     {
@@ -49,7 +50,6 @@ class _SetupIncomeScreenState extends State<SetupIncomeScreen> {
     });
   }
 
-  // ✅ Inline field validator
   bool _validateFields() {
     bool isValid = true;
 
@@ -81,6 +81,44 @@ class _SetupIncomeScreenState extends State<SetupIncomeScreen> {
     return isValid;
   }
 
+  // ✅ Confirmation dialog before saving
+  Future<bool> _confirmPaydayLock(BuildContext context) async {
+    return await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            backgroundColor: const Color(0xFF2B2B48),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: const Text(
+              'Confirm Payday',
+              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+            ),
+            content: const Text(
+              'Once you set your payday for this month, you cannot change it until the next month .',
+              style: TextStyle(color: Colors.white70),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel',
+                    style: TextStyle(color: Colors.white70)),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF704EF4),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                ),
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Confirm',
+                    style: TextStyle(color: Colors.white)),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+  }
+
   Future<void> saveIncomesToSupabase() async {
     if (!_validateFields()) return;
 
@@ -98,6 +136,11 @@ class _SetupIncomeScreenState extends State<SetupIncomeScreen> {
       if (profileResponse == null) throw Exception("User profile not found");
       final profileId = profileResponse['profile_id'];
 
+      // ✅ Add date formatting for last_update
+      final today = DateTime.now();
+      final formattedDate =
+          "${today.year.toString().padLeft(4, '0')}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}";
+
       final incomeRecords = incomes.map((i) {
         return {
           'profile_id': profileId,
@@ -105,7 +148,8 @@ class _SetupIncomeScreenState extends State<SetupIncomeScreen> {
           'monthly_income': double.tryParse(i['amount'].text) ?? 0.0,
           'payday': i['day'],
           'is_primary': incomes.indexOf(i) == 0,
-          'start_time': DateTime.now().toIso8601String(),
+          'start_time': today.toIso8601String(),
+          'last_update': formattedDate, // ✅ Added
         };
       }).toList();
 
@@ -127,8 +171,8 @@ class _SetupIncomeScreenState extends State<SetupIncomeScreen> {
 
   Widget _errorText(String text) => Padding(
         padding: const EdgeInsets.only(top: 4, left: 4),
-        child:
-            Text(text, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+        child: Text(text,
+            style: const TextStyle(color: Colors.grey, fontSize: 12)),
       );
 
   Widget buildIncomeCard(int index) {
@@ -153,7 +197,6 @@ class _SetupIncomeScreenState extends State<SetupIncomeScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ==== HEADER ====
             Row(
               children: [
                 Text(
@@ -169,14 +212,14 @@ class _SetupIncomeScreenState extends State<SetupIncomeScreen> {
                 const Spacer(),
                 if (!isPrimary)
                   IconButton(
-                    icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                    icon:
+                        const Icon(Icons.delete_outline, color: Colors.redAccent),
                     onPressed: () => deleteIncomeField(index),
                   ),
               ],
             ),
             const SizedBox(height: 10),
 
-            // ==== SOURCE ====
             TextField(
               controller: income['source'],
               style: const TextStyle(color: Colors.white),
@@ -192,7 +235,6 @@ class _SetupIncomeScreenState extends State<SetupIncomeScreen> {
             if (errors['source'] != null) _errorText(errors['source']!),
             const SizedBox(height: 10),
 
-            // ==== AMOUNT ====
             TextField(
               controller: income['amount'],
               keyboardType: TextInputType.number,
@@ -210,34 +252,38 @@ class _SetupIncomeScreenState extends State<SetupIncomeScreen> {
             if (errors['amount'] != null) _errorText(errors['amount']!),
             const SizedBox(height: 10),
 
-            // ==== PAYDAY DROPDOWN ====
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              decoration: BoxDecoration(
-                color: const Color(0xFF1F1B3A),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.white.withOpacity(0.2)),
+            TextField(
+              controller: TextEditingController(
+                text: income['day']?.toString() ?? '',
               ),
-              child: DropdownButton<int>(
-                value: income['day'],
-                dropdownColor: const Color(0xFF1F1B3A),
-                isExpanded: true,
-                hint: const Text('Select payday (1–31)',
-                    style: TextStyle(color: Colors.white70)),
-                icon:
-                    const Icon(Icons.arrow_drop_down, color: Color(0xFFB8A8FF)),
-                items: List.generate(
-                  31,
-                  (i) => DropdownMenuItem<int>(
-                    value: i + 1,
-                    child: Text('${i + 1}',
-                        style: const TextStyle(color: Colors.white)),
-                  ),
+              keyboardType: TextInputType.number,
+              inputFormatters: [
+                FilteringTextInputFormatter.digitsOnly,
+                LengthLimitingTextInputFormatter(2),
+              ],
+              style: const TextStyle(color: Colors.white),
+              decoration: const InputDecoration(
+                hintText: 'Enter payday (1–31)',
+                hintStyle: TextStyle(color: Color(0xFFB0AFC5)),
+                filled: true,
+                fillColor: Color(0xFF1F1B3A),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.all(Radius.circular(12)),
                 ),
-                onChanged: (val) => setState(() => income['day'] = val),
-                underline: const SizedBox(),
-                style: const TextStyle(color: Colors.white),
               ),
+              onChanged: (val) {
+                final number = int.tryParse(val);
+                setState(() {
+                  if (number != null && number >= 1 && number <= 31) {
+                    income['day'] = number;
+                    (income['errors'] as Map<String, String?>)['day'] = null;
+                  } else {
+                    income['day'] = null;
+                    (income['errors'] as Map<String, String?>)['day'] =
+                        "Enter 1–31 only";
+                  }
+                });
+              },
             ),
             if (errors['day'] != null) _errorText(errors['day']!),
           ],
@@ -256,7 +302,6 @@ class _SetupIncomeScreenState extends State<SetupIncomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // ====== PROGRESS BAR ======
               Stack(
                 children: [
                   Container(height: 4, width: double.infinity, color: Colors.white12),
@@ -272,7 +317,6 @@ class _SetupIncomeScreenState extends State<SetupIncomeScreen> {
               ),
               const SizedBox(height: 30),
 
-              // ====== STEP INDICATOR ======
               Container(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
@@ -291,7 +335,6 @@ class _SetupIncomeScreenState extends State<SetupIncomeScreen> {
               ),
               const SizedBox(height: 16),
 
-              // ====== TITLE ======
               const Text(
                 "Monthly Income",
                 style: TextStyle(
@@ -306,7 +349,6 @@ class _SetupIncomeScreenState extends State<SetupIncomeScreen> {
               ),
               const SizedBox(height: 20),
 
-              // ====== INCOME CARDS ======
               Expanded(
                 child: ListView.builder(
                   itemCount: incomes.length,
@@ -339,8 +381,7 @@ class _SetupIncomeScreenState extends State<SetupIncomeScreen> {
                         foregroundColor: Colors.white,
                         backgroundColor:
                             const Color(0xFF2E2C4A).withOpacity(0.5),
-                        padding:
-                            const EdgeInsets.symmetric(vertical: 14),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12)),
                       ),
@@ -354,15 +395,24 @@ class _SetupIncomeScreenState extends State<SetupIncomeScreen> {
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF7959F5),
-                        padding:
-                            const EdgeInsets.symmetric(vertical: 14),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12)),
                         elevation: 6,
                         shadowColor:
                             const Color(0xFF7959F5).withOpacity(0.4),
                       ),
-                      onPressed: loading ? null : saveIncomesToSupabase,
+                      onPressed: loading
+                          ? null
+                          : () async {
+                              if (!_paydayConfirmed) {
+                                final confirmed =
+                                    await _confirmPaydayLock(context);
+                                if (!confirmed) return;
+                                _paydayConfirmed = true;
+                              }
+                              await saveIncomesToSupabase();
+                            },
                       child: loading
                           ? const CircularProgressIndicator(color: Colors.white)
                           : const Text(

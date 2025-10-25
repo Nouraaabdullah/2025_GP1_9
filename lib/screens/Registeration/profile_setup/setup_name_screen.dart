@@ -103,7 +103,7 @@ class _SetupNameScreenState extends State<SetupNameScreen> {
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: const Text(
-                      "STEP 1 OF 4",
+                      "STEP 1 OF 6",
                       style: TextStyle(
                         color: Color(0xFFB8A8FF),
                         fontSize: 12,

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class SignUpScreen extends StatefulWidget {
@@ -15,6 +14,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
   final supabase = Supabase.instance.client;
   bool loading = false;
 
+  // ===== Email/Password Sign-Up =====
   Future<void> signUpUser() async {
     final email = emailController.text.trim();
     final password = passwordController.text.trim();
@@ -29,42 +29,53 @@ class _SignUpScreenState extends State<SignUpScreen> {
     setState(() => loading = true);
 
     try {
-      // 1️⃣ Create user in Supabase Auth
+      // ✅ 1. Create user in Supabase Auth
       final response = await supabase.auth.signUp(
         email: email,
         password: password,
       );
 
       final user = response.user;
-      if (user == null) {
-        throw Exception("User creation failed.");
-      }
+      if (user == null) throw Exception("User creation failed.");
 
-      debugPrint("✅ User created in Auth: ${user.id}");
-
-      // 2️⃣ Insert user profile in User_Profile table
-      // Since RLS is disabled, no need for policies.
-      final insertResponse = await supabase.from('User_Profile').insert({
+      // ✅ 2. Insert user profile
+      await supabase.from('User_Profile').insert({
         'user_id': user.id,
         'email': email,
-        'full_name': null, // user will fill this in setup flow
+        'full_name': null,
         'current_balance': 0,
-        'hashed_password': null,
       });
 
-      debugPrint("✅ Profile inserted: $insertResponse");
-
-      // 3️⃣ Show confirmation message
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Account created for ${user.email}")),
       );
 
-      // 4️⃣ Navigate to next setup page
+      // ✅ 3. Navigate to setup flow
       Navigator.pushReplacementNamed(context, '/setupName');
     } catch (e) {
-      debugPrint("❌ Signup Error: $e");
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Error signing up: $e")),
+      );
+    } finally {
+      setState(() => loading = false);
+    }
+  }
+
+  // ===== Google Sign-In =====
+  Future<void> signUpWithGoogle() async {
+    setState(() => loading = true);
+    try {
+      await supabase.auth.signInWithOAuth(
+        OAuthProvider.google,
+        redirectTo: 'io.supabase.flutter://login-callback/',
+      );
+      // ✅ Supabase handles redirect back into app automatically
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Redirecting to Google Sign-In...")),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Google Sign-In failed: $e")),
       );
     } finally {
       setState(() => loading = false);
@@ -74,244 +85,223 @@ class _SignUpScreenState extends State<SignUpScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF1D1B32),
-      body: SafeArea(
-        child: Stack(
-          children: [
-            // === Background Layers ===
-            Positioned(
-              left: -5,
-              top: 0,
-              child: Container(
-                width: 440,
-                height: 403,
-                decoration: const BoxDecoration(
-                  color: Color(0xFF1F1B52),
-                  borderRadius: BorderRadius.only(
-                    bottomLeft: Radius.circular(24),
-                    bottomRight: Radius.circular(24),
-                  ),
-                ),
+      backgroundColor: const Color(0xFF181732),
+      body: Stack(
+        children: [
+          // ===== BACKGROUND CIRCLES =====
+          Positioned(
+            top: -150,
+            left: -120,
+            child: Container(
+              width: 400,
+              height: 400,
+              decoration: const BoxDecoration(
+                color: Color(0xFF4E46B4),
+                shape: BoxShape.circle,
               ),
             ),
-            Positioned(
-              left: -279,
-              top: -255,
-              child: Container(
-                width: 627,
-                height: 627,
-                decoration: const BoxDecoration(
-                  color: Color(0xFF322B78),
-                  shape: BoxShape.circle,
-                ),
+          ),
+          Positioned(
+            top: -80,
+            left: -200,
+            child: Container(
+              width: 600,
+              height: 600,
+              decoration: const BoxDecoration(
+                color: Color(0xFF322B78),
+                shape: BoxShape.circle,
               ),
             ),
-            Positioned(
-              left: -162,
-              top: -138,
-              child: Container(
-                width: 393,
-                height: 393,
-                decoration: const BoxDecoration(
-                  color: Color(0xFF4E479B),
-                  shape: BoxShape.circle,
-                ),
-              ),
-            ),
+          ),
 
-            // === Main Content ===
-            ListView(
-              padding: const EdgeInsets.symmetric(horizontal: 32),
-              children: [
-                const SizedBox(height: 140),
-                const Text(
-                  'Create your\nAccount',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: Color(0xFFFCFFFF),
-                    fontSize: 32,
-                    fontWeight: FontWeight.w600,
-                    shadows: [
-                      Shadow(
-                        offset: Offset(0, 0),
-                        blurRadius: 12,
-                        color: Colors.black26,
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  'Sign up to manage your finances smarter 💜',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: Color(0xFFB6B8B8),
-                    fontSize: 18,
-                  ),
-                ),
-                const SizedBox(height: 50),
-
-                // === Email Field ===
-                const Text('Email',
-                    style: TextStyle(color: Color(0xFFFCFFFF), fontSize: 15)),
-                const SizedBox(height: 8),
-                FocusedTextField(
-                    controller: emailController, hint: 'example@email.com'),
-                const SizedBox(height: 24),
-
-                // === Password Field ===
-                const Text('Password',
-                    style: TextStyle(color: Color(0xFFFCFFFF), fontSize: 15)),
-                const SizedBox(height: 8),
-                FocusedTextField(
-                    controller: passwordController,
-                    hint: '••••••••',
-                    obscure: true),
-                const SizedBox(height: 40),
-
-                // === Sign Up Button ===
-                SizedBox(
-                  width: double.infinity,
-                  height: 50,
-                  child: ElevatedButton(
-                    onPressed: loading ? null : signUpUser,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF7959F5),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(33),
-                      ),
+          // ===== MAIN CONTENT =====
+          SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 30.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 230),
+                  const Text(
+                    "Create your\nAccount",
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 32,
+                      fontWeight: FontWeight.w700,
+                      height: 1.3,
                     ),
-                    child: loading
-                        ? const CircularProgressIndicator(color: Colors.white)
-                        : const Text(
-                            'Sign Up',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 22,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
                   ),
-                ),
-                const SizedBox(height: 20),
+                  const SizedBox(height: 12),
+                  const Text(
+                    "Sign up to manage your finances smarter 💜",
+                    style: TextStyle(color: Colors.white70, fontSize: 16),
+                  ),
+                  const SizedBox(height: 60),
 
-                // // === Google Sign-In Placeholder ===
-                // SizedBox(
-                //   width: double.infinity,
-                //   height: 50,
-                //   child: OutlinedButton.icon(
-                //     onPressed: () {},
-                //     icon: const FaIcon(FontAwesomeIcons.google,
-                //         color: Colors.white, size: 18),
-                //     label: const Text(
-                //       'Continue with Google',
-                //       style: TextStyle(color: Colors.white, fontSize: 16),
-                //     ),
-                //     style: OutlinedButton.styleFrom(
-                //       side: const BorderSide(color: Colors.white54),
-                //       shape: RoundedRectangleBorder(
-                //         borderRadius: BorderRadius.circular(33),
-                //       ),
-                //     ),
-                //   ),
-                // ),
-                // const SizedBox(height: 24),
+                  // ===== EMAIL =====
+                  const Text(
+                    "Email",
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  _buildTextField(
+                    controller: emailController,
+                    hintText: "you@example.com",
+                    isPassword: false,
+                  ),
+                  const SizedBox(height: 25),
 
-                // === Redirect to Login ===
-                GestureDetector(
-                  onTap: () =>
-                      Navigator.pushReplacementNamed(context, '/login'),
-                  child: const Text.rich(
-                    TextSpan(
-                      children: [
-                        TextSpan(
-                          text: 'Already have an account? ',
-                          style: TextStyle(color: Colors.white, fontSize: 15),
+                  // ===== PASSWORD =====
+                  const Text(
+                    "Password",
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  _buildTextField(
+                    controller: passwordController,
+                    hintText: "********",
+                    isPassword: true,
+                  ),
+
+                  const SizedBox(height: 45),
+
+                  // ===== SIGN UP BUTTON =====
+                  SizedBox(
+                    width: double.infinity,
+                    height: 55,
+                    child: ElevatedButton(
+                      onPressed: loading ? null : signUpUser,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF7C6FD6),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(30),
                         ),
-                        TextSpan(
-                          text: 'Log In',
+                        elevation: 6,
+                        shadowColor:
+                            const Color(0xFF7C6FD6).withOpacity(0.4),
+                      ),
+                      child: loading
+                          ? const CircularProgressIndicator(
+                              color: Colors.white,
+                            )
+                          : const Text(
+                              "Sign Up",
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 18,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 25),
+
+                  // // ===== GOOGLE SIGN IN =====
+                  // SizedBox(
+                  //   width: double.infinity,
+                  //   height: 55,
+                  //   child: OutlinedButton.icon(
+                  //     onPressed: loading ? null : signUpWithGoogle,
+                  //     icon: const Icon(
+                  //       Icons.g_mobiledata,
+                  //       color: Colors.white,
+                  //       size: 28,
+                  //     ),
+                  //     label: const Text(
+                  //       "Continue with Google",
+                  //       style: TextStyle(
+                  //         color: Colors.white,
+                  //         fontSize: 16,
+                  //         fontWeight: FontWeight.w500,
+                  //       ),
+                  //     ),
+                  //     style: OutlinedButton.styleFrom(
+                  //       side: const BorderSide(color: Colors.white54),
+                  //       shape: RoundedRectangleBorder(
+                  //         borderRadius: BorderRadius.circular(30),
+                  //       ),
+                  //       backgroundColor: const Color(0xFF2C284A),
+                  //     ),
+                  //   ),
+                  // ),
+
+                  // const SizedBox(height: 25),
+
+                  // ===== LOGIN LINK =====
+                  Center(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Text(
+                          "Already have an account? ",
                           style: TextStyle(
-                            color: Color(0xFF7959F5),
+                            color: Colors.white70,
                             fontSize: 15,
-                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        GestureDetector(
+                          onTap: () {
+                            Navigator.pushReplacementNamed(context, '/login');
+                          },
+                          child: const Text(
+                            "Log In",
+                            style: TextStyle(
+                              color: Color(0xFFB19DFA),
+                              fontWeight: FontWeight.w600,
+                              fontSize: 15,
+                            ),
                           ),
                         ),
                       ],
                     ),
-                    textAlign: TextAlign.center,
                   ),
-                ),
-                const SizedBox(height: 30),
-              ],
+                  const SizedBox(height: 40),
+                ],
+              ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
-}
 
-// === Reusable Focused TextField Widget ===
-class FocusedTextField extends StatefulWidget {
-  final String hint;
-  final bool obscure;
-  final TextEditingController controller;
-
-  const FocusedTextField({
-    required this.controller,
-    required this.hint,
-    this.obscure = false,
-    super.key,
-  });
-
-  @override
-  State<FocusedTextField> createState() => _FocusedTextFieldState();
-}
-
-class _FocusedTextFieldState extends State<FocusedTextField> {
-  final FocusNode _focusNode = FocusNode();
-  bool _isFocused = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _focusNode.addListener(() {
-      if (mounted) setState(() => _isFocused = _focusNode.hasFocus);
-    });
-  }
-
-  @override
-  void dispose() {
-    _focusNode.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 200),
-      height: 50,
-      decoration: BoxDecoration(
-        color: const Color(0xFF2E2C4A),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: _isFocused ? const Color(0xFF7959F5) : Colors.transparent,
-          width: 2,
+  // ===== Custom TextField =====
+  Widget _buildTextField({
+    required TextEditingController controller,
+    required String hintText,
+    required bool isPassword,
+  }) {
+    return TextField(
+      controller: controller,
+      obscureText: isPassword,
+      style: const TextStyle(color: Colors.white),
+      decoration: InputDecoration(
+        hintText: hintText,
+        hintStyle: const TextStyle(color: Colors.white54),
+        filled: true,
+        fillColor: const Color(0xFF2C284A),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide.none,
         ),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      alignment: Alignment.centerLeft,
-      child: TextField(
-        controller: widget.controller,
-        focusNode: _focusNode,
-        obscureText: widget.obscure,
-        style: const TextStyle(color: Colors.white),
-        decoration: InputDecoration(
-          hintText: widget.hint,
-          hintStyle: const TextStyle(color: Color(0xFFB6B8B8)),
-          border: InputBorder.none,
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(
+            color: Color(0xFF9B7EE8),
+            width: 1.5,
+          ),
         ),
-        cursorColor: const Color(0xFF7959F5),
       ),
     );
   }

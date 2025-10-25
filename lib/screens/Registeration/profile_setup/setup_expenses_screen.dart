@@ -13,6 +13,7 @@ class SetupExpensesScreen extends StatefulWidget {
 class _SetupExpensesScreenState extends State<SetupExpensesScreen> {
   final supabase = Supabase.instance.client;
   bool loading = false;
+  bool _dueDateConfirmed = false; // ✅ To ensure user confirms once
 
   final List<Map<String, dynamic>> expenses = [
     {
@@ -50,7 +51,6 @@ class _SetupExpensesScreenState extends State<SetupExpensesScreen> {
     });
   }
 
-  // ✅ Validation: only checks filled rows
   bool _validateFields() {
     bool isValid = true;
 
@@ -58,7 +58,6 @@ class _SetupExpensesScreenState extends State<SetupExpensesScreen> {
       final errors = e['errors'] as Map<String, String?>;
       errors.updateAll((key, value) => null);
 
-      // skip if all fields empty
       if (e['name'].text.trim().isEmpty &&
           e['amount'].text.trim().isEmpty &&
           e['dueDate'] == null &&
@@ -107,14 +106,12 @@ class _SetupExpensesScreenState extends State<SetupExpensesScreen> {
       if (profileResponse == null) throw Exception("User profile not found.");
       final profileId = profileResponse['profile_id'];
 
-      // ✅ Filter out empty rows
       final filledExpenses = expenses.where((e) =>
           e['name'].text.trim().isNotEmpty ||
           e['amount'].text.trim().isNotEmpty ||
           e['dueDate'] != null ||
           e['category'] != null).toList();
 
-      // ✅ If none filled, skip saving and move on
       if (filledExpenses.isEmpty) {
         Navigator.pushNamed(context, '/setupBalance');
         return;
@@ -127,6 +124,10 @@ class _SetupExpensesScreenState extends State<SetupExpensesScreen> {
           cat['name'].toString(): cat['category_id']
       };
 
+      final today = DateTime.now();
+      final formattedDate =
+          "${today.year.toString().padLeft(4, '0')}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}";
+
       final expenseRecords = filledExpenses.map((e) {
         final categoryName = e['category'] == 'Custom'
             ? e['customCategory'].text
@@ -138,8 +139,9 @@ class _SetupExpensesScreenState extends State<SetupExpensesScreen> {
           'amount': double.tryParse(e['amount'].text) ?? 0.0,
           'due_date': e['dueDate'],
           'category_id': categoryId,
-          'start_time': DateTime.now().toIso8601String(),
+          'start_time': today.toIso8601String(),
           'end_time': null,
+          'last_update': formattedDate, // ✅ added field
         };
       }).toList();
 
@@ -171,7 +173,44 @@ class _SetupExpensesScreenState extends State<SetupExpensesScreen> {
     }
   }
 
-  // ✅ Expense Card Widget
+  // ✅ Confirmation Dialog
+  Future<bool> _confirmDueDateLock(BuildContext context) async {
+    return await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            backgroundColor: const Color(0xFF2B2B48),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: const Text(
+              'Confirm Due Date',
+              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+            ),
+            content: const Text(
+              'Once you set the due date for this month, you cannot change it until the next month.',
+              style: TextStyle(color: Colors.white70),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel',
+                    style: TextStyle(color: Colors.white70)),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF704EF4),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                ),
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Confirm',
+                    style: TextStyle(color: Colors.white)),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+  }
+
   Widget buildExpenseCard(int index) {
     final expense = expenses[index];
     final errors = expense['errors'] as Map<String, String?>;
@@ -194,7 +233,6 @@ class _SetupExpensesScreenState extends State<SetupExpensesScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ==== TITLE ====
             Row(
               children: [
                 Text(
@@ -215,7 +253,6 @@ class _SetupExpensesScreenState extends State<SetupExpensesScreen> {
             ),
             const SizedBox(height: 10),
 
-            // ==== NAME ====
             TextField(
               controller: expense['name'],
               style: const TextStyle(color: Colors.white),
@@ -224,7 +261,6 @@ class _SetupExpensesScreenState extends State<SetupExpensesScreen> {
             if (errors['name'] != null) _errorText(errors['name']!),
             const SizedBox(height: 12),
 
-            // ==== AMOUNT ====
             TextField(
               controller: expense['amount'],
               keyboardType: TextInputType.number,
@@ -235,75 +271,53 @@ class _SetupExpensesScreenState extends State<SetupExpensesScreen> {
             if (errors['amount'] != null) _errorText(errors['amount']!),
             const SizedBox(height: 12),
 
-            // ==== CATEGORY ====
             DropdownButtonFormField<String>(
               value: expense['category'],
               dropdownColor: const Color(0xFF2A2550),
               style: const TextStyle(color: Colors.white),
               iconEnabledColor: const Color(0xFFB8A8FF),
-              decoration: _inputDecoration('Select category'),
-              items: [
-                ...categoryNames.map(
-                  (cat) => DropdownMenuItem(
-                    value: cat,
-                    child:
-                        Text(cat, style: const TextStyle(color: Colors.white)),
-                  ),
-                ),
-                const DropdownMenuItem(
-                  value: 'Custom',
-                  child:
-                      Text('Custom', style: TextStyle(color: Colors.white)),
-                ),
-              ],
+              decoration: _inputDecoration('Select category').copyWith(
+                hintStyle:
+                    const TextStyle(color: Color(0xFFB0AFC5)), // grey hint
+              ),
+              items: ProfileData.categories
+                  .map<DropdownMenuItem<String>>((c) {
+                    final name = c['name'] as String? ?? '';
+                    return DropdownMenuItem(
+                      value: name,
+                      child: Text(name,
+                          style: const TextStyle(color: Colors.white)),
+                    );
+                  })
+                  .toList(),
               onChanged: (value) => setState(() => expense['category'] = value),
             ),
             if (errors['category'] != null) _errorText(errors['category']!),
 
-            if (expense['category'] == 'Custom') ...[
-              const SizedBox(height: 12),
-              TextField(
-                controller: expense['customCategory'],
-                style: const TextStyle(color: Colors.white),
-                decoration: _inputDecoration('Enter custom category name'),
+            TextField(
+              controller: TextEditingController(
+                text: expense['dueDate']?.toString() ?? '',
               ),
-              if (errors['customCategory'] != null)
-                _errorText(errors['customCategory']!),
-            ],
-            const SizedBox(height: 12),
-
-            // ==== DUE DATE (Dropdown 1–31) ====
-            Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              decoration: BoxDecoration(
-                color: const Color(0xFF1F1B3A),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.white.withOpacity(0.2)),
-              ),
-              child: DropdownButton<int>(
-                value: expense['dueDate'],
-                dropdownColor: const Color(0xFF1F1B3A),
-                isExpanded: true,
-                hint: const Text(
-                  'Select due day (1–31)',
-                  style: TextStyle(color: Colors.white70),
-                ),
-                icon: const Icon(Icons.arrow_drop_down,
-                    color: Color(0xFFB8A8FF)),
-                items: List.generate(
-                  31,
-                  (i) => DropdownMenuItem<int>(
-                    value: i + 1,
-                    child: Text('${i + 1}',
-                        style: const TextStyle(color: Colors.white)),
-                  ),
-                ),
-                onChanged: (val) =>
-                    setState(() => expense['dueDate'] = val),
-                underline: const SizedBox(),
-                style: const TextStyle(color: Colors.white),
-              ),
+              keyboardType: TextInputType.number,
+              inputFormatters: [
+                FilteringTextInputFormatter.digitsOnly,
+                LengthLimitingTextInputFormatter(2),
+              ],
+              style: const TextStyle(color: Colors.white),
+              decoration: _inputDecoration('Enter due day (1–31)'),
+              onChanged: (val) {
+                final number = int.tryParse(val);
+                setState(() {
+                  if (number != null && number >= 1 && number <= 31) {
+                    expense['dueDate'] = number;
+                    (expense['errors'] as Map<String, String?>)['dueDate'] = null;
+                  } else {
+                    expense['dueDate'] = null;
+                    (expense['errors'] as Map<String, String?>)['dueDate'] =
+                        "Enter a valid day (1–31)";
+                  }
+                });
+              },
             ),
             if (errors['dueDate'] != null) _errorText(errors['dueDate']!),
           ],
@@ -314,8 +328,8 @@ class _SetupExpensesScreenState extends State<SetupExpensesScreen> {
 
   Widget _errorText(String text) => Padding(
         padding: const EdgeInsets.only(top: 4, left: 4),
-        child:
-            Text(text, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+        child: Text(text,
+            style: const TextStyle(color: Colors.grey, fontSize: 12)),
       );
 
   @override
@@ -328,7 +342,6 @@ class _SetupExpensesScreenState extends State<SetupExpensesScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // ===== PROGRESS BAR =====
               Stack(
                 children: [
                   Container(height: 4, width: double.infinity, color: Colors.white12),
@@ -345,7 +358,6 @@ class _SetupExpensesScreenState extends State<SetupExpensesScreen> {
               ),
               const SizedBox(height: 28),
 
-              // ===== STEP INDICATOR =====
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
                 decoration: BoxDecoration(
@@ -408,8 +420,7 @@ class _SetupExpensesScreenState extends State<SetupExpensesScreen> {
                         foregroundColor: Colors.white,
                         backgroundColor:
                             const Color(0xFF2E2C4A).withOpacity(0.5),
-                        padding:
-                            const EdgeInsets.symmetric(vertical: 14),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12)),
                       ),
@@ -423,18 +434,26 @@ class _SetupExpensesScreenState extends State<SetupExpensesScreen> {
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF7959F5),
-                        padding:
-                            const EdgeInsets.symmetric(vertical: 14),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12)),
                         elevation: 6,
                         shadowColor:
                             const Color(0xFF7959F5).withOpacity(0.4),
                       ),
-                      onPressed: loading ? null : saveExpensesToSupabase,
+                      onPressed: loading
+                          ? null
+                          : () async {
+                              if (!_dueDateConfirmed) {
+                                final confirmed =
+                                    await _confirmDueDateLock(context);
+                                if (!confirmed) return;
+                                _dueDateConfirmed = true;
+                              }
+                              await saveExpensesToSupabase();
+                            },
                       child: loading
-                          ? const CircularProgressIndicator(
-                              color: Colors.white)
+                          ? const CircularProgressIndicator(color: Colors.white)
                           : const Text(
                               "Continue",
                               style: TextStyle(

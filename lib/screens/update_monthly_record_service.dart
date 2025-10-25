@@ -41,7 +41,7 @@ _transactionListener = _supabase
       schema: 'public',
       table: 'Transaction',
       callback: (payload) async {
-        // ✅ Optional: check profile_id manually from payload
+     
         final newRow = payload.newRecord;
         if (newRow != null && newRow['profile_id'] == profileId) {
           await Future.delayed(const Duration(milliseconds: 800));
@@ -144,50 +144,46 @@ _fixedIncomeListener = _supabase
           .eq('record_id', recordId);
       final totalExpense = (catSum as List? ?? [])
           .fold<double>(0, (sum, e) => sum + (e['total_expense'] ?? 0).toDouble());
-// ---------- INCOME ----------
-final fi = await _supabase
-    .from('Fixed_Income')
-    .select('monthly_income, payday, start_time, end_time')
-    .eq('profile_id', profileId);
 
-double totalIncome = 0;
+        // ---------- INCOME ----------
+        final fi = await _supabase
+            .from('Fixed_Income')
+            .select('monthly_income, payday, start_time, end_time')
+            .eq('profile_id', profileId);
 
-bool _isSameDay(DateTime a, DateTime b) =>
-    a.year == b.year && a.month == b.month && a.day == b.day;
+        double totalIncome = 0;
+        final today = _dateOnly(DateTime.now());
+        final lastDay = DateTime(today.year, today.month + 1, 0).day;
 
-for (final i in (fi as List? ?? [])) {
-  final monthlyIncome = (i['monthly_income'] ?? 0).toDouble();
-  final payday = (i['payday'] ?? 1) as int;
+        for (final i in (fi as List? ?? [])) {
+          final monthlyIncome = (i['monthly_income'] ?? 0).toDouble();
+          final payday = (i['payday'] ?? 1) as int;
+          final paydayDate = _dateOnly(DateTime(today.year, today.month, payday.clamp(1, lastDay)));
 
-  final start = i['start_time'] != null
-      ? DateTime.parse(i['start_time'])
-      : DateTime(1900);
-  final end = i['end_time'] != null
-      ? DateTime.parse(i['end_time'])
-      : DateTime(9999);
+          final rawStart = i['start_time'] != null
+              ? DateTime.parse(i['start_time']).toLocal()
+              : DateTime(1900);
+          final rawEnd = i['end_time'] != null
+              ? DateTime.parse(i['end_time']).toLocal()
+              : DateTime(9999);
 
-  //  Skip invalid or same-day archived records
-  if (end.isBefore(start)) continue;
-  if (_isSameDay(end, now)) continue;
+          final start = _dateOnly(rawStart);
+          final end = _dateOnly(rawEnd);
 
-  // Only count active income within current month
-  final sameOrAfterStartMonth =
-      (now.year > start.year) ||
-      (now.year == start.year && now.month >= start.month);
-  final sameOrBeforeEndMonth =
-      (now.year < end.year) ||
-      (now.year == end.year && now.month <= end.month);
+          if (end.isBefore(start)) continue;
+          if (_isSameDay(end, today)) continue;
 
-  final isInRange = sameOrAfterStartMonth && sameOrBeforeEndMonth;
+          // Active if payday within valid range
+          final active = !paydayDate.isBefore(start) && !paydayDate.isAfter(end);
+          if (!active) continue;
 
-  // Check if payday for current month has passed
-  final paydayThisMonth = DateTime(now.year, now.month, payday);
-  final paydayReached = !now.isBefore(paydayThisMonth);
+          // Count if payday reached
+          if (!today.isBefore(paydayDate)) {
+            totalIncome += monthlyIncome;
+          }
+        }
 
-  if (isInRange && paydayReached) {
-    totalIncome += monthlyIncome;
-  }
-}
+
 
       // ---------- EARNING ----------
       final tx = await _supabase
@@ -224,7 +220,7 @@ for (final i in (fi as List? ?? [])) {
     }
   }
 
-  // Add this inside UpdateMonthlyRecordService class
+  
 static Future<void> startWithoutContext(String profileId) async {
   try {
     await _generateOrUpdateRecord(profileId);
@@ -232,11 +228,13 @@ static Future<void> startWithoutContext(String profileId) async {
     debugPrint(' startWithoutContext failed: $e');
   }
 }
-static void _debugRealtimeStatus() {
-  final rt = _supabase.realtime;
-  debugPrint('[Realtime] Connected: ${rt.isConnected}');
-  debugPrint('[Realtime] Channels: ${rt.channels.map((c) => c.topic).toList()}');
-}
+
+static DateTime _dateOnly(DateTime d) =>
+    DateTime(d.year, d.month, d.day);
+
+static bool _isSameDay(DateTime a, DateTime b) =>
+    a.year == b.year && a.month == b.month && a.day == b.day;
+
 }
 
 

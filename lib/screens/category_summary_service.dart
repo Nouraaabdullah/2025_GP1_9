@@ -6,7 +6,7 @@ import '../../utils/auth_helpers.dart';
 import 'update_monthly_record_service.dart';
 
 /// ---------------------------------------------------------------------------
-///  UpdateCategorySummaryService
+/// 🔹 UpdateCategorySummaryService
 /// ---------------------------------------------------------------------------
 /// Keeps Category_Summary table up-to-date for the logged-in user.
 /// - Calculates total expenses per category each month.
@@ -33,7 +33,7 @@ class UpdateCategorySummaryService {
       }
       _profileId = profileId;
 
-      await _updateAll(); 
+      await _updateAll(); // Initial computation
       _setupRealtime();
 
       debugPrint(' UpdateCategorySummaryService started for $profileId');
@@ -69,19 +69,17 @@ class UpdateCategorySummaryService {
         schema: 'public',
         table: 'Fixed_Expense',
         callback: (_) async {
-          // small delay ensures new data is committed before recalculation
           await Future.delayed(const Duration(milliseconds: 300));
           _debouncedUpdate();
         },
       )
       ..subscribe();
 
-    debugPrint(' Category summary realtime channels subscribed.');
+    debugPrint('✅ Category summary realtime channels subscribed.');
   }
 
   static void _debouncedUpdate() {
     _debounce?.cancel();
-    // longer debounce gives Supabase a safe commit window
     _debounce = Timer(const Duration(seconds: 1), _updateAll);
   }
 
@@ -114,7 +112,7 @@ class UpdateCategorySummaryService {
 
       final recordId = record['record_id'] as String;
 
-      // Get active  categories
+      // Get active (non-archived) categories
       final categories = await _supabase
           .from('Category')
           .select('category_id')
@@ -137,7 +135,7 @@ class UpdateCategorySummaryService {
         totals[cid] = (totals[cid] ?? 0) - amt;
       }
 
-      //  Add dynamic Transaction-based expenses
+      //  A) Transaction-based expenses
       final txs = await _supabase
           .from('Transaction')
           .select('category_id, amount, type, date')
@@ -150,63 +148,44 @@ class UpdateCategorySummaryService {
         add(t['category_id'] as String?, (t['amount'] ?? 0).toDouble());
       }
 
-      // Handle Fixed Expenses dynamically 
 final fx = await _supabase
     .from('Fixed_Expense')
-    .select('expense_id, category_id, amount, start_time, end_time, due_date')
+    .select('category_id, amount, start_time, end_time, due_date')
     .eq('profile_id', _profileId!);
 
-final lastDay = DateTime(now.year, now.month + 1, 0).day;
+final today = _dateOnly(DateTime.now());
+final lastDay = DateTime(today.year, today.month + 1, 0).day;
 
 for (final f in (fx as List? ?? [])) {
   final cid = f['category_id'] as String?;
   final amount = (f['amount'] ?? 0).toDouble();
   final dueDay = (f['due_date'] ?? 1) as int;
+  final dueDate = _dateOnly(DateTime(today.year, today.month, dueDay.clamp(1, lastDay)));
 
-  final start = f['start_time'] != null
-      ? DateTime.parse(f['start_time'])
+  final rawStart = f['start_time'] != null
+      ? DateTime.parse(f['start_time']).toLocal()
       : DateTime(1900);
-  final end = f['end_time'] != null
-      ? DateTime.parse(f['end_time'])
+  final rawEnd = f['end_time'] != null
+      ? DateTime.parse(f['end_time']).toLocal()
       : DateTime(9999);
 
-  final dueDate = DateTime(now.year, now.month, dueDay.clamp(1, lastDay));
+  final start = _dateOnly(rawStart);
+  final end = _dateOnly(rawEnd);
 
-  // Skip invalid or archived ranges
+  // skip invalid or expired
   if (end.isBefore(start)) continue;
+  if (_isSameDay(end, today)) continue;
 
-  //  Ignore records that ended today (archived same day)
-  if (_isSameDay(end, now)) continue;
+  // active range check
+  final active = !dueDate.isBefore(start) && !dueDate.isAfter(end);
+  if (!active) continue;
 
-  // Active if current date is between start and end
-  final isActive = (now.isAfter(start) || now.isAtSameMomentAs(start)) &&
-      (now.isBefore(end.add(const Duration(days: 1))) ||
-          now.isAtSameMomentAs(end));
-
-  if (!isActive) continue;
-
-  // Only count if due date has passed this month
-  final dueReached = !now.isBefore(dueDate);
-
-  if (dueReached) {
+  // only count if due date reached
+  if (!today.isBefore(dueDate)) {
     add(cid, amount);
-  } else {
-    // 🔹 If the expense was previously counted but now moved backward, remove it
-    final existing = await _supabase
-        .from('Category_Summary')
-        .select('summary_id, total_expense')
-        .eq('record_id', recordId)
-        .eq('category_id', cid!)
-        .maybeSingle();
-
-    final oldTotal = (existing?['total_expense'] ?? 0).toDouble();
-
-    if (oldTotal > 0 && oldTotal >= amount) {
-      subtract(cid, amount);
-      debugPrint('🔸 Removed outdated expense $amount for category $cid');
-    }
   }
 }
+
 
       //  Upsert Category_Summary
       for (final entry in totals.entries) {
@@ -234,7 +213,7 @@ for (final f in (fx as List? ?? [])) {
         }
       }
 
-      //  Trigger main monthly record recalculation
+      //  Trigger Monthly Record recalculation
       await UpdateMonthlyRecordService.startWithoutContext(_profileId!);
 
       debugPrint(
@@ -244,8 +223,22 @@ for (final f in (fx as List? ?? [])) {
     }
   }
 
-static bool _isSameDay(DateTime a, DateTime b) =>
-    a.year == b.year && a.month == b.month && a.day == b.day;
+  // ---------- Helper Methods ----------
+
+  static DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
+
+  static bool _isSameDay(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
+
+  static bool _isSameOrAfter(DateTime a, DateTime b) {
+    final da = _dateOnly(a), db = _dateOnly(b);
+    return !da.isBefore(db);
+  }
+
+  static bool _isSameOrBefore(DateTime a, DateTime b) {
+    final da = _dateOnly(a), db = _dateOnly(b);
+    return !da.isAfter(db);
+  }
 
   static String _ymd(DateTime d) =>
       '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';

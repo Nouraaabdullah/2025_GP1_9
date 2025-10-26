@@ -990,65 +990,77 @@ class _LogTransactionManuallyPageState
     }
   }
 
-  Future<void> _submit() async {
-    if (_formKey.currentState?.validate() != true) return;
+Future<void> _submit() async {
+  if (_formKey.currentState?.validate() != true) return;
 
-    if (_type == 'Expense' && _selectedCategory == null) {
-      try {
-        final created = await _createCategoryDialog();
-        await _loadCategories();
-        setState(() => _selectedCategory = created);
-      } catch (_) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please select or create a category')),
-        );
-        return;
-      }
-    }
+  // NEW date validation: disallow future dates
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  final picked = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day);
+  if (picked.isAfter(today)) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Please choose a valid date (today or a past date)')),
+    );
+    return;
+  }
 
+  if (_type == 'Expense' && _selectedCategory == null) {
     try {
-      final isExpense = _type == 'Expense';
-      final amount = double.parse(_amountCtrl.text.trim());
-      final currentBalance = (await _getCurrentBalance()).toDouble();
-
-      final confirmed = await _showConfirmTransactionDialog(
-        currentBalance: currentBalance,
-        amount: amount,
-        isExpense: isExpense,
-        categoryName: isExpense ? _selectedCategory : null,
-        dateText: _fmt(_selectedDate),
-      );
-      if (!confirmed) return;
-
-      final newBalance = isExpense
-          ? currentBalance - amount
-          : currentBalance + amount;
-
-      await _showZeroBalanceInfoIfNeeded(
-        isExpense: isExpense,
-        newBalance: newBalance,
-      );
-
-      await _submitToDb();
-
-      final preview =
-          '$_type • ${_selectedCategory ?? ''} • ${_amountCtrl.text.trim()} • ${_fmt(_selectedDate)}';
+      final created = await _createCategoryDialog();
+      await _loadCategories();
+      setState(() => _selectedCategory = created);
+    } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Saved: $preview'),
-          behavior: SnackBarBehavior.floating,
-        ),
+        const SnackBar(content: Text('Please select or create a category')),
       );
-      Navigator.pop(context);
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Could not save: $e')));
+      return;
     }
   }
+
+  try {
+    final isExpense = _type == 'Expense';
+    final amount = double.parse(_amountCtrl.text.trim());
+    final currentBalance = (await _getCurrentBalance()).toDouble();
+
+    final confirmed = await _showConfirmTransactionDialog(
+      currentBalance: currentBalance,
+      amount: amount,
+      isExpense: isExpense,
+      categoryName: isExpense ? _selectedCategory : null,
+      dateText: _fmt(_selectedDate),
+    );
+    if (!confirmed) return;
+
+    final newBalance = isExpense
+        ? currentBalance - amount
+        : currentBalance + amount;
+
+    await _showZeroBalanceInfoIfNeeded(
+      isExpense: isExpense,
+      newBalance: newBalance,
+    );
+
+    await _submitToDb();
+
+    final preview =
+        '$_type • ${_selectedCategory ?? ''} • ${_amountCtrl.text.trim()} • ${_fmt(_selectedDate)}';
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Saved: $preview'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+    Navigator.pop(context);
+  } catch (e) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text('Could not save: $e')));
+  }
+}
+
 
   @override
   Widget build(BuildContext context) {

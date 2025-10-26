@@ -13,14 +13,72 @@ class _SetupBalanceScreenState extends State<SetupBalanceScreen> {
   final supabase = Supabase.instance.client;
   final balanceController = TextEditingController();
   bool loading = false;
-  String? errorText; // ✅ Added for inline validation
+  String? errorText;
 
-  // ✅ Inline grey error style
   Widget _errorTextWidget(String text) => Padding(
         padding: const EdgeInsets.only(top: 6, left: 4),
-        child:
-            Text(text, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+        child: Text(
+          text,
+          style: const TextStyle(color: Colors.grey, fontSize: 12),
+        ),
       );
+
+  // ✅ Function to apply today’s fixed incomes & expenses after setting balance
+  Future<void> _applyTodayFixedTransactions(String profileId) async {
+    final today = DateTime.now().day;
+    double balance = double.tryParse(balanceController.text.trim()) ?? 0.0;
+
+    // Fetch active incomes and expenses
+    final incomes = await supabase
+        .from('Fixed_Income')
+        .select('income_id, monthly_income, payday, is_transacted, end_time')
+        .eq('profile_id', profileId)
+        .filter('end_time', 'is', null);
+
+    final expenses = await supabase
+        .from('Fixed_Expense')
+        .select('expense_id, amount, due_date, is_transacted, end_time')
+        .eq('profile_id', profileId)
+        .filter('end_time', 'is', null);
+
+    // Apply incomes
+    for (final inc in incomes) {
+      final int? payday = inc['payday'] as int?;
+      final bool transacted = (inc['is_transacted'] ?? false) as bool;
+      final double amount = (inc['monthly_income'] ?? 0.0).toDouble();
+
+      if (payday == today && !transacted && amount != 0) {
+        balance += amount;
+        await supabase
+            .from('Fixed_Income')
+            .update({'is_transacted': true})
+            .eq('income_id', inc['income_id']);
+      }
+    }
+
+    // Apply expenses
+    for (final exp in expenses) {
+      final int? due = exp['due_date'] as int?;
+      final bool transacted = (exp['is_transacted'] ?? false) as bool;
+      final double amount = (exp['amount'] ?? 0.0).toDouble();
+
+      if (due == today && !transacted && amount != 0) {
+        balance -= amount;
+        await supabase
+            .from('Fixed_Expense')
+            .update({'is_transacted': true})
+            .eq('expense_id', exp['expense_id']);
+      }
+    }
+
+    // Update balance in User_Profile
+    await supabase
+        .from('User_Profile')
+        .update({'current_balance': balance})
+        .eq('profile_id', profileId);
+
+    ProfileData.currentBalance = balance;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -112,8 +170,6 @@ class _SetupBalanceScreenState extends State<SetupBalanceScreen> {
                       ),
                     ),
                     const SizedBox(height: 12),
-
-                    // ✅ BALANCE FIELD
                     TextField(
                       controller: balanceController,
                       keyboardType: TextInputType.number,
@@ -127,20 +183,19 @@ class _SetupBalanceScreenState extends State<SetupBalanceScreen> {
                         fillColor: const Color(0xFF2A2550),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(
-                              color: Colors.white.withOpacity(0.2)),
+                          borderSide:
+                              BorderSide(color: Colors.white.withOpacity(0.2)),
                         ),
                         focusedBorder: const OutlineInputBorder(
                           borderRadius:
                               BorderRadius.all(Radius.circular(12)),
-                          borderSide: BorderSide(
-                              color: Color(0xFF7959F5), width: 2),
+                          borderSide:
+                              BorderSide(color: Color(0xFF7959F5), width: 2),
                         ),
                       ),
                     ),
                     if (errorText != null) _errorTextWidget(errorText!),
                     const SizedBox(height: 48),
-
                     Container(
                       height: 3,
                       decoration: const BoxDecoration(
@@ -154,7 +209,6 @@ class _SetupBalanceScreenState extends State<SetupBalanceScreen> {
                       ),
                     ),
                     const SizedBox(height: 48),
-
                     Row(
                       children: [
                         Expanded(
@@ -220,11 +274,10 @@ class _SetupBalanceScreenState extends State<SetupBalanceScreen> {
     );
   }
 
-  Future<void> saveBalance(BuildContext context, double totalIncome,
-      double totalCategoryLimits) async {
+  Future<void> saveBalance(
+      BuildContext context, double totalIncome, double totalCategoryLimits) async {
     final balanceText = balanceController.text.trim();
 
-    // ✅ Inline validation
     if (balanceText.isEmpty) {
       setState(() => errorText = "Required");
       return;
@@ -251,12 +304,16 @@ class _SetupBalanceScreenState extends State<SetupBalanceScreen> {
       if (profileResponse == null) throw Exception("User profile not found.");
       final profileId = profileResponse['profile_id'];
 
+      // ✅ Save base balance first
       await supabase
           .from('User_Profile')
           .update({'current_balance': balanceValue})
           .eq('profile_id', profileId);
 
       ProfileData.currentBalance = balanceValue;
+
+      // ✅ Apply today’s incomes/expenses after saving
+      await _applyTodayFixedTransactions(profileId);
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('✅ Balance saved successfully!')),

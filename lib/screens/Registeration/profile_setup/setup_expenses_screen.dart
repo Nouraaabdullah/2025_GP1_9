@@ -13,7 +13,7 @@ class SetupExpensesScreen extends StatefulWidget {
 class _SetupExpensesScreenState extends State<SetupExpensesScreen> {
   final supabase = Supabase.instance.client;
   bool loading = false;
-  bool _dueDateConfirmed = false; // ✅ To ensure user confirms once
+  bool _dueDateConfirmed = false;
 
   final List<Map<String, dynamic>> expenses = [
     {
@@ -88,11 +88,69 @@ class _SetupExpensesScreenState extends State<SetupExpensesScreen> {
     return isValid;
   }
 
+  Future<String> _getProfileId() async {
+    final user = supabase.auth.currentUser;
+    if (user == null) throw Exception("No logged-in user found.");
+    final p = await supabase
+        .from('User_Profile')
+        .select('profile_id')
+        .eq('user_id', user.id)
+        .maybeSingle();
+    if (p == null) throw Exception("User profile not found.");
+    return p['profile_id'] as String;
+  }
+
+  // ✅ Used only when pressing Back — ends outdated fixed expenses
+  Future<void> _softEndSupersededExpenses(String profileId) async {
+    final current = expenses
+        .map((e) => (
+              (e['name'] as TextEditingController).text.trim(),
+              double.tryParse((e['amount'] as TextEditingController).text.trim()) ?? 0.0,
+              e['dueDate'] as int?,
+              (e['category'] as String?)
+            ))
+        .where((t) => t.$1.isNotEmpty)
+        .toSet();
+
+    final active = await supabase
+        .from('Fixed_Expense')
+        .select('expense_id,name,amount,due_date,category_id')
+        .eq('profile_id', profileId)
+        .filter('end_time', 'is', null);
+
+    final categoryResponse =
+        await supabase.from('Category').select('category_id,name');
+    final catNameById = {
+      for (final c in categoryResponse) c['category_id']: (c['name'] as String?)?.trim()
+    };
+
+    final nowIso = DateTime.now().toIso8601String();
+    final toEnd = <dynamic>[];
+
+    for (final r in active) {
+      final tuple = (
+        (r['name'] as String).trim(),
+        (r['amount'] ?? 0.0).toDouble(),
+        r['due_date'] as int?,
+        catNameById[r['category_id']]
+      );
+      if (!current.contains(tuple)) {
+        toEnd.add(r['expense_id']);
+      }
+    }
+
+    if (toEnd.isNotEmpty) {
+      await supabase
+          .from('Fixed_Expense')
+          .update({'end_time': nowIso})
+          .inFilter('expense_id', toEnd.cast());
+    }
+  }
+
   Future<void> saveExpensesToSupabase() async {
     if (!_validateFields()) return;
 
     setState(() => loading = true);
-
     try {
       final user = supabase.auth.currentUser;
       if (user == null) throw Exception("No logged-in user found.");
@@ -126,7 +184,7 @@ class _SetupExpensesScreenState extends State<SetupExpensesScreen> {
 
       final today = DateTime.now();
       final formattedDate =
-          "${today.year.toString().padLeft(4, '0')}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}";
+          "${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}";
 
       final expenseRecords = filledExpenses.map((e) {
         final categoryName = e['category'] == 'Custom'
@@ -141,7 +199,8 @@ class _SetupExpensesScreenState extends State<SetupExpensesScreen> {
           'category_id': categoryId,
           'start_time': today.toIso8601String(),
           'end_time': null,
-          'last_update': formattedDate, // ✅ added field
+          'last_update': formattedDate,
+          'is_transacted': false,
         };
       }).toList();
 
@@ -173,7 +232,6 @@ class _SetupExpensesScreenState extends State<SetupExpensesScreen> {
     }
   }
 
-  // ✅ Confirmation Dialog
   Future<bool> _confirmDueDateLock(BuildContext context) async {
     return await showDialog<bool>(
           context: context,
@@ -214,8 +272,6 @@ class _SetupExpensesScreenState extends State<SetupExpensesScreen> {
   Widget buildExpenseCard(int index) {
     final expense = expenses[index];
     final errors = expense['errors'] as Map<String, String?>;
-    final categoryNames =
-        ProfileData.categories.map((c) => c['name'] as String).toList();
 
     return Card(
       color: const Color(0xFF2A2550),
@@ -252,7 +308,6 @@ class _SetupExpensesScreenState extends State<SetupExpensesScreen> {
               ],
             ),
             const SizedBox(height: 10),
-
             TextField(
               controller: expense['name'],
               style: const TextStyle(color: Colors.white),
@@ -260,7 +315,6 @@ class _SetupExpensesScreenState extends State<SetupExpensesScreen> {
             ),
             if (errors['name'] != null) _errorText(errors['name']!),
             const SizedBox(height: 12),
-
             TextField(
               controller: expense['amount'],
               keyboardType: TextInputType.number,
@@ -270,7 +324,6 @@ class _SetupExpensesScreenState extends State<SetupExpensesScreen> {
             ),
             if (errors['amount'] != null) _errorText(errors['amount']!),
             const SizedBox(height: 12),
-
             DropdownButtonFormField<String>(
               value: expense['category'],
               dropdownColor: const Color(0xFF2A2550),
@@ -278,7 +331,7 @@ class _SetupExpensesScreenState extends State<SetupExpensesScreen> {
               iconEnabledColor: const Color(0xFFB8A8FF),
               decoration: _inputDecoration('Select category').copyWith(
                 hintStyle:
-                    const TextStyle(color: Color(0xFFB0AFC5)), // grey hint
+                    const TextStyle(color: Color(0xFFB0AFC5)),
               ),
               items: ProfileData.categories
                   .map<DropdownMenuItem<String>>((c) {
@@ -293,7 +346,6 @@ class _SetupExpensesScreenState extends State<SetupExpensesScreen> {
               onChanged: (value) => setState(() => expense['category'] = value),
             ),
             if (errors['category'] != null) _errorText(errors['category']!),
-
             TextField(
               controller: TextEditingController(
                 text: expense['dueDate']?.toString() ?? '',
@@ -357,7 +409,6 @@ class _SetupExpensesScreenState extends State<SetupExpensesScreen> {
                 ],
               ),
               const SizedBox(height: 28),
-
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
                 decoration: BoxDecoration(
@@ -374,7 +425,6 @@ class _SetupExpensesScreenState extends State<SetupExpensesScreen> {
                 ),
               ),
               const SizedBox(height: 16),
-
               const Text(
                 "Fixed Expenses",
                 style: TextStyle(
@@ -388,7 +438,6 @@ class _SetupExpensesScreenState extends State<SetupExpensesScreen> {
                 style: TextStyle(color: Color(0xFFB3B3C7), fontSize: 15),
               ),
               const SizedBox(height: 20),
-
               Expanded(
                 child: ListView.builder(
                   itemCount: expenses.length,
@@ -396,7 +445,6 @@ class _SetupExpensesScreenState extends State<SetupExpensesScreen> {
                 ),
               ),
               const SizedBox(height: 10),
-
               Align(
                 alignment: Alignment.centerLeft,
                 child: TextButton.icon(
@@ -409,7 +457,6 @@ class _SetupExpensesScreenState extends State<SetupExpensesScreen> {
                   ),
                 ),
               ),
-
               const SizedBox(height: 20),
               Row(
                 children: [
@@ -424,7 +471,13 @@ class _SetupExpensesScreenState extends State<SetupExpensesScreen> {
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12)),
                       ),
-                      onPressed: () => Navigator.pop(context),
+                      onPressed: () async {
+                        try {
+                          final profileId = await _getProfileId();
+                          await _softEndSupersededExpenses(profileId);
+                        } catch (_) {}
+                        if (mounted) Navigator.pop(context);
+                      },
                       child: const Text("Back"),
                     ),
                   ),
@@ -434,24 +487,32 @@ class _SetupExpensesScreenState extends State<SetupExpensesScreen> {
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF7959F5),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        padding:
+                            const EdgeInsets.symmetric(vertical: 14),
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12)),
                         elevation: 6,
                         shadowColor:
                             const Color(0xFF7959F5).withOpacity(0.4),
                       ),
-                      onPressed: loading
-                          ? null
-                          : () async {
-                              if (!_dueDateConfirmed) {
-                                final confirmed =
-                                    await _confirmDueDateLock(context);
-                                if (!confirmed) return;
-                                _dueDateConfirmed = true;
-                              }
-                              await saveExpensesToSupabase();
-                            },
+onPressed: loading
+    ? null
+    : () async {
+        if (!_dueDateConfirmed) {
+          final confirmed =
+              await _confirmDueDateLock(context);
+          if (!confirmed) return;
+          _dueDateConfirmed = true;
+        }
+
+        try {
+          final profileId = await _getProfileId();
+          await _softEndSupersededExpenses(profileId);
+        } catch (_) {}
+
+        await saveExpensesToSupabase();
+      },
+
                       child: loading
                           ? const CircularProgressIndicator(color: Colors.white)
                           : const Text(

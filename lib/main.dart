@@ -3,25 +3,25 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 // Background updaters
-import 'screens/update_monthly_record_service.dart';
-import 'screens/category_summary_service.dart';
+import 'services/update_monthly_record_service.dart';
+import 'services/category_summary_service.dart';
 import 'utils/auth_helpers.dart'; 
 
 //  Screens
-import 'screens/Registeration/welcome_screen.dart';
-import 'screens/Registeration/login_screen.dart';
-import 'screens/Registeration/signup_screen.dart';
+import 'screens/registeration/welcome_screen.dart';
+import 'screens/registeration/login_screen.dart';
+import 'screens/registeration/signup_screen.dart';
 import 'screens/profile/profile_main.dart';
 import 'screens/profile/edit_profile/edit_profile.dart';
-import 'screens/Savings/savings_page.dart';
+import 'screens/savings/savings_page.dart';
 import 'screens/dashboard/dashboard_page.dart';
-import 'screens/Registeration/profile_setup/setup_name_screen.dart';
-import 'screens/Registeration/profile_setup/setup_income_screen.dart';
-import 'screens/Registeration/profile_setup/setup_expenses_screen.dart';
-import 'screens/Registeration/profile_setup/setup_balance_screen.dart';
-import 'screens/Registeration/profile_setup/setup_complete_screen.dart';
-import 'screens/Registeration/profile_setup/setup_categories_screen.dart';
-import 'screens/Registeration/profile_setup/add_edit_category_page.dart';
+import 'screens/registeration/profile_setup/setup_name_screen.dart';
+import 'screens/registeration/profile_setup/setup_income_screen.dart';
+import 'screens/registeration/profile_setup/setup_expenses_screen.dart';
+import 'screens/registeration/profile_setup/setup_balance_screen.dart';
+import 'screens/registeration/profile_setup/setup_complete_screen.dart';
+import 'screens/registeration/profile_setup/setup_categories_screen.dart';
+import 'screens/registeration/profile_setup/add_edit_category_page.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();

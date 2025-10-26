@@ -7,7 +7,7 @@ import 'create_goal_page.dart';
 import 'edit_goal_page.dart';
 import 'dart:math'; 
 import '../../utils/auth_helpers.dart'; 
-import '/../screens/category_summary_service.dart';
+import '/../../services/category_summary_service.dart';
 
 
 /// ---------------- Domain ----------------

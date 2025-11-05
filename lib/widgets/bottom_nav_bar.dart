@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 import '../screens/log/log_transaction_manually.dart';
+import '../screens/Chatbot/chatbot_screen.dart';       // ✅ AI assistant screen
+import '../screens/dashboard/dashboard_page.dart';      // ✅ Dashboard
+import '../screens/savings/savings_page.dart';          // ✅ Savings
+import '../screens/profile/profile_main.dart';          // ✅ Profile
 
 class SurraBottomBar extends StatelessWidget {
   final VoidCallback onTapDashboard;
@@ -48,11 +52,49 @@ class SurraBottomBar extends StatelessWidget {
                       mainAxisAlignment: MainAxisAlignment.spaceAround,
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        _item('AI assistant', Icons.android, onTapAssistant ?? () {}),
-                        _item('Dashboard', Icons.pie_chart, onTapDashboard),
+                        // 🤖 AI Assistant
+                        _item(
+                          'AI assistant',
+                          Icons.android,
+                          onTapAssistant ??
+                              () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                      builder: (_) => const ChatBotScreen()),
+                                );
+                              },
+                        ),
+
+                        // 📊 Dashboard
+                        _item(
+                          'Dashboard',
+                          Icons.pie_chart,
+                          onTapDashboard,
+                        ),
+
                         const SizedBox(width: 80),
-                        _item('Savings', Icons.savings, onTapSavings),
-                        _item('Profile', Icons.person, onTapProfile ?? () {}),
+
+                        // 💰 Savings
+                        _item(
+                          'Savings',
+                          Icons.savings,
+                          onTapSavings,
+                        ),
+
+                        // 👤 Profile
+                        _item(
+                          'Profile',
+                          Icons.person,
+                          onTapProfile ??
+                              () {
+                                Navigator.pushReplacement(
+                                  context,
+                                  MaterialPageRoute(
+                                      builder: (_) => const ProfileMainPage()),
+                                );
+                              },
+                        ),
                       ],
                     ),
                   ),
@@ -61,6 +103,8 @@ class SurraBottomBar extends StatelessWidget {
             ],
           ),
         ),
+
+        // ➕ Add Transaction Button
         Positioned(
           top: -10,
           child: StatefulBuilder(
@@ -68,20 +112,16 @@ class SurraBottomBar extends StatelessWidget {
               double scale = 1.0;
 
               return GestureDetector(
-                onTapDown: (_) => setState(() => scale = 1.15), // slightly enlarge
+                onTapDown: (_) => setState(() => scale = 1.15),
                 onTapUp: (_) async {
                   await Future.delayed(const Duration(milliseconds: 100));
-                  setState(() => scale = 1.0); // return to normal
-                  // Navigate to log page after animation
-                  (onTapAdd ??
-                      () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => const LogTransactionManuallyPage(),
-                            fullscreenDialog: true,
-                          ),
-                        );
-                      })();
+                  setState(() => scale = 1.0);
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const LogTransactionManuallyPage(),
+                      fullscreenDialog: true,
+                    ),
+                  );
                 },
                 onTapCancel: () => setState(() => scale = 1.0),
                 child: AnimatedScale(
@@ -124,32 +164,6 @@ class SurraBottomBar extends StatelessWidget {
     );
   }
 
-  Widget _fabCore() {
-    return Container(
-      width: 56,
-      height: 56,
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            AppColors.accent,
-            AppColors.accent.withOpacity(0.85),
-          ],
-        ),
-        shape: BoxShape.circle,
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.accent.withOpacity(0.6),
-            blurRadius: 24,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: const Icon(Icons.add_rounded, color: Colors.white, size: 28),
-    );
-  }
-
   Widget _item(String label, IconData icon, VoidCallback onTap) {
     return Flexible(
       child: InkWell(
@@ -187,16 +201,22 @@ class _CurvedBottomBarPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()..color = color..style = PaintingStyle.fill;
-    final path = Path();
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
 
+    final path = Path();
     path.moveTo(0, size.height);
     path.lineTo(0, 40);
     path.quadraticBezierTo(0, 25, 15, 20);
     path.lineTo(size.width * 0.35, 20);
     path.quadraticBezierTo(size.width * 0.38, 20, size.width * 0.40, 25);
     path.quadraticBezierTo(size.width * 0.43, 35, size.width * 0.45, 50);
-    path.arcToPoint(Offset(size.width * 0.55, 50), radius: const Radius.circular(30), clockwise: false);
+    path.arcToPoint(
+      Offset(size.width * 0.55, 50),
+      radius: const Radius.circular(30),
+      clockwise: false,
+    );
     path.quadraticBezierTo(size.width * 0.57, 35, size.width * 0.60, 25);
     path.quadraticBezierTo(size.width * 0.62, 20, size.width * 0.65, 20);
     path.lineTo(size.width - 15, 20);

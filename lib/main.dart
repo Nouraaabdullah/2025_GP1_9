@@ -5,9 +5,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 // Background updaters
 import 'services/update_monthly_record_service.dart';
 import 'services/category_summary_service.dart';
-import 'utils/auth_helpers.dart'; 
+import 'utils/auth_helpers.dart';
 
-//  Screens
+// Screens
 import 'screens/registeration/welcome_screen.dart';
 import 'screens/registeration/login_screen.dart';
 import 'screens/registeration/signup_screen.dart';
@@ -22,6 +22,9 @@ import 'screens/registeration/profile_setup/setup_balance_screen.dart';
 import 'screens/registeration/profile_setup/setup_complete_screen.dart';
 import 'screens/registeration/profile_setup/setup_categories_screen.dart';
 import 'screens/registeration/profile_setup/add_edit_category_page.dart';
+
+// 🟣 Chatbot
+import 'screens/Chatbot/chatbot_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -63,13 +66,11 @@ class _SurraAppState extends State<SurraApp> {
         _isLoading = false;
       });
 
-      // If already logged in, ensure services start once
       if (session?.user != null) {
-        debugPrint(' User already logged in – ensuring background updaters start once.');
+        debugPrint('User already logged in – ensuring background updaters start once.');
         await _ensureMonthlyAndCategoryServices(context);
       }
 
-      //  Handle login/logout transitions
       _supabase.auth.onAuthStateChange.listen((event) async {
         final session = event.session;
         if (session != null) {
@@ -78,7 +79,7 @@ class _SurraAppState extends State<SurraApp> {
           UpdateMonthlyRecordService.stop();
           UpdateCategorySummaryService.stop();
           _servicesStarted = false;
-          debugPrint(' Updaters stopped after logout');
+          debugPrint('Updaters stopped after logout');
         }
       });
     } catch (e) {
@@ -86,14 +87,13 @@ class _SurraAppState extends State<SurraApp> {
         _user = null;
         _isLoading = false;
       });
-      debugPrint(' Error initializing session: $e');
+      debugPrint('Error initializing session: $e');
     }
   }
 
-  /// Ensures that Monthly + Category summary updaters start exactly once
   Future<void> _ensureMonthlyAndCategoryServices(BuildContext context) async {
     if (_servicesStarted) {
-      debugPrint(' Updaters already running – skipping duplicate start.');
+      debugPrint('Updaters already running – skipping duplicate start.');
       return;
     }
     _servicesStarted = true;
@@ -101,31 +101,28 @@ class _SurraAppState extends State<SurraApp> {
     String? profileId;
     int retries = 0;
 
-    
     while (profileId == null && retries < 5) {
       profileId = await getProfileId(context);
       if (profileId == null) {
-        debugPrint('[main.dart]  Profile not ready (retry $retries)');
+        debugPrint('[main.dart] Profile not ready (retry $retries)');
         await Future.delayed(const Duration(seconds: 1));
         retries++;
       }
     }
 
     if (profileId == null) {
-      debugPrint('[main.dart]  Failed to fetch profile ID after retries.');
+      debugPrint('[main.dart] Failed to fetch profile ID after retries.');
       _servicesStarted = false;
       return;
     }
 
-    //  Guarantee a record exists before realtime starts
     await UpdateMonthlyRecordService.startWithoutContext(profileId);
-    debugPrint(' Ensured monthly record exists for $profileId');
+    debugPrint('Ensured monthly record exists for $profileId');
 
-    //  Start live background updaters
     await UpdateMonthlyRecordService.start(context);
     await UpdateCategorySummaryService.start(context);
 
-    debugPrint(' Background updaters started successfully.');
+    debugPrint('Background updaters started successfully.');
   }
 
   @override
@@ -169,6 +166,7 @@ class _SurraAppState extends State<SurraApp> {
         '/setupComplete': (context) => const SetupCompleteScreen(),
         '/setupCategories': (context) => SetupCategoriesScreen(),
         '/addEditCategory': (context) => const AddEditCategoryPage(),
+        '/chatbot': (context) => const ChatBotScreen(), // 🟣 Chatbot route
       },
     );
   }

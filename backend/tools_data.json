@@ -1,0 +1,259 @@
+[
+  {
+    "type": "function",
+    "function": {
+      "name": "get_balance",
+      "description": "Return the user's current_balance from User_Profile.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "profile_id": {
+            "type": "string"
+          },
+          "user_id": {
+            "type": "string",
+            "description": "Optional; backend resolves to profile_id"
+          }
+        },
+        "required": []
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_payday",
+      "description": "Return next payday and primary monthly income (from Fixed_Income).",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "profile_id": {
+            "type": "string"
+          },
+          "user_id": {
+            "type": "string"
+          }
+        },
+        "required": []
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_fixed_incomes",
+      "description": "List fixed incomes with monthly_income, payday, start/end, is_transacted.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "profile_id": {
+            "type": "string"
+          },
+          "user_id": {
+            "type": "string"
+          }
+        },
+        "required": []
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_fixed_expenses",
+      "description": "List fixed expenses with amount, due_date, start/end, is_transacted.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "profile_id": {
+            "type": "string"
+          },
+          "user_id": {
+            "type": "string"
+          }
+        },
+        "required": []
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_current_record",
+      "description": "Return the current month's Monthly_Financial_Record (record_id, period_start/end).",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "profile_id": {
+            "type": "string"
+          },
+          "user_id": {
+            "type": "string"
+          }
+        },
+        "required": []
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_category_summary",
+      "description": "Return current-month Category_Summary joined with Category (spent, limit, remaining, %). Optionally filter by category_id.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "profile_id": { "type": "string" },
+          "user_id":    { "type": "string" },
+          "record_id":  {
+            "type": "string",
+            "description": "Optional; if missing, backend uses current month's record"
+          },
+          "category_id": {
+            "type": "string",
+            "description": "Optional; filter to one category"
+          }
+        },
+        "required": []
+      }
+    }
+  },  
+  {
+    "type": "function",
+    "function": {
+      "name": "get_top_spending",
+      "description": "Top-N categories by total_expense for current month.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "profile_id": {
+            "type": "string"
+          },
+          "user_id": {
+            "type": "string"
+          },
+          "n": {
+            "type": "integer",
+            "default": 3,
+            "minimum": 1,
+            "maximum": 10
+          }
+        },
+        "required": []
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_weekly_summary",
+      "description": "Daily expense/income totals for the current week using Transaction.date.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "profile_id": {
+            "type": "string"
+          },
+          "user_id": {
+            "type": "string"
+          }
+        },
+        "required": []
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_goals",
+      "description": "Return goals with progress computed from Goal_Transfer.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "profile_id": {
+            "type": "string"
+          },
+          "user_id": {
+            "type": "string"
+          }
+        },
+        "required": []
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_goal_progress",
+      "description": "Return a single goal's progress.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "goal_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "goal_id"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "simulate_purchase",
+      "description": "Check if a price fits the selected category and compute new balance.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "profile_id": {
+            "type": "string"
+          },
+          "user_id": {
+            "type": "string"
+          },
+          "price": {
+            "type": "number"
+          },
+          "category_id": {
+            "type": "string",
+            "description": "Optional; if missing, just compute balance impact"
+          }
+        },
+        "required": [
+          "price"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "suggest_savings_plan",
+      "description": "Analyze income, expenses, balance (and optionally goal/horizon) to suggest a safe monthly saving amount, required buffer, and a recommended focus (e.g., Emergency Fund).",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "profile_id": {
+            "type": "string"
+          },
+          "user_id": {
+            "type": "string"
+          },
+          "preferred_goal": {
+            "type": "string",
+            "description": "Optional user-stated goal such as 'Emergency Fund', 'Vacation', 'Home Deposit'."
+          },
+          "horizon_months": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 60,
+            "description": "Optional planning horizon to tailor monthly target."
+          }
+        },
+        "required": []
+      }
+    }
+  }
+]

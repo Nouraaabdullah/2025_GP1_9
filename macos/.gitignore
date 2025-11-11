@@ -5,3 +5,20 @@
 # Xcode-related
 **/dgph
 **/xcuserdata/
+
+# --- macOS / IDE ---
+.DS_Store
+.idea/
+.vscode/*
+
+# --- Python / Backend ---
+backend/.venv/
+backend/__pycache__/
+backend/*.pyc
+backend/.env
+backend/.env.*
+backend/.python-version
+
+# optional: logs, dumps
+backend/logs/
+backend/*.log

@@ -28,7 +28,7 @@ class _ChatBotScreenState extends State<ChatBotScreen> {
   static const String _backendBaseUrl = 'http://127.0.0.1:8080';
 
   // Your backend API key
-  static const String _backendApiKey = 'mysurra-backend-key';
+  static const String _backendApiKey = 'localdev-123';
 
   final List<String> _suggestedQuestions = [
     "Is now a good time to buy gold?",

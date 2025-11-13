@@ -24,7 +24,57 @@ import 'screens/registeration/profile_setup/setup_categories_screen.dart';
 import 'screens/registeration/profile_setup/add_edit_category_page.dart';
 
 // 🟣 Chatbot
-import 'screens/Chatbot/chatbot_screen.dart';
+import 'screens/chatbot/chatbot_screen.dart';
+
+class ChatbotLoader extends StatefulWidget {
+  const ChatbotLoader({super.key});
+
+  @override
+  State<ChatbotLoader> createState() => _ChatbotLoaderState();
+}
+
+class _ChatbotLoaderState extends State<ChatbotLoader> {
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final profileId = await getProfileId(context);
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+
+    if (!mounted) return;
+
+    if (profileId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Could not load profile")),
+      );
+      Navigator.pop(context);
+      return;
+    }
+
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ChatBotScreen(
+          profileId: profileId,
+          userId: userId,
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      backgroundColor: Color(0xFF1D1B32),
+      body: Center(
+        child: CircularProgressIndicator(color: Color(0xFF7959F5)),
+      ),
+    );
+  }
+}
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -166,7 +216,7 @@ class _SurraAppState extends State<SurraApp> {
         '/setupComplete': (context) => const SetupCompleteScreen(),
         '/setupCategories': (context) => SetupCategoriesScreen(),
         '/addEditCategory': (context) => const AddEditCategoryPage(),
-        '/chatbot': (context) => const ChatBotScreen(), // 🟣 Chatbot route
+        '/chatbot': (context) => const ChatbotLoader(),
       },
     );
   }

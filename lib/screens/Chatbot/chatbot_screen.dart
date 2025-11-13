@@ -1,10 +1,19 @@
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
-import 'dart:io';
+import 'package:http/http.dart' as http;
 
 class ChatBotScreen extends StatefulWidget {
-  const ChatBotScreen({super.key});
+  final String profileId;   // ← required
+  final String? userId;     // ← optional
+
+  const ChatBotScreen({
+    super.key,
+    required this.profileId,
+    this.userId,
+  });
 
   @override
   State<ChatBotScreen> createState() => _ChatBotScreenState();
@@ -15,12 +24,52 @@ class _ChatBotScreenState extends State<ChatBotScreen> {
   final List<Map<String, dynamic>> _messages = [];
   final ScrollController _scrollController = ScrollController();
 
+  // Backend URL
+  static const String _backendBaseUrl = 'http://127.0.0.1:8080';
+
+  // Your backend API key
+  static const String _backendApiKey = 'mysurra-backend-key';
+
   final List<String> _suggestedQuestions = [
     "Is now a good time to buy gold?",
     "How much can I spend this week?",
   ];
 
-  // 📤 Handle picking either image or file
+  // -----------------------------------------------------------
+  // 🌐 CALL BACKEND USING REAL profileId + userId
+  // -----------------------------------------------------------
+  Future<String> _callBackend(String userText) async {
+    final uri = Uri.parse('$_backendBaseUrl/chat');
+
+    final body = {
+      "text": userText,
+      "profile_id": widget.profileId,   // ← dynamic from user
+      "user_id": widget.userId,
+    };
+
+    final response = await http.post(
+      uri,
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": _backendApiKey,
+      },
+      body: jsonEncode(body),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception(
+        "Backend error ${response.statusCode}: ${response.body}",
+      );
+    }
+
+    final decoded = jsonDecode(response.body);
+    return decoded["answer"] ?? "No answer found.";
+  }
+
+  // -----------------------------------------------------------
+  // FILE & IMAGE PICKERS
+  // -----------------------------------------------------------
+
   Future<void> _showUploadOptions() async {
     showModalBottomSheet(
       context: context,
@@ -71,10 +120,9 @@ class _ChatBotScreenState extends State<ChatBotScreen> {
     );
   }
 
-  // 🖼 Pick image from gallery
   Future<void> _pickImage() async {
-    final ImagePicker picker = ImagePicker();
-    final XFile? image = await picker.pickImage(source: ImageSource.gallery);
+    final XFile? image =
+        await ImagePicker().pickImage(source: ImageSource.gallery);
 
     if (image != null) {
       setState(() {
@@ -92,37 +140,58 @@ class _ChatBotScreenState extends State<ChatBotScreen> {
     }
   }
 
-  // 📄 Pick any file (pdf, docx, etc.)
   Future<void> _pickFile() async {
     FilePickerResult? result = await FilePicker.platform.pickFiles();
+
     if (result != null && result.files.isNotEmpty) {
-      final file = result.files.single;
       setState(() {
         _messages.add({
           "sender": "user",
-          "text": "📎 Uploaded file: ${file.name}",
+          "text": "📎 Uploaded file: ${result.files.single.name}",
         });
         _messages.add({
           "sender": "bot",
-          "text": "File received! I’ll soon support file reading 📄",
+          "text": "File received! File reading coming soon 📄",
         });
       });
       _scrollToBottom();
     }
   }
 
-  // ✉ Send a text message
-  void _sendMessage(String text) {
+  // -----------------------------------------------------------
+  // SEND MESSAGE
+  // -----------------------------------------------------------
+
+  Future<void> _sendMessage(String text) async {
     if (text.trim().isEmpty) return;
+
+    final userText = text.trim();
+
     setState(() {
-      _messages.add({"sender": "user", "text": text});
-      _messages.add({
-        "sender": "bot",
-        "text":
-            "Gold prices are currently stable with slight upward trends. For long-term saving, buying now is fine — but for short-term profit, consider waiting for dips."
-      });
+      _messages.add({"sender": "user", "text": userText});
+      _messages.add({"sender": "bot", "text": "Thinking..."});
     });
+
     _controller.clear();
+    _scrollToBottom();
+
+    final int botIndex = _messages.length - 1;
+
+    try {
+      final botReply = await _callBackend(userText);
+
+      setState(() {
+        _messages[botIndex] = {"sender": "bot", "text": botReply};
+      });
+    } catch (e) {
+      setState(() {
+        _messages[botIndex] = {
+          "sender": "bot",
+          "text": "Connection error: $e"
+        };
+      });
+    }
+
     _scrollToBottom();
   }
 
@@ -138,6 +207,10 @@ class _ChatBotScreenState extends State<ChatBotScreen> {
     });
   }
 
+  // -----------------------------------------------------------
+  // UI
+  // -----------------------------------------------------------
+
   @override
   Widget build(BuildContext context) {
     final bool isEmpty = _messages.isEmpty;
@@ -147,10 +220,10 @@ class _ChatBotScreenState extends State<ChatBotScreen> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        automaticallyImplyLeading: true,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white),
-          onPressed: () => Navigator.pop(context), // ✅ Always goes back
+          icon: const Icon(Icons.arrow_back_ios_new_rounded,
+              color: Colors.white),
+          onPressed: () => Navigator.pop(context),
         ),
         title: const Text(
           "Surra",
@@ -166,7 +239,8 @@ class _ChatBotScreenState extends State<ChatBotScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            Expanded(child: isEmpty ? _buildWelcomeScreen() : _buildChatView()),
+            Expanded(
+                child: isEmpty ? _buildWelcomeScreen() : _buildChatView()),
             if (isEmpty) _buildSuggestedQuestions(),
             _buildMessageInput(),
           ],
@@ -175,7 +249,6 @@ class _ChatBotScreenState extends State<ChatBotScreen> {
     );
   }
 
-  // 🌟 Welcome screen with glowing aura
   Widget _buildWelcomeScreen() {
     return Center(
       child: Stack(
@@ -195,20 +268,19 @@ class _ChatBotScreenState extends State<ChatBotScreen> {
               ],
             ),
           ),
-          Column(
+          const Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Text(
+              Text(
                 "Surra",
                 style: TextStyle(
                   fontFamily: 'Poppins',
                   fontSize: 48,
                   fontWeight: FontWeight.w600,
                   color: Colors.white,
-                  letterSpacing: 1.2,
                 ),
               ),
-              const SizedBox(height: 12),
+              SizedBox(height: 12),
               Text(
                 "Your financial assistant",
                 style: TextStyle(
@@ -226,7 +298,7 @@ class _ChatBotScreenState extends State<ChatBotScreen> {
 
   Widget _buildSuggestedQuestions() {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Wrap(
         spacing: 12,
         runSpacing: 12,
@@ -235,13 +307,13 @@ class _ChatBotScreenState extends State<ChatBotScreen> {
           return GestureDetector(
             onTap: () => _sendMessage(question),
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
               decoration: BoxDecoration(
                 color: const Color(0xFF252346),
                 borderRadius: BorderRadius.circular(25),
                 border: Border.all(
                   color: Colors.white.withOpacity(0.1),
-                  width: 1,
                 ),
               ),
               child: Text(
@@ -268,12 +340,14 @@ class _ChatBotScreenState extends State<ChatBotScreen> {
         final msg = _messages[index];
         final isUser = msg["sender"] == "user";
         final imagePath = msg["imagePath"];
-        return _buildMessageBubble(msg["text"]!, isUser, imagePath: imagePath);
+        return _buildMessageBubble(msg["text"] ?? "", isUser,
+            imagePath: imagePath);
       },
     );
   }
 
-  Widget _buildMessageBubble(String text, bool isUser, {String? imagePath}) {
+  Widget _buildMessageBubble(String text, bool isUser,
+      {String? imagePath}) {
     return Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
@@ -287,42 +361,35 @@ class _ChatBotScreenState extends State<ChatBotScreen> {
                 width: 32,
                 height: 32,
                 margin: const EdgeInsets.only(right: 12),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF252346),
+                decoration: const BoxDecoration(
                   shape: BoxShape.circle,
-                  border: Border.all(
-                    color: Colors.white.withOpacity(0.1),
-                    width: 1,
-                  ),
+                  color: Color(0xFF252346),
                 ),
-                child: const Icon(
-                  Icons.smart_toy_outlined,
-                  color: Colors.white,
-                  size: 18,
-                ),
+                child: const Icon(Icons.smart_toy_outlined,
+                    color: Colors.white, size: 18),
               ),
             Flexible(
               child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 18, vertical: 14),
                 constraints: BoxConstraints(
-                  maxWidth: MediaQuery.of(context).size.width * 0.75,
+                  maxWidth:
+                      MediaQuery.of(context).size.width * 0.75,
                 ),
                 decoration: BoxDecoration(
-                  color:
-                      isUser ? const Color(0xFF3D3763) : const Color(0xFF252346),
+                  color: isUser
+                      ? const Color(0xFF3D3763)
+                      : const Color(0xFF252346),
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: Colors.white.withOpacity(0.05),
-                    width: 1,
-                  ),
                 ),
                 child: imagePath != null
                     ? Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                        crossAxisAlignment:
+                            CrossAxisAlignment.start,
                         children: [
                           ClipRRect(
-                            borderRadius: BorderRadius.circular(15),
+                            borderRadius:
+                                BorderRadius.circular(15),
                             child: Image.file(
                               File(imagePath),
                               height: 150,
@@ -333,22 +400,16 @@ class _ChatBotScreenState extends State<ChatBotScreen> {
                           Text(
                             text,
                             style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 14,
-                              height: 1.5,
-                              fontFamily: 'Poppins',
-                            ),
+                                color: Colors.white,
+                                fontSize: 14),
                           ),
                         ],
                       )
                     : Text(
                         text,
                         style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                          height: 1.5,
-                          fontFamily: 'Poppins',
-                        ),
+                            color: Colors.white,
+                            fontSize: 14),
                       ),
               ),
             ),
@@ -360,20 +421,13 @@ class _ChatBotScreenState extends State<ChatBotScreen> {
 
   Widget _buildMessageInput() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1A1834),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.2),
-            blurRadius: 10,
-            offset: const Offset(0, -2),
-          )
-        ],
+      padding:
+          const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: const BoxDecoration(
+        color: Color(0xFF1A1834),
       ),
       child: Row(
         children: [
-          // ➕ Upload button with popup
           GestureDetector(
             onTap: _showUploadOptions,
             child: Container(
@@ -382,39 +436,28 @@ class _ChatBotScreenState extends State<ChatBotScreen> {
                 shape: BoxShape.circle,
                 color: Color(0xFF252346),
               ),
-              child: const Icon(
-                Icons.add,
-                color: Colors.white,
-                size: 22,
-              ),
+              child: const Icon(Icons.add,
+                  color: Colors.white, size: 22),
             ),
           ),
           const SizedBox(width: 10),
-
-          // Text field
           Expanded(
             child: TextField(
               controller: _controller,
               style: const TextStyle(
-                color: Colors.white,
-                fontSize: 15,
-                fontFamily: 'Poppins',
-              ),
+                  color: Colors.white, fontSize: 15),
               decoration: InputDecoration(
                 hintText: "Send a message.",
                 hintStyle: TextStyle(
-                  color: Colors.white.withOpacity(0.4),
-                  fontSize: 15,
-                  fontFamily: 'Poppins',
-                ),
+                    color: Colors.white.withOpacity(0.4)),
                 filled: true,
                 fillColor: const Color(0xFF252346),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 14,
-                ),
+                contentPadding:
+                    const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 14),
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(30),
+                  borderRadius:
+                      BorderRadius.circular(30),
                   borderSide: BorderSide.none,
                 ),
               ),
@@ -422,8 +465,6 @@ class _ChatBotScreenState extends State<ChatBotScreen> {
             ),
           ),
           const SizedBox(width: 10),
-
-          // Send button
           GestureDetector(
             onTap: () => _sendMessage(_controller.text),
             child: Container(
@@ -431,16 +472,16 @@ class _ChatBotScreenState extends State<ChatBotScreen> {
               decoration: const BoxDecoration(
                 shape: BoxShape.circle,
                 gradient: LinearGradient(
-                  colors: [Color(0xFF7D5EF6), Color(0xFF6C63FF)],
+                  colors: [
+                    Color(0xFF7D5EF6),
+                    Color(0xFF6C63FF)
+                  ],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
               ),
-              child: const Icon(
-                Icons.arrow_upward,
-                color: Colors.white,
-                size: 22,
-              ),
+              child: const Icon(Icons.arrow_upward,
+                  color: Colors.white, size: 22),
             ),
           ),
         ],

@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
 import '../theme/app_colors.dart';
 import '../screens/log/log_transaction_manually.dart';
-import '../screens/Chatbot/chatbot_screen.dart';       // ✅ AI assistant screen
-import '../screens/dashboard/dashboard_page.dart';      // ✅ Dashboard
-import '../screens/savings/savings_page.dart';          // ✅ Savings
-import '../screens/profile/profile_main.dart';          // ✅ Profile
+import '../screens/chatbot/chatbot_screen.dart';
+import '../screens/dashboard/dashboard_page.dart';
+import '../screens/savings/savings_page.dart';
+import '../screens/profile/profile_main.dart';
+import '../utils/auth_helpers.dart';        // ✅ to fetch profileId
 
 class SurraBottomBar extends StatelessWidget {
   final VoidCallback onTapDashboard;
@@ -57,12 +60,30 @@ class SurraBottomBar extends StatelessWidget {
                           'AI assistant',
                           Icons.android,
                           onTapAssistant ??
-                              () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                      builder: (_) => const ChatBotScreen()),
-                                );
+                              () async {
+                                final profileId = await getProfileId(context);
+                                final userId = Supabase.instance.client.auth.currentUser?.id;
+
+                                if (profileId == null) {
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text("Unable to load profile.")),
+                                    );
+                                  }
+                                  return;
+                                }
+
+                                if (context.mounted) {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => ChatBotScreen(
+                                        profileId: profileId,
+                                        userId: userId,
+                                      ),
+                                    ),
+                                  );
+                                }
                               },
                         ),
 
@@ -91,7 +112,8 @@ class SurraBottomBar extends StatelessWidget {
                                 Navigator.pushReplacement(
                                   context,
                                   MaterialPageRoute(
-                                      builder: (_) => const ProfileMainPage()),
+                                    builder: (_) => const ProfileMainPage(),
+                                  ),
                                 );
                               },
                         ),

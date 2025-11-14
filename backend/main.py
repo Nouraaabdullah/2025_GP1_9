@@ -514,8 +514,8 @@ def health():
 @app.post("/chat")
 def chat(body: ChatIn):
     try:
-        model = body.model or FT_MODEL_ID or "gpt-3.5-turbo-0125"
-
+        model = body.model or FT_MODEL_ID
+        print(f"📦 /chat using model: {model}")
         r = client.chat.completions.create(
             model=model,
             messages=[
@@ -564,7 +564,11 @@ def chat(body: ChatIn):
         else:
             answer = msg.content
 
-        return {"answer": answer, "tool_traces": traces}
+        return {
+    "answer": answer,
+    "tool_traces": traces,
+    "model_used": model
+}
 
     except Exception as e:
         print("=== /chat ERROR ===")

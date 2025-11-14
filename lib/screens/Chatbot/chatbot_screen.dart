@@ -1,19 +1,12 @@
 import 'dart:convert';
-import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:http/http.dart' as http;
 
 class ChatBotScreen extends StatefulWidget {
-  final String profileId;   // ← required
-  final String? userId;     // ← optional
+  final String profileId; // required
+  final String? userId; // optional
 
-  const ChatBotScreen({
-    super.key,
-    required this.profileId,
-    this.userId,
-  });
+  const ChatBotScreen({super.key, required this.profileId, this.userId});
 
   @override
   State<ChatBotScreen> createState() => _ChatBotScreenState();
@@ -24,26 +17,23 @@ class _ChatBotScreenState extends State<ChatBotScreen> {
   final List<Map<String, dynamic>> _messages = [];
   final ScrollController _scrollController = ScrollController();
 
-  // Backend URL
-  static const String _backendBaseUrl = 'http://127.0.0.1:8080';
+  // Backend URL (FastAPI default from your code)
+  static const String _backendBaseUrl = 'http://127.0.0.1:8000';
 
   // Your backend API key
-  static const String _backendApiKey = 'mysurra-backend-key';
+  static const String _backendApiKey = 'localdev-123';
 
-  final List<String> _suggestedQuestions = [
-    "Is now a good time to buy gold?",
-    "How much can I spend this week?",
+  final List<String> _suggestedQuestions = const [
+    "what is my top spending category?",
+    "What is my current balance?",
   ];
 
-  // -----------------------------------------------------------
-  // 🌐 CALL BACKEND USING REAL profileId + userId
-  // -----------------------------------------------------------
+  // --------- Call backend ----------
   Future<String> _callBackend(String userText) async {
     final uri = Uri.parse('$_backendBaseUrl/chat');
-
     final body = {
       "text": userText,
-      "profile_id": widget.profileId,   // ← dynamic from user
+      "profile_id": widget.profileId,
       "user_id": widget.userId,
     };
 
@@ -57,121 +47,21 @@ class _ChatBotScreenState extends State<ChatBotScreen> {
     );
 
     if (response.statusCode != 200) {
-      throw Exception(
-        "Backend error ${response.statusCode}: ${response.body}",
-      );
+      throw Exception("Backend error ${response.statusCode}: ${response.body}");
     }
-
     final decoded = jsonDecode(response.body);
     return decoded["answer"] ?? "No answer found.";
   }
 
-  // -----------------------------------------------------------
-  // FILE & IMAGE PICKERS
-  // -----------------------------------------------------------
-
-  Future<void> _showUploadOptions() async {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: const Color(0xFF1D1B32),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (_) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  height: 4,
-                  width: 60,
-                  margin: const EdgeInsets.only(bottom: 16),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.image, color: Colors.white),
-                  title: const Text('Upload an Image',
-                      style: TextStyle(color: Colors.white)),
-                  onTap: () async {
-                    Navigator.pop(context);
-                    await _pickImage();
-                  },
-                ),
-                ListTile(
-                  leading: const Icon(Icons.insert_drive_file,
-                      color: Colors.white),
-                  title: const Text('Upload a File',
-                      style: TextStyle(color: Colors.white)),
-                  onTap: () async {
-                    Navigator.pop(context);
-                    await _pickFile();
-                  },
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Future<void> _pickImage() async {
-    final XFile? image =
-        await ImagePicker().pickImage(source: ImageSource.gallery);
-
-    if (image != null) {
-      setState(() {
-        _messages.add({
-          "sender": "user",
-          "text": "[Image sent]",
-          "imagePath": image.path,
-        });
-        _messages.add({
-          "sender": "bot",
-          "text": "Got your image 📸 — image analysis coming soon!"
-        });
-      });
-      _scrollToBottom();
-    }
-  }
-
-  Future<void> _pickFile() async {
-    FilePickerResult? result = await FilePicker.platform.pickFiles();
-
-    if (result != null && result.files.isNotEmpty) {
-      setState(() {
-        _messages.add({
-          "sender": "user",
-          "text": "📎 Uploaded file: ${result.files.single.name}",
-        });
-        _messages.add({
-          "sender": "bot",
-          "text": "File received! File reading coming soon 📄",
-        });
-      });
-      _scrollToBottom();
-    }
-  }
-
-  // -----------------------------------------------------------
-  // SEND MESSAGE
-  // -----------------------------------------------------------
-
+  // --------- Send message ----------
   Future<void> _sendMessage(String text) async {
     if (text.trim().isEmpty) return;
-
     final userText = text.trim();
 
     setState(() {
       _messages.add({"sender": "user", "text": userText});
       _messages.add({"sender": "bot", "text": "Thinking..."});
     });
-
     _controller.clear();
     _scrollToBottom();
 
@@ -179,16 +69,12 @@ class _ChatBotScreenState extends State<ChatBotScreen> {
 
     try {
       final botReply = await _callBackend(userText);
-
       setState(() {
         _messages[botIndex] = {"sender": "bot", "text": botReply};
       });
     } catch (e) {
       setState(() {
-        _messages[botIndex] = {
-          "sender": "bot",
-          "text": "Connection error: $e"
-        };
+        _messages[botIndex] = {"sender": "bot", "text": "Connection error: $e"};
       });
     }
 
@@ -207,22 +93,22 @@ class _ChatBotScreenState extends State<ChatBotScreen> {
     });
   }
 
-  // -----------------------------------------------------------
-  // UI
-  // -----------------------------------------------------------
-
+  // --------- UI ----------
   @override
   Widget build(BuildContext context) {
     final bool isEmpty = _messages.isEmpty;
 
     return Scaffold(
       backgroundColor: const Color(0xFF14122B),
+      resizeToAvoidBottomInset: true,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded,
-              color: Colors.white),
+          icon: const Icon(
+            Icons.arrow_back_ios_new_rounded,
+            color: Colors.white,
+          ),
           onPressed: () => Navigator.pop(context),
         ),
         title: const Text(
@@ -236,13 +122,18 @@ class _ChatBotScreenState extends State<ChatBotScreen> {
         ),
         centerTitle: true,
       ),
+
+      // Put the input at the scaffold bottom so it sits flush (no gap)
+      bottomNavigationBar: SafeArea(top: false, child: _buildMessageInput()),
+
       body: SafeArea(
+        top: true, // keep status bar safe
+        bottom: false, // bottom handled by bottomNavigationBar
         child: Column(
           children: [
-            Expanded(
-                child: isEmpty ? _buildWelcomeScreen() : _buildChatView()),
+            Expanded(child: isEmpty ? _buildWelcomeScreen() : _buildChatView()),
             if (isEmpty) _buildSuggestedQuestions(),
-            _buildMessageInput(),
+            // input moved to bottomNavigationBar
           ],
         ),
       ),
@@ -303,21 +194,18 @@ class _ChatBotScreenState extends State<ChatBotScreen> {
         spacing: 12,
         runSpacing: 12,
         alignment: WrapAlignment.center,
-        children: _suggestedQuestions.map((question) {
+        children: _suggestedQuestions.map((q) {
           return GestureDetector(
-            onTap: () => _sendMessage(question),
+            onTap: () => _sendMessage(q),
             child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
               decoration: BoxDecoration(
                 color: const Color(0xFF252346),
                 borderRadius: BorderRadius.circular(25),
-                border: Border.all(
-                  color: Colors.white.withOpacity(0.1),
-                ),
+                border: Border.all(color: Colors.white.withOpacity(0.1)),
               ),
               child: Text(
-                question,
+                q,
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 14,
@@ -336,18 +224,15 @@ class _ChatBotScreenState extends State<ChatBotScreen> {
       controller: _scrollController,
       padding: const EdgeInsets.all(16),
       itemCount: _messages.length,
-      itemBuilder: (context, index) {
-        final msg = _messages[index];
+      itemBuilder: (context, i) {
+        final msg = _messages[i];
         final isUser = msg["sender"] == "user";
-        final imagePath = msg["imagePath"];
-        return _buildMessageBubble(msg["text"] ?? "", isUser,
-            imagePath: imagePath);
+        return _buildMessageBubble(msg["text"] ?? "", isUser);
       },
     );
   }
 
-  Widget _buildMessageBubble(String text, bool isUser,
-      {String? imagePath}) {
+  Widget _buildMessageBubble(String text, bool isUser) {
     return Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
@@ -365,16 +250,20 @@ class _ChatBotScreenState extends State<ChatBotScreen> {
                   shape: BoxShape.circle,
                   color: Color(0xFF252346),
                 ),
-                child: const Icon(Icons.smart_toy_outlined,
-                    color: Colors.white, size: 18),
+                child: const Icon(
+                  Icons.smart_toy_outlined,
+                  color: Colors.white,
+                  size: 18,
+                ),
               ),
             Flexible(
               child: Container(
                 padding: const EdgeInsets.symmetric(
-                    horizontal: 18, vertical: 14),
+                  horizontal: 18,
+                  vertical: 14,
+                ),
                 constraints: BoxConstraints(
-                  maxWidth:
-                      MediaQuery.of(context).size.width * 0.75,
+                  maxWidth: MediaQuery.of(context).size.width * 0.75,
                 ),
                 decoration: BoxDecoration(
                   color: isUser
@@ -382,35 +271,10 @@ class _ChatBotScreenState extends State<ChatBotScreen> {
                       : const Color(0xFF252346),
                   borderRadius: BorderRadius.circular(20),
                 ),
-                child: imagePath != null
-                    ? Column(
-                        crossAxisAlignment:
-                            CrossAxisAlignment.start,
-                        children: [
-                          ClipRRect(
-                            borderRadius:
-                                BorderRadius.circular(15),
-                            child: Image.file(
-                              File(imagePath),
-                              height: 150,
-                              fit: BoxFit.cover,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            text,
-                            style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 14),
-                          ),
-                        ],
-                      )
-                    : Text(
-                        text,
-                        style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 14),
-                      ),
+                child: Text(
+                  text,
+                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                ),
               ),
             ),
           ],
@@ -421,46 +285,30 @@ class _ChatBotScreenState extends State<ChatBotScreen> {
 
   Widget _buildMessageInput() {
     return Container(
-      padding:
-          const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: const BoxDecoration(
-        color: Color(0xFF1A1834),
-      ),
+      decoration: const BoxDecoration(color: Color(0xFF1A1834)),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child: Row(
         children: [
-          GestureDetector(
-            onTap: _showUploadOptions,
-            child: Container(
-              padding: const EdgeInsets.all(10),
-              decoration: const BoxDecoration(
-                shape: BoxShape.circle,
-                color: Color(0xFF252346),
-              ),
-              child: const Icon(Icons.add,
-                  color: Colors.white, size: 22),
-            ),
-          ),
-          const SizedBox(width: 10),
+          // (Upload button removed)
           Expanded(
             child: TextField(
               controller: _controller,
-              style: const TextStyle(
-                  color: Colors.white, fontSize: 15),
+              style: const TextStyle(color: Colors.white, fontSize: 15),
               decoration: InputDecoration(
                 hintText: "Send a message.",
-                hintStyle: TextStyle(
-                    color: Colors.white.withOpacity(0.4)),
+                hintStyle: TextStyle(color: Colors.white.withOpacity(0.4)),
                 filled: true,
                 fillColor: const Color(0xFF252346),
-                contentPadding:
-                    const EdgeInsets.symmetric(
-                        horizontal: 20, vertical: 14),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 14,
+                ),
                 border: OutlineInputBorder(
-                  borderRadius:
-                      BorderRadius.circular(30),
+                  borderRadius: BorderRadius.circular(30),
                   borderSide: BorderSide.none,
                 ),
               ),
+              textInputAction: TextInputAction.send,
               onSubmitted: (text) => _sendMessage(text),
             ),
           ),
@@ -472,16 +320,16 @@ class _ChatBotScreenState extends State<ChatBotScreen> {
               decoration: const BoxDecoration(
                 shape: BoxShape.circle,
                 gradient: LinearGradient(
-                  colors: [
-                    Color(0xFF7D5EF6),
-                    Color(0xFF6C63FF)
-                  ],
+                  colors: [Color(0xFF7D5EF6), Color(0xFF6C63FF)],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
               ),
-              child: const Icon(Icons.arrow_upward,
-                  color: Colors.white, size: 22),
+              child: const Icon(
+                Icons.arrow_upward,
+                color: Colors.white,
+                size: 22,
+              ),
             ),
           ),
         ],

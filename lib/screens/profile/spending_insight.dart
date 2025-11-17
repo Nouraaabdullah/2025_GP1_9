@@ -385,7 +385,7 @@ class _SpendingInsightPageState extends State<SpendingInsightPage> {
                       const SizedBox(height: 6),
                       Center(
                         child: Text(
-                          '${_fmt(data.currentBalance)} SAR',
+                          '${_fmt(data.totalSpent)} SAR', // <-- use totalSpent
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 40,
@@ -393,6 +393,7 @@ class _SpendingInsightPageState extends State<SpendingInsightPage> {
                           ),
                         ),
                       ),
+
                       const SizedBox(height: 16),
 
                       // ===== Category Spending Progress Title =====

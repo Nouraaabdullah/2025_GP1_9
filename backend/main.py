@@ -17,11 +17,15 @@ from dotenv import load_dotenv
 load_dotenv(dotenv_path=Path(__file__).with_name(".env"))
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-FT_MODEL_ID    = os.getenv("FT_MODEL_ID")  # fine-tuned model id (or leave None to fall back)
+FT_MODEL_ID    = os.getenv("FT_MODEL_ID")  # MUST be your fine-tuned model id
 SUPABASE_URL   = os.getenv("SUPABASE_URL")
 SERVICE_KEY    = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 FASTAPI_SECRET = os.getenv("FASTAPI_SECRET_KEY")  # optional app-to-backend shared key
 PORT           = int(os.getenv("PORT", "8080"))
+
+# Require FT_MODEL_ID so we NEVER fall back to a base model
+if not FT_MODEL_ID:
+    raise RuntimeError("FT_MODEL_ID is missing. Set it in backend/.env to your fine-tuned model id.")
 
 if not all([OPENAI_API_KEY, SUPABASE_URL, SERVICE_KEY]):
     raise RuntimeError("Missing required env vars. Check .env")
@@ -501,11 +505,11 @@ class ChatIn(BaseModel):
     text: str
     profile_id: str
     user_id: Optional[str] = None
-    model: Optional[str] = None
+    # model field removed so clients CANNOT override the fine-tuned model
 
 @app.get("/")
 def root():
-    return {"ok": True, "service": "Surra backend", "model": FT_MODEL_ID or "gpt-3.5-turbo-0125"}
+    return {"ok": True, "service": "Surra backend", "model": FT_MODEL_ID}
 
 @app.get("/health")
 def health():
@@ -514,13 +518,18 @@ def health():
 @app.post("/chat")
 def chat(body: ChatIn):
     try:
-        model = body.model or FT_MODEL_ID
-        print(f"📦 /chat using model: {model}")
+        # Always use the fine-tuned model
+        model = FT_MODEL_ID
+        print(f" /chat using model: {model}")
+
         r = client.chat.completions.create(
             model=model,
             messages=[
-                {"role":"system","content":"You are Surra, a precise but friendly finance assistant. Use tools when needed."},
-                {"role":"user","content": body.text},
+                {
+                    "role": "system",
+                    "content": "You are Surra, a precise but friendly finance assistant that speaks and response to english messages only. Use tools when needed."
+                },
+                {"role": "user", "content": body.text},
             ],
             tools=OPENAI_TOOLS,
             tool_choice="auto",
@@ -554,8 +563,11 @@ def chat(body: ChatIn):
             r2 = client.chat.completions.create(
                 model=model,
                 messages=[
-                    {"role":"system","content":"You are Surra, a precise but friendly finance assistant. Use tools when needed."},
-                    {"role":"user","content": body.text},
+                    {
+                        "role": "system",
+                        "content": "You are Surra, a precise but friendly finance assistant. Use tools when needed."
+                    },
+                    {"role": "user", "content": body.text},
                     msg,
                     *tool_msgs,
                 ],
@@ -565,10 +577,10 @@ def chat(body: ChatIn):
             answer = msg.content
 
         return {
-    "answer": answer,
-    "tool_traces": traces,
-    "model_used": model
-}
+            "answer": answer,
+            "tool_traces": traces,
+            "model_used": model,
+        }
 
     except Exception as e:
         print("=== /chat ERROR ===")
@@ -584,4 +596,5 @@ if __name__ == "__main__":
     uvicorn.run("main:app", host="127.0.0.1", port=PORT, reload=True)
 
 print("Loaded tools:", [t["function"]["name"] for t in OPENAI_TOOLS])
+
 

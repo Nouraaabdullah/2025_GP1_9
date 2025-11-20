@@ -27,7 +27,7 @@ macos/Pods/
 backend/.venv/
 backend/__pycache__/
 backend/*.pyc
-backend/.env
+codes/backend/.env
 backend/.env.*
 backend/*.log
 !backend/.env.example

@@ -33,7 +33,7 @@ if not all([OPENAI_API_KEY, SUPABASE_URL, SERVICE_KEY]):
 client = OpenAI(api_key=OPENAI_API_KEY)
 
 def _load_tools():
-    path = os.path.join(os.path.dirname(__file__), "tools_data.json")
+    path = os.path.join(os.path.dirname(__file__), "../../datasets/tools_data.json")
     raw = json.load(open(path, "r", encoding="utf-8"))
 
     tool_list = raw["tools"] if isinstance(raw, dict) and "tools" in raw else raw

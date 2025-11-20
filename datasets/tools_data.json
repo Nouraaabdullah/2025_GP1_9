@@ -82,21 +82,25 @@
     "type": "function",
     "function": {
       "name": "get_category_summary",
-      "description": "Return current-month Category_Summary joined with Category (spent, limit, remaining, %). Optionally filter by category_id.",
+      "description": "Return per-category spending for a given monthly record. Uses Category_Summary.total_expense and Category.monthly_limit to compute spent, limit, remaining, and utilization percentage.",
       "parameters": {
         "type": "object",
         "properties": {
           "profile_id": { "type": "string" },
-          "record_id":  {
+          "record_id": {
             "type": "string",
-            "description": "Optional; if missing, backend uses current month's record"
+            "description": "Optional; if missing, backend uses the current period record."
           },
           "category_id": {
             "type": "string",
-            "description": "Optional; filter to one category"
+            "description": "Optional; filter to a single category."
+          },
+          "user_id": {
+            "type": "string",
+            "description": "Optional; accepted for compatibility but ignored by the backend."
           }
         },
-        "required": []
+        "required": ["profile_id"]
       }
     }
   },  
@@ -203,5 +207,51 @@
         "required": []
       }
     }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_record_history",
+      "description": "List monthly financial records for this profile (record_id, period_start, period_end, totals), ordered from most recent to oldest. Use this to find the correct record_id when the user asks about last month or previous months.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "profile_id": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Maximum number of records to return (most recent first).",
+            "minimum": 1,
+            "maximum": 24,
+            "default": 12
+          }
+        },
+        "required": []
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "compare_category_last_month",
+      "description": "Compare spending in a single category between the current month and the previous calendar month for this profile. Category spending is read from Category_Summary.total_expense for the matching Monthly_Financial_Record.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "profile_id": {
+            "type": "string"
+          },
+          "category_id": {
+            "type": "string",
+            "description": "Category identifier or name (e.g., 'gym'); the backend resolves it to the correct Category.category_id."
+          }
+        },
+        "required": ["profile_id", "category_id"]
+      }
+    }
   }
+  
+  
+  
 ]

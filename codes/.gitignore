@@ -24,11 +24,11 @@ macos/Pods/
 **/DerivedData/
 
 # --- Python backend ---
-codes/backend/.venv/
-codes/backend/__pycache__/
-codes/backend/*.pyc
-codes/backend/.env
-codes/backend/.env.*
-codes/backend/*.log
-!codes/backend/.env.example
+backend/.venv/
+backend/__pycache__/
+backend/*.pyc
+backend/.env
+backend/.env.*
+backend/*.log
+!backend/.env.example
 

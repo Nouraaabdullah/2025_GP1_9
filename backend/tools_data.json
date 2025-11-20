@@ -3,15 +3,13 @@
     "type": "function",
     "function": {
       "name": "get_balance",
-      "description": "Return the user's current_balance from User_Profile.",
+      "description": "Get the user's current overall balance in SAR. Use this to report the balance only. Do NOT use this alone to decide if a purchase is affordable; prefer simulate_purchase for purchase/affordability questions.",
       "parameters": {
         "type": "object",
         "properties": {
-          "profile_id": {
-            "type": "string"
-          }
+          "profile_id": { "type": "string" }
         },
-        "required": []
+        "required": ["profile_id"]
       }
     }
   },
@@ -19,7 +17,7 @@
     "type": "function",
     "function": {
       "name": "get_payday",
-      "description": "Return next payday and primary monthly income (from Fixed_Income).",
+      "description": "Return next payday monthly income (from Fixed_Income).",
       "parameters": {
         "type": "object",
         "properties": {
@@ -36,7 +34,7 @@
     "type": "function",
     "function": {
       "name": "get_fixed_incomes",
-      "description": "List fixed incomes with monthly_income, payday, start/end, is_transacted.",
+      "description": "List fixed incomes with monthly_income, payday, is_transacted.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -52,7 +50,7 @@
     "type": "function",
     "function": {
       "name": "get_fixed_expenses",
-      "description": "List fixed expenses with amount, due_date, start/end, is_transacted.",
+      "description": "List fixed expenses with amount, due_date, is_transacted.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -160,7 +158,7 @@
     "type": "function",
     "function": {
       "name": "simulate_purchase",
-      "description": "Check if a price fits the selected category and compute new balance.",
+      "description": "Use this whenever the user asks if they can afford a purchase, wants to buy something, or wants to understand the impact of a price on their budget. It uses current balance, fixed monthly income, and fixed monthly expenses to project the impact of the price, and can also check the effect on a specific category.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -168,19 +166,18 @@
             "type": "string"
           },
           "price": {
-            "type": "number"
+            "type": "number",
+            "description": "Price of the item the user wants to buy, in SAR."
           },
           "category_id": {
             "type": "string",
-            "description": "Optional; if missing, just compute balance impact"
+            "description": "Optional; if provided, simulate the impact on that spending category as well."
           }
         },
-        "required": [
-          "price"
-        ]
+        "required": ["price"]
       }
     }
-  },
+  },  
   {
     "type": "function",
     "function": {

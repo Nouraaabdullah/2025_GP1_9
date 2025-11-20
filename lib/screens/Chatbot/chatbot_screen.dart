@@ -24,17 +24,43 @@ class _ChatBotScreenState extends State<ChatBotScreen> {
   static const String _backendApiKey = 'localdev-123';
 
   final List<String> _suggestedQuestions = const [
-    "what is my top spending category?",
+    "What is my top spending category?",
     "What is my current balance?",
   ];
 
+  // --------- Build history payload ----------
+  /// Convert local _messages into the history format expected by the backend.
+  /// Maps:
+  ///   sender "user" -> role "user"
+  ///   sender "bot"  -> role "assistant"
+  List<Map<String, String>> _buildHistoryPayload() {
+    final List<Map<String, String>> history = [];
+    for (final msg in _messages) {
+      final sender = msg['sender'] as String?;
+      final text = (msg['text'] ?? '').toString();
+
+      if (text.trim().isEmpty) continue;
+
+      if (sender == 'user') {
+        history.add({"role": "user", "content": text});
+      } else if (sender == 'bot') {
+        history.add({"role": "assistant", "content": text});
+      }
+    }
+    return history;
+  }
+
   // --------- Call backend ----------
-  Future<String> _callBackend(String userText) async {
+  Future<String> _callBackend(
+    String userText,
+    List<Map<String, String>> history,
+  ) async {
     final uri = Uri.parse('$_backendBaseUrl/chat');
     final body = {
       "text": userText,
       "profile_id": widget.profileId,
       "user_id": widget.userId,
+      "history": history,
     };
 
     final response = await http.post(
@@ -50,13 +76,16 @@ class _ChatBotScreenState extends State<ChatBotScreen> {
       throw Exception("Backend error ${response.statusCode}: ${response.body}");
     }
     final decoded = jsonDecode(response.body);
-    return decoded["answer"] ?? "No answer found.";
+    return decoded["answer"]?.toString() ?? "No answer found.";
   }
 
   // --------- Send message ----------
   Future<void> _sendMessage(String text) async {
     if (text.trim().isEmpty) return;
     final userText = text.trim();
+
+    // Build history BEFORE adding the new user message + "Thinking..."
+    final history = _buildHistoryPayload();
 
     setState(() {
       _messages.add({"sender": "user", "text": userText});
@@ -68,7 +97,7 @@ class _ChatBotScreenState extends State<ChatBotScreen> {
     final int botIndex = _messages.length - 1;
 
     try {
-      final botReply = await _callBackend(userText);
+      final botReply = await _callBackend(userText, history);
       setState(() {
         _messages[botIndex] = {"sender": "bot", "text": botReply};
       });
@@ -127,13 +156,12 @@ class _ChatBotScreenState extends State<ChatBotScreen> {
       bottomNavigationBar: SafeArea(top: false, child: _buildMessageInput()),
 
       body: SafeArea(
-        top: true, // keep status bar safe
-        bottom: false, // bottom handled by bottomNavigationBar
+        top: true,
+        bottom: false,
         child: Column(
           children: [
             Expanded(child: isEmpty ? _buildWelcomeScreen() : _buildChatView()),
             if (isEmpty) _buildSuggestedQuestions(),
-            // input moved to bottomNavigationBar
           ],
         ),
       ),
@@ -289,7 +317,6 @@ class _ChatBotScreenState extends State<ChatBotScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child: Row(
         children: [
-          // (Upload button removed)
           Expanded(
             child: TextField(
               controller: _controller,

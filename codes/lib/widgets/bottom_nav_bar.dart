@@ -7,7 +7,7 @@ import '../screens/chatbot/chatbot_screen.dart';
 import '../screens/dashboard/dashboard_page.dart';
 import '../screens/savings/savings_page.dart';
 import '../screens/profile/profile_main.dart';
-import '../utils/auth_helpers.dart';        // ✅ to fetch profileId
+import '../utils/auth_helpers.dart'; // ✅ to fetch profileId
 
 class SurraBottomBar extends StatelessWidget {
   final VoidCallback onTapDashboard;
@@ -34,7 +34,7 @@ class SurraBottomBar extends StatelessWidget {
       alignment: Alignment.topCenter,
       children: [
         SizedBox(
-          height: 110,
+          height: 110, // ⬅️ back to original
           child: Stack(
             clipBehavior: Clip.none,
             children: [
@@ -50,24 +50,64 @@ class SurraBottomBar extends StatelessWidget {
               Positioned.fill(
                 child: SafeArea(
                   child: Padding(
+                    // ⬅️ original padding that didn’t overflow
                     padding: const EdgeInsets.only(top: 35, bottom: 0),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceAround,
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        // 🤖 AI Assistant
+                        // 👤 Profile (LEFT)
+                        _item(
+                          'Profile',
+                          Icons.person_outline,
+                          onTapProfile ??
+                              () {
+                                Navigator.pushReplacement(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => const ProfileMainPage(),
+                                  ),
+                                );
+                              },
+                        ),
+
+                        // 🎯 Savings
+                        _item(
+                          'Savings',
+                          Icons.track_changes_outlined,
+                          onTapSavings,
+                        ),
+
+                        const SizedBox(width: 80), // space for + button
+                        // 📊 Dashboard
+                        _item(
+                          'Dashboard',
+                          Icons.pie_chart_outline,
+                          onTapDashboard,
+                        ),
+
+                        // 🤖 AI assistant (RIGHT)
                         _item(
                           'AI assistant',
-                          Icons.android,
+                          Icons.smart_toy_outlined,
                           onTapAssistant ??
                               () async {
                                 final profileId = await getProfileId(context);
-                                final userId = Supabase.instance.client.auth.currentUser?.id;
+                                final userId = Supabase
+                                    .instance
+                                    .client
+                                    .auth
+                                    .currentUser
+                                    ?.id;
 
                                 if (profileId == null) {
                                   if (context.mounted) {
                                     ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(content: Text("Unable to load profile.")),
+                                      const SnackBar(
+                                        content: Text(
+                                          "Unable to load profile.",
+                                        ),
+                                      ),
                                     );
                                   }
                                   return;
@@ -86,37 +126,6 @@ class SurraBottomBar extends StatelessWidget {
                                 }
                               },
                         ),
-
-                        // 📊 Dashboard
-                        _item(
-                          'Dashboard',
-                          Icons.pie_chart,
-                          onTapDashboard,
-                        ),
-
-                        const SizedBox(width: 80),
-
-                        // 💰 Savings
-                        _item(
-                          'Savings',
-                          Icons.savings,
-                          onTapSavings,
-                        ),
-
-                        // 👤 Profile
-                        _item(
-                          'Profile',
-                          Icons.person,
-                          onTapProfile ??
-                              () {
-                                Navigator.pushReplacement(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => const ProfileMainPage(),
-                                  ),
-                                );
-                              },
-                        ),
                       ],
                     ),
                   ),
@@ -126,7 +135,7 @@ class SurraBottomBar extends StatelessWidget {
           ),
         ),
 
-        // ➕ Add Transaction Button
+        // ➕ Add Transaction Button (back to original position)
         Positioned(
           top: -10,
           child: StatefulBuilder(
@@ -138,12 +147,17 @@ class SurraBottomBar extends StatelessWidget {
                 onTapUp: (_) async {
                   await Future.delayed(const Duration(milliseconds: 100));
                   setState(() => scale = 1.0);
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const LogTransactionManuallyPage(),
-                      fullscreenDialog: true,
-                    ),
-                  );
+
+                  if (onTapAdd != null) {
+                    onTapAdd!();
+                  } else {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const LogTransactionManuallyPage(),
+                        fullscreenDialog: true,
+                      ),
+                    );
+                  }
                 },
                 onTapCancel: () => setState(() => scale = 1.0),
                 child: AnimatedScale(
@@ -181,7 +195,7 @@ class SurraBottomBar extends StatelessWidget {
               );
             },
           ),
-        )
+        ),
       ],
     );
   }

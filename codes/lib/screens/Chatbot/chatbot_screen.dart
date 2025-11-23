@@ -14,6 +14,7 @@ class ChatBotScreen extends StatefulWidget {
 
 class _ChatBotScreenState extends State<ChatBotScreen> {
   final TextEditingController _controller = TextEditingController();
+  final FocusNode _inputFocusNode = FocusNode();
   final List<Map<String, dynamic>> _messages = [];
   final ScrollController _scrollController = ScrollController();
 
@@ -23,16 +24,13 @@ class _ChatBotScreenState extends State<ChatBotScreen> {
   // Your backend API key
   static const String _backendApiKey = 'localdev-123';
 
+  // Suggested questions (balance removed, new question added)
   final List<String> _suggestedQuestions = const [
     "What is my top spending category?",
-    "What is my current balance?",
+    "The effects of item purchase",
   ];
 
   // --------- Build history payload ----------
-  /// Convert local _messages into the history format expected by the backend.
-  /// Maps:
-  ///   sender "user" -> role "user"
-  ///   sender "bot"  -> role "assistant"
   List<Map<String, String>> _buildHistoryPayload() {
     final List<Map<String, String>> history = [];
     for (final msg in _messages) {
@@ -84,7 +82,6 @@ class _ChatBotScreenState extends State<ChatBotScreen> {
     if (text.trim().isEmpty) return;
     final userText = text.trim();
 
-    // Build history BEFORE adding the new user message + "Thinking..."
     final history = _buildHistoryPayload();
 
     setState(() {
@@ -122,6 +119,22 @@ class _ChatBotScreenState extends State<ChatBotScreen> {
     });
   }
 
+  // Handle tapping on suggested questions
+  void _onSuggestedTap(String q) {
+    if (q == "The effects of item purchase") {
+      const prefix = "Can I buy an item worth ";
+      setState(() {
+        _controller.text = prefix;
+        _controller.selection = TextSelection.fromPosition(
+          TextPosition(offset: _controller.text.length),
+        );
+      });
+      FocusScope.of(context).requestFocus(_inputFocusNode);
+    } else {
+      _sendMessage(q);
+    }
+  }
+
   // --------- UI ----------
   @override
   Widget build(BuildContext context) {
@@ -152,16 +165,28 @@ class _ChatBotScreenState extends State<ChatBotScreen> {
         centerTitle: true,
       ),
 
-      // Put the input at the scaffold bottom so it sits flush (no gap)
-      bottomNavigationBar: SafeArea(top: false, child: _buildMessageInput()),
-
+      // NO bottomNavigationBar – input lives inside the body at the bottom
       body: SafeArea(
         top: true,
-        bottom: false,
+        bottom: false, // allow it to touch the absolute bottom
         child: Column(
           children: [
             Expanded(child: isEmpty ? _buildWelcomeScreen() : _buildChatView()),
-            if (isEmpty) _buildSuggestedQuestions(),
+
+            if (isEmpty)
+              Padding(
+                padding: const EdgeInsets.only(
+                  left: 16,
+                  right: 16,
+                  top: 8,
+                  bottom:
+                      18, // <-- This adds space between questions & input bar
+                ),
+                child: _buildSuggestedQuestionsRow(),
+              ),
+
+            // Always at the very bottom
+            _buildMessageInput(),
           ],
         ),
       ),
@@ -215,34 +240,38 @@ class _ChatBotScreenState extends State<ChatBotScreen> {
     );
   }
 
-  Widget _buildSuggestedQuestions() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Wrap(
-        spacing: 12,
-        runSpacing: 12,
-        alignment: WrapAlignment.center,
-        children: _suggestedQuestions.map((q) {
+  // Horizontal suggested questions row on main background
+  Widget _buildSuggestedQuestionsRow() {
+    return SizedBox(
+      height: 46,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: _suggestedQuestions.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 12),
+        itemBuilder: (context, index) {
+          final q = _suggestedQuestions[index];
           return GestureDetector(
-            onTap: () => _sendMessage(q),
+            onTap: () => _onSuggestedTap(q),
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
               decoration: BoxDecoration(
                 color: const Color(0xFF252346),
                 borderRadius: BorderRadius.circular(25),
                 border: Border.all(color: Colors.white.withOpacity(0.1)),
               ),
-              child: Text(
-                q,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 14,
-                  fontFamily: 'Poppins',
+              child: Center(
+                child: Text(
+                  q,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontFamily: 'Poppins',
+                  ),
                 ),
               ),
             ),
           );
-        }).toList(),
+        },
       ),
     );
   }
@@ -311,15 +340,22 @@ class _ChatBotScreenState extends State<ChatBotScreen> {
     );
   }
 
+  // Input bar that now touches the bottom
   Widget _buildMessageInput() {
     return Container(
       decoration: const BoxDecoration(color: Color(0xFF1A1834)),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      padding: const EdgeInsets.only(
+        left: 16,
+        right: 16,
+        top: 15,
+        bottom: 20, // ← lift the bar up by 6px
+      ),
       child: Row(
         children: [
           Expanded(
             child: TextField(
               controller: _controller,
+              focusNode: _inputFocusNode,
               style: const TextStyle(color: Colors.white, fontSize: 15),
               decoration: InputDecoration(
                 hintText: "Send a message.",
@@ -367,6 +403,7 @@ class _ChatBotScreenState extends State<ChatBotScreen> {
   @override
   void dispose() {
     _controller.dispose();
+    _inputFocusNode.dispose();
     _scrollController.dispose();
     super.dispose();
   }

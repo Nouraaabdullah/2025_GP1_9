@@ -539,33 +539,225 @@ def compare_category_last_month(
         "difference": diff,
     }
 
-def suggest_savings_plan(profile_id: str, user_id: str | None = None) -> Dict[str,Any]:
+def suggest_savings_plan(profile_id: str, user_id: str | None = None) -> Dict[str, Any]:
+    """
+    Surra Smart Saving Plan (Balanced Mode)
+    --------------------------------------------------------
+    - Uses current balance
+    - Uses ONLY Monthly_Financial_Record for income + earnings
+    - Uses Category Summary for total monthly spending
+    - Adjusts savings dynamically based on:
+        • Spending ratio
+        • Days until payday
+    - Matches dashboard logic:
+        total_available = total_income + total_earning
+        spent_ratio     = total_spent / total_available
+    """
+
+    import datetime, calendar
+    today = datetime.date.today()
+
+    # ----------------------------------------------------
+    # 1) CURRENT BALANCE
+    # ----------------------------------------------------
     bal = get_balance(profile_id)
-    payday = get_payday(profile_id)
-    balance = float(bal.get("balance_sar", 0))
-    suggestion = max(0, round(balance * 0.15, 2))
+    balance = float(bal.get("balance_sar", 0) or 0)
+
+    # ----------------------------------------------------
+    # 2) PRIMARY PAYDAY (salary payday)
+    # ----------------------------------------------------
+    payday_info = get_payday(profile_id)
+    payday_raw  = payday_info.get("next_payday")
+    income      = float(payday_info.get("amount") or 0)
+
+    # Resolve payday into a date object
+    def resolve_payday(raw):
+        if raw is None:
+            return today + datetime.timedelta(days=15)
+
+        s = str(raw)
+
+        # Format: yyyy-mm-dd
+        if "-" in s:
+            try:
+                return datetime.date.fromisoformat(s)
+            except:
+                pass
+
+        # Format: DD (day of month)
+        try:
+            day = int(s)
+            try:
+                return datetime.date(today.year, today.month, day)
+            except ValueError:
+                last_day = calendar.monthrange(today.year, today.month)[1]
+                return datetime.date(today.year, today.month, last_day)
+        except:
+            return today + datetime.timedelta(days=15)
+
+    payday = resolve_payday(payday_raw)
+
+    # Payday passed → move to next month
+    if payday < today:
+        next_month = (today.replace(day=1) + datetime.timedelta(days=32)).replace(day=1)
+        desired_day = payday.day
+        try:
+            payday = datetime.date(next_month.year, next_month.month, desired_day)
+        except ValueError:
+            last_day = calendar.monthrange(next_month.year, next_month.month)[1]
+            payday = datetime.date(next_month.year, next_month.month, last_day)
+
+    days_left = max(0, (payday - today).days)
+
+    # ----------------------------------------------------
+    # 3) SPENDING (Category Summary)
+    # ----------------------------------------------------
+    cat = get_category_summary(profile_id)
+    total_spent = sum(float(c.get("spent", 0) or 0) for c in cat.get("summaries", []))
+
+    # ----------------------------------------------------
+    # 4) EARNINGS (from Monthly_Financial_Record)
+    # ----------------------------------------------------
+    period = _current_period(profile_id)
+    record_id = period["record_id"]
+
+    record = sb_single(
+        "Monthly_Financial_Record",
+        "total_income,total_earning",
+        record_id=record_id,
+        profile_id=profile_id,
+    )
+
+    total_income  = float(record.get("total_income", 0) or 0)
+    total_earning = float(record.get("total_earning", 0) or 0)
+
+    # ----------------------------------------------------
+    # 5) TOTAL AVAILABLE IN THIS MONTH (Dashboard logic)
+    # ----------------------------------------------------
+    total_available = total_income + total_earning
+
+    if total_available > 0:
+        spending_ratio = min(1.0, total_spent / total_available)
+    else:
+        spending_ratio = 0.0
+
+    # ----------------------------------------------------
+    # 6) DYNAMIC SAVING % (Balanced)
+    # ----------------------------------------------------
+    if spending_ratio < 0.30:
+        base_pct = 0.22
+    elif spending_ratio < 0.60:
+        base_pct = 0.17
+    elif spending_ratio < 0.85:
+        base_pct = 0.12
+    else:
+        base_pct = 0.06
+
+    # ----------------------------------------------------
+    # 7) TIME ADJUSTMENT (Based on days to payday)
+    # ----------------------------------------------------
+    if days_left <= 5:
+        time_adj = 1.25
+    elif days_left <= 10:
+        time_adj = 1.15
+    elif days_left <= 20:
+        time_adj = 1.00
+    else:
+        time_adj = 0.85
+
+    final_pct = base_pct * time_adj
+
+    # ----------------------------------------------------
+    # 8) FINAL SAVING RECOMMENDATION
+    # ----------------------------------------------------
+    recommended = round(balance * final_pct, 2)
+
     return {
-        "plan": f"Suggested savings: {suggestion} SAR before {payday.get('next_payday')}.",
-        "inputs": {"balance": balance, "payday": payday.get("next_payday")},
+        "recommended_saving": recommended,
+        "payday": payday.isoformat(),
+        "days_left": days_left,
+        "inputs": {
+            "balance": balance,
+            "total_income": total_income,
+            "total_earning": total_earning,
+            "total_available": total_available,
+            "total_spent_this_month": total_spent,
+            "spending_ratio": spending_ratio,
+            "base_percentage": base_pct,
+            "final_percentage": final_pct,
+        }
     }
 
-# --- Helper for goal transfers ---
 def _signed_transfer_amount(direction: Optional[str], amount: Any) -> float:
-    """
-    Interpret Goal_Transfer.direction as + / - for computing saved amount.
-    We don't assume exact string set, just a reasonable convention:
-      - 'from_goal', 'withdraw', 'out' => negative
-      - everything else (or None)      => positive
-    """
     if amount is None:
         return 0.0
 
     value = float(amount)
     dir_norm = (direction or "").lower()
 
-    if dir_norm in ("from_goal", "withdraw", "out"):
+    # Make "unassign", "withdraw", "from_goal", "out" negative
+    if dir_norm in ("unassign", "from_goal", "withdraw", "out"):
         return -value
+
+    # Everything else positive: Assign
     return value
+
+
+def get_goal_transfers(profile_id: str, goal_id: str, user_id: str | None = None):
+    # Try UUID
+    try:
+        resolved = str(uuid.UUID(goal_id))
+    except:
+        rows = sb_list(
+        "Goal",
+        "goal_id,name,target_amount,target_date,status",
+        profile_id=profile_id,
+        name=f"eq.{goal_id}"  # exact match
+        )
+
+        if not rows:
+            return {"ok": False, "reason": "goal_not_found", "choices": []}
+
+        if len(rows) > 1:
+            # ambiguous
+            return {
+                "ok": False,
+                "reason": "ambiguous_name",
+                "choices": [
+                    {
+                        "goal_id": r["goal_id"],
+                        "name": r["name"],
+                        "target_amount": r.get("target_amount"),
+                        "target_date": r.get("target_date"),
+                        "status": r.get("status"),
+                    }
+                    for r in rows
+                ]
+            }
+
+        resolved = rows[0]["goal_id"]
+
+    # Fetch transfers
+    transfers = sb_list(
+        "Goal_Transfer",
+        "goal_transfer_id,direction,amount,created_at,goal_id",
+        goal_id=resolved,
+    )
+
+    # Add signed amount
+    out = []
+    for t in transfers:
+        signed = _signed_transfer_amount(t.get("direction"), t.get("amount"))
+        out.append({
+            "goal_transfer_id": t["goal_transfer_id"],
+            "direction": t["direction"],
+            "amount": float(t["amount"] or 0),
+            "signed_amount": signed,
+            "created_at": t["created_at"],
+        })
+
+    return {"ok": True, "goal_id": resolved, "transfers": out}
+
 
 def get_top_spending(
     profile_id: str,
@@ -795,6 +987,64 @@ def simulate_purchase(
         "category_effect": cat_block,
     }
 
+def get_goal_details(
+    profile_id: str,
+    goal_name: str | None = None,
+    goal_id: str | None = None,
+    user_id: str | None = None,
+):
+    # 1. Resolve name → id
+    if goal_name and not goal_id:
+        row = sb_single(
+            "Goal",
+            "goal_id,name,target_amount,target_date,status,created_at,profile_id",
+            profile_id=profile_id,
+            name=goal_name
+        )
+        if not row:
+            return {"ok": False, "reason": "goal_not_found"}
+        goal_id = row["goal_id"]
+        g = row
+    else:
+        # fetch by id
+        g = sb_single(
+            "Goal",
+            "goal_id,name,target_amount,target_date,status,created_at,profile_id",
+            profile_id=profile_id,
+            goal_id=goal_id
+        )
+        if not g:
+            return {"ok": False, "reason": "goal_not_found"}
+
+    # 2. Fetch transfers
+    transfers_data = get_goal_transfers(
+        profile_id=profile_id,
+        goal_id=goal_id,
+        user_id=user_id,
+    )
+    transfers = transfers_data.get("transfers", [])
+
+    # 3. Compute progress
+    progress = round(sum(t["signed_amount"] for t in transfers), 2)
+    target = float(g["target_amount"] or 0)
+    remaining = max(target - progress, 0)
+    percent = 0 if target <= 0 else round((progress / target) * 100, 2)
+
+    return {
+        "ok": True,
+        "goal": {
+            "goal_id": goal_id,
+            "name": g["name"],
+            "target_amount": target,
+            "target_date": g["target_date"],
+            "status": g["status"],
+            "created_at": g["created_at"],
+            "progress": progress,
+            "remaining": remaining,
+            "percent_complete": percent,
+            "transfers": transfers
+        }
+    }
 
 
 # Map tool names to functions
@@ -808,6 +1058,8 @@ NAME_TO_FUNC = {
     "get_top_spending": get_top_spending,
     "get_weekly_summary": get_weekly_summary,
     "get_goals": get_goals,
+    "get_goal_transfers": get_goal_transfers,
+    "get_goal_details": get_goal_details,
     "simulate_purchase": simulate_purchase,
     "suggest_savings_plan": suggest_savings_plan,
     "get_record_history": get_record_history,
@@ -864,7 +1116,7 @@ def build_messages(body: ChatIn) -> List[Dict[str, str]]:
 "- Avoid unnecessary sentences.\n"
 "- Do NOT describe which tools you are using, which record_ids you selected, or how many records exist.\n"
 "- Do NOT ask the user to confirm the months; infer them from the data unless the user explicitly asks for a different month.\n"
-"- Always write amounts with 'SAR'.\n"
+"- Always write amounts with 'SAR' after the value.\n"
 "- Never include disclaimers or apologies.\n"
 "\n"
 "3. Interpret tool results intelligently\n"
@@ -883,6 +1135,53 @@ def build_messages(body: ChatIn) -> List[Dict[str, str]]:
 "- Clearly state whether the purchase is affordable or NOT affordable.\n"
 "- Provide a short explanation based only on tool outputs.\n"
 "- Never invent missing values.\n"
+"\n"
+"If the backend returns reason='ambiguous_name':\n"
+"- Do NOT choose randomly.\n"
+"- Show the user ALL matching goals: each goal_id, target_amount, target_date, and status.\n"
+"- Ask the user: \"Which one of these goals do you mean?\"\n"
+"- If the user still cannot specify, reply:\n"
+"  \"Please rename one of the goals in the app so I can tell the difference between them.\"\n"
+"\n"
+"Goal status rules:\n"
+"- A goal is ACTIVE if status=\"active\" AND percent_complete < 100 AND the target date has NOT passed.\n"
+"- A goal is INCOMPLETE if percent_complete < 100 AND the target date HAS passed.\n"
+"- A goal is COMPLETED if percent_complete = 100 AND it has NOT been transacted as an expense.\n"
+"- A goal is ACHIEVED if percent_complete = 100 AND it HAS been transacted as an expense.\n"
+"\n"
+"When the user asks:\n"
+"- \"active goals\" → return only ACTIVE.\n"
+"- \"uncompleted goals\" → return only INCOMPLETE.\n"
+"- \"completed goals\" → return only COMPLETED.\n"
+"- \"achieved goals\" → return only ACHIEVED.\n"
+"\n"
+"NEVER include all goals unless the user explicitly asks for \"all goals\".\n"
+"\n"
+"- Goal transfer history, assigned amounts, saved amounts, contributions, or money moved into a goal → use `get_goal_transfers`.\n"
+"Any of the following questions MUST always call `get_goal_transfers` with the goal name:\n"
+"- Questions about assigns, assigned money, or contributions to a goal.\n"
+"- Questions about unassigns, withdrawals, or money taken out of a goal.\n"
+"- Questions about goal activity, history, or what the user has been doing with the goal.\n"
+"- Questions like: \"what did I add to this goal?\", \"show my assigns\", \"show my activity\", \"what have I done with this goal\", \"how much did I put into the goal\", or \"how much did I withdraw\".\n"
+"- For ANY question about goal assigns, unassigns, contributions, withdrawals, activity, or transfer history, the assistant MUST follow this exact procedure:\n"
+"  1. First call `get_goals` to retrieve all goals.\n"
+"  2. Match the user’s written goal name EXACTLY to the `name` field returned by `get_goals`.\n"
+"     - Case-insensitive comparison is allowed.\n"
+"     - Apostrophes must match exactly (\"'\" is different from \"’\").\n"
+"     - Do NOT normalize, modify, or alter the user’s text.\n"
+"     - Do NOT replace characters or strip whitespace.\n"
+"  3. Once a matching goal is found, use that goal’s `goal_id` when calling `get_goal_transfers`.\n"
+"  4. NEVER ask the user for a goal_id; the assistant must always infer it from `get_goals`.\n"
+"  5. If more than one goal has the same name → treat it as ambiguous_name and follow the ambiguous-name rules.\n"
+"  6. NEVER pass the goal name as goal_id. ALWAYS extract the goal_id from `get_goals`.\n"
+"\n"
+"After matching the user’s goal name to a specific goal in `get_goals`:\n"
+"- The assistant MUST call `get_goal_transfers` using the goal’s UUID only.\n"
+"- NEVER pass the name (e.g., \"goaly\", \"don’t\") into `goal_id`.\n"
+"- The value of `goal_id` in the tool call must ALWAYS be the UUID extracted from `get_goals`.\n"
+"- If the user selects between ambiguous goals, the assistant must store the chosen UUID and use it for the tool call.\n"
+"\n"
+"- NEVER pass the goal name as goal_id. ALWAYS extract goal_id from `get_goals`.\n"
 "\n"
 "4. Missing or partial data\n"
 "- If a tool returns no rows, empty lists, missing fields, or indicates that data is unavailable, you must say: 'There is no data available for this.'\n"
@@ -914,7 +1213,6 @@ def build_messages(body: ChatIn) -> List[Dict[str, str]]:
 "- Do not explain the function-calling system.\n"
 "- Do not mention implementation details or backend.\n"
 "- Do not guess values you did not receive from tools.\n"
-
     ),
 }
 

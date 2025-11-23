@@ -15,196 +15,221 @@ class _LoginScreenState extends State<LoginScreen> {
 
   bool loading = false;
 
-  Future<void> loginUser() async {
-    final email = emailController.text.trim();
-    final password = passwordController.text.trim();
+Future<void> loginUser() async {
+  final email = emailController.text.trim();
+  final password = passwordController.text.trim();
 
-    if (email.isEmpty || password.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please enter email and password.")),
-      );
-      return;
-    }
-
-    setState(() => loading = true);
-
-    try {
-      // ✅ Attempt login
-      final response = await supabase.auth.signInWithPassword(
-        email: email,
-        password: password,
-      );
-
-      if (response.user != null) {
-        // ✅ Successful login
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Login successful!")),
-        );
-
-        // Navigate to Dashboard
-        Navigator.pushReplacementNamed(context, '/dashboard');
-      } else {
-        throw Exception("Invalid credentials.");
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Login failed: $e")),
-      );
-    } finally {
-      setState(() => loading = false);
-    }
+  if (email.isEmpty || password.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text("Please enter email and password."),
+      ),
+    );
+    return;
   }
+
+  setState(() => loading = true);
+
+  try {
+    final response = await supabase.auth.signInWithPassword(
+      email: email,
+      password: password,
+    );
+
+    if (response.user != null) {
+      // SUCCESS
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Login successful!")),
+      );
+      Navigator.pushReplacementNamed(context, '/dashboard');
+    } else {
+      throw Exception("wrong_credentials");
+    }
+  } catch (e) {
+    // CHECK IF IT'S WRONG EMAIL/PASSWORD  
+    final isWrongCred =
+        e.toString().toLowerCase().contains("invalid") ||
+        e.toString().toLowerCase().contains("wrong") ||
+        e.toString().toLowerCase().contains("credential");
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: const Color(0xFF3C2C71),
+        content: Text(
+          isWrongCred
+              ? "Email or password is wrong."
+              : "Login failed. Please try again.",
+          style: const TextStyle(
+            color: Color(0xFFE6DDFC),
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+    );
+  } finally {
+    setState(() => loading = false);
+  }
+}
+
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF181732),
+      backgroundColor: const Color(0xFF0F0F1A),
       body: Stack(
         children: [
-          // ===== BACKGROUND CIRCLES =====
-          Positioned(
-            top: -150,
-            left: -120,
-            child: Container(
-              width: 400,
-              height: 400,
-              decoration: const BoxDecoration(
-                color: Color(0xFF4E46B4),
-                shape: BoxShape.circle,
+          // ===================== TOP PURPLE ARC =====================
+          Container(
+            height: 260,
+            width: double.infinity,
+            decoration: const BoxDecoration(
+              borderRadius: BorderRadius.only(
+                bottomLeft: Radius.circular(40),
+                bottomRight: Radius.circular(40),
               ),
-            ),
-          ),
-          Positioned(
-            top: -80,
-            left: -200,
-            child: Container(
-              width: 600,
-              height: 600,
-              decoration: const BoxDecoration(
-                color: Color(0xFF322B78),
-                shape: BoxShape.circle,
-              ),
-            ),
-          ),
-
-          // ===== MAIN CONTENT =====
-          SafeArea(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 30.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const SizedBox(height: 230),
-                  const Text(
-                    "Log in to your\nAccount",
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 32,
-                      fontWeight: FontWeight.w700,
-                      height: 1.3,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  const Text(
-                    "Please enter your credentials to continue.",
-                    style: TextStyle(color: Colors.white70, fontSize: 16),
-                  ),
-                  const SizedBox(height: 60),
-
-                  // ===== EMAIL =====
-                  const Text(
-                    "Email",
-                    style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w500),
-                  ),
-                  const SizedBox(height: 8),
-                  _buildTextField(
-                    controller: emailController,
-                    hintText: "you@example.com",
-                    isPassword: false,
-                  ),
-                  const SizedBox(height: 25),
-
-                  // ===== PASSWORD =====
-                  const Text(
-                    "Password",
-                    style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w500),
-                  ),
-                  const SizedBox(height: 8),
-                  _buildTextField(
-                    controller: passwordController,
-                    hintText: "********",
-                    isPassword: true,
-                  ),
-
-                  const SizedBox(height: 45),
-
-                  // ===== LOGIN BUTTON =====
-                  SizedBox(
-                    width: double.infinity,
-                    height: 55,
-                    child: ElevatedButton(
-                      onPressed: loading ? null : loginUser,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF7C6FD6),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(30),
-                        ),
-                        elevation: 6,
-                        shadowColor:
-                            const Color(0xFF7C6FD6).withOpacity(0.4),
-                      ),
-                      child: loading
-                          ? const CircularProgressIndicator(
-                              color: Colors.white,
-                            )
-                          : const Text(
-                              "Log In",
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 18,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                    ),
-                  ),
-                  const SizedBox(height: 25),
-
-                  // ===== SIGN UP LINK =====
-                  Center(
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Text(
-                          "Don't have an account? ",
-                          style: TextStyle(
-                            color: Colors.white70,
-                            fontSize: 15,
-                          ),
-                        ),
-                        GestureDetector(
-                          onTap: () {
-                            Navigator.pushNamed(context, '/signup');
-                          },
-                          child: const Text(
-                            "Sign Up",
-                            style: TextStyle(
-                              color: Color(0xFFB19DFA),
-                              fontWeight: FontWeight.w600,
-                              fontSize: 15,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 40),
+              gradient: LinearGradient(
+                colors: [
+                  Color(0xFF6A47CE),
+                  Color(0xFF3C2C71),
                 ],
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+              ),
+            ),
+            child: Stack(
+              children: [
+                // 🔮 Glow
+                Positioned.fill(
+                  child: Container(
+                    decoration: const BoxDecoration(
+                      gradient: RadialGradient(
+                        center: Alignment(0, -0.3),
+                        radius: 0.7,
+                        colors: [
+                          Color(0x90B38CFF),
+                          Color(0x003C2C71),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+
+                // === HEADER TITLE ===
+                const Positioned(
+                  top: 110,
+                  left: 0,
+                  right: 0,
+                  child: Center(
+                    child: Text(
+                      "Log In",
+                      style: TextStyle(
+                        fontSize: 32,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Back arrow
+          SafeArea(
+            child: Align(
+              alignment: Alignment.topLeft,
+              child: IconButton(
+                icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ),
+          ),
+
+          // ===================== CONTENT CARD =====================
+          Positioned(
+            top: 200,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(24, 28, 24, 40),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF181826),
+                  borderRadius: BorderRadius.circular(28),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Email
+                    const Text(
+                      "Email",
+                      style: TextStyle(
+                        color: Color(0xFFBEBED3),
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    _inputField(
+                      controller: emailController,
+                      hint: "you@example.com",
+                      isPassword: false,
+                    ),
+
+                    const SizedBox(height: 28),
+
+                    // Password
+                    const Text(
+                      "Password",
+                      style: TextStyle(
+                        color: Color(0xFFBEBED3),
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    _inputField(
+                      controller: passwordController,
+                      hint: "********",
+                      isPassword: true,
+                    ),
+
+                    const SizedBox(height: 40),
+
+                    // LOGIN BUTTON
+                    SizedBox(
+                      width: double.infinity,
+                      height: 58,
+                      child: ElevatedButton(
+                        onPressed: loading ? null : loginUser,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF7C5CFF),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          shadowColor: const Color(0xAA7C5CFF),
+                          elevation: 10,
+                        ),
+                        child: loading
+                            ? const CircularProgressIndicator(color: Colors.white)
+                            : const Text(
+                                "Log In",
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 19,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 24),
+
+                  ],
+                ),
               ),
             ),
           ),
@@ -213,35 +238,44 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  // ===== Custom TextField =====
-  Widget _buildTextField({
-    required TextEditingController controller,
-    required String hintText,
-    required bool isPassword,
-  }) {
-    return TextField(
-      controller: controller,
-      obscureText: isPassword,
-      style: const TextStyle(color: Colors.white),
-      decoration: InputDecoration(
-        hintText: hintText,
-        hintStyle: const TextStyle(color: Colors.white54),
-        filled: true,
-        fillColor: const Color(0xFF2C284A),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide.none,
-        ),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(
-            color: Color(0xFF9B7EE8),
-            width: 1.5,
+  // ===================== Input Field =====================
+Widget _inputField({
+  required TextEditingController controller,
+  required String hint,
+  bool isPassword = false,
+}) {
+  return Focus(
+    child: Builder(builder: (context) {
+      final bool isFocused = Focus.of(context).hasFocus;
+
+      return AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        decoration: BoxDecoration(
+          color: const Color(0xFF121225), // same background always
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+            color: isFocused
+                ? const Color(0xFF7C5CFF)  
+                : const Color(0xFF2C284A), 
+            width: isFocused ? 2 : 1.4,
           ),
         ),
-      ),
-    );
-  }
+        child: TextField(
+          controller: controller,
+          obscureText: isPassword,
+          style: const TextStyle(color: Colors.white),
+          decoration: InputDecoration(
+            hintText: hint,
+            hintStyle: const TextStyle(color: Colors.white38),
+            border: InputBorder.none,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 20,
+              vertical: 18,
+            ),
+          ),
+        ),
+      );
+    }),
+  );
+}
 }

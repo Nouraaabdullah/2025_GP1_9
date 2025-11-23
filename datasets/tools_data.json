@@ -146,7 +146,7 @@
     "type": "function",
     "function": {
       "name": "get_goals",
-      "description": "Return goals with progress computed from Goal_Transfer.",
+      "description": "Return goals with progress, remaining, and percent_complete ALREADY computed in the backend. The assistant must ALWAYS use these exact values and must NEVER recalculate percentages or progress from raw numbers.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -250,8 +250,47 @@
         "required": ["profile_id", "category_id"]
       }
     }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_goal_transfers",
+      "description": "Return transfer rows for a goal. Accepts either UUID or goal name.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "profile_id": { "type": "string" },
+          "goal_id": {
+            "type": "string",
+            "description": "UUID or goal name. Backend resolves automatically."
+          }
+        },
+        "required": ["profile_id", "goal_id"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_goal_details",
+      "description": "Return details for one goal. The user may refer to the goal by name (goal_name) or by UUID (goal_id). If goal_name is provided, the backend resolves it to UUID.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "profile_id": {
+            "type": "string"
+          },
+          "goal_name": {
+            "type": "string",
+            "description": "Human-readable goal name such as 'goaly'. Preferred input."
+          },
+          "goal_id": {
+            "type": "string",
+            "description": "UUID of the goal. Optional. The assistant should NOT generate UUIDs."
+          }
+        },
+        "required": ["profile_id"]
+      }
+    }
   }
-  
-  
-  
 ]

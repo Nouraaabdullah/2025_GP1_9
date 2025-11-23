@@ -1,6 +1,7 @@
 // lib/main.dart
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:surra_application/screens/Registeration/start_page.dart';
 
 // Background updaters
 import 'services/update_monthly_record_service.dart';
@@ -202,7 +203,9 @@ class _SurraAppState extends State<SurraApp> {
       ),
       initialRoute: initialRoute,
       routes: {
+
         '/welcome': (context) => const WelcomeScreen(),
+        '/startpage': (context) => const StartPage(),
         '/login': (context) => const LoginScreen(),
         '/signup': (context) => const SignUpScreen(),
         '/dashboard': (context) => const DashboardPage(),
@@ -217,6 +220,8 @@ class _SurraAppState extends State<SurraApp> {
         '/setupCategories': (context) => SetupCategoriesScreen(),
         '/addEditCategory': (context) => const AddEditCategoryPage(),
         '/chatbot': (context) => const ChatbotLoader(),
+        
+
       },
     );
   }

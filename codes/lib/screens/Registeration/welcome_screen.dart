@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'start_page.dart';
+
 
 class WelcomeScreen extends StatefulWidget {
   const WelcomeScreen({super.key});
@@ -47,7 +49,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
         timer.cancel();
         // Navigate after animation finishes
         Future.delayed(const Duration(seconds: 2), () {
-          Navigator.pushReplacementNamed(context, '/login');
+          Navigator.pushReplacementNamed(context, '/startpage');
         });
       }
     });

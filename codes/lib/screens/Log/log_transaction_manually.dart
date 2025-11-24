@@ -28,6 +28,10 @@ class _LogTransactionManuallyPageState
 
   String? _profileId;
 
+  // inline validation messages
+  String? _dateErrorText;
+  String? _categoryErrorText;
+
   SupabaseClient get _sb => Supabase.instance.client;
 
   @override
@@ -435,6 +439,11 @@ class _LogTransactionManuallyPageState
 
     String? createdCategoryName;
 
+    // local inline error messages for dialog
+    String? nameErrorText;
+    String? colorErrorText;
+    String? iconErrorText;
+
     await showDialog(
       context: context,
       useRootNavigator: true,
@@ -467,6 +476,17 @@ class _LogTransactionManuallyPageState
                             ? 'Enter a name'
                             : null,
                       ),
+                      if (nameErrorText != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: Text(
+                            nameErrorText!,
+                            style: const TextStyle(
+                              color: Colors.redAccent,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
                       const SizedBox(height: 12),
                       TextFormField(
                         controller: limitCtrl,
@@ -495,8 +515,12 @@ class _LogTransactionManuallyPageState
                           GestureDetector(
                             onTap: () async {
                               final picked = await _pickWheelColor(chosenColor);
-                              if (picked != null)
-                                setDialog(() => chosenColor = picked);
+                              if (picked != null) {
+                                setDialog(() {
+                                  chosenColor = picked;
+                                  colorErrorText = null;
+                                });
+                              }
                             },
                             child: Container(
                               width: 28,
@@ -510,6 +534,17 @@ class _LogTransactionManuallyPageState
                           ),
                         ],
                       ),
+                      if (colorErrorText != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: Text(
+                            colorErrorText!,
+                            style: const TextStyle(
+                              color: Colors.redAccent,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
                       const SizedBox(height: 12),
                       SizedBox(
                         width: 5 * 50 + 4 * 8,
@@ -521,7 +556,10 @@ class _LogTransactionManuallyPageState
                             return SizedBox(
                               width: 50,
                               child: GestureDetector(
-                                onTap: () => setDialog(() => chosenIcon = icon),
+                                onTap: () => setDialog(() {
+                                  chosenIcon = icon;
+                                  iconErrorText = null;
+                                }),
                                 child: Container(
                                   padding: const EdgeInsets.all(8),
                                   decoration: BoxDecoration(
@@ -541,6 +579,17 @@ class _LogTransactionManuallyPageState
                           }).toList(),
                         ),
                       ),
+                      if (iconErrorText != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: Text(
+                            iconErrorText!,
+                            style: const TextStyle(
+                              color: Colors.redAccent,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                 ),
@@ -556,16 +605,24 @@ class _LogTransactionManuallyPageState
                   ),
                   onPressed: () async {
                     if (!formKey.currentState!.validate()) return;
+
+                    // clear previous inline errors
+                    setDialog(() {
+                      nameErrorText = null;
+                      colorErrorText = null;
+                      iconErrorText = null;
+                    });
+
                     if (chosenIcon == null) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Pick an icon')),
-                      );
+                      setDialog(() {
+                        iconErrorText = 'Pick an icon';
+                      });
                       return;
                     }
 
                     final profileId = await _getProfileId();
 
-                    // validation for unique color and unique name
+                    // validation for unique color and unique name (inline)
                     try {
                       final List rows = await _sb
                           .from('Category')
@@ -590,37 +647,29 @@ class _LogTransactionManuallyPageState
                       };
 
                       final chosenHex = _hexFromColorRGB(chosenColor);
+                      final rawName = nameCtrl.text;
+                      final normalized = _normalizeName(rawName);
+
                       if (takenColors.contains(chosenHex)) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text(
-                              'This color is already used by another category. Pick a different color',
-                            ),
-                          ),
-                        );
+                        setDialog(() {
+                          colorErrorText =
+                              'This color is already used by another category. Pick a different color.';
+                        });
                         return;
                       }
 
-                      final rawName = nameCtrl.text;
-                      final normalized = _normalizeName(rawName);
                       if (takenNames.contains(normalized)) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text(
-                              'A category with this name already exists',
-                            ),
-                          ),
-                        );
+                        setDialog(() {
+                          nameErrorText =
+                              'A category with this name already exists';
+                        });
                         return;
                       }
                     } catch (e) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            'Could not validate uniqueness: $e',
-                          ),
-                        ),
-                      );
+                      setDialog(() {
+                        nameErrorText =
+                            'Could not validate uniqueness. Please try again.';
+                      });
                       return;
                     }
 
@@ -628,16 +677,7 @@ class _LogTransactionManuallyPageState
                     num? limit;
                     final lt = limitCtrl.text.trim();
                     if (lt.isNotEmpty) {
-                      final parsed = num.tryParse(lt);
-                      if (parsed == null || parsed < 0) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Enter a valid non negative limit'),
-                          ),
-                        );
-                        return;
-                      }
-                      limit = parsed;
+                      limit = num.tryParse(lt);
                     }
 
                     final payload = {
@@ -659,6 +699,9 @@ class _LogTransactionManuallyPageState
 
                     if (context.mounted) {
                       Navigator.of(ctx, rootNavigator: true).pop();
+                      await _showSuccessDialog(
+                        message: 'Category created successfully.',
+                      );
                     }
                   },
                   child: const Text(
@@ -707,6 +750,208 @@ class _LogTransactionManuallyPageState
     setColor(color);
   }
 
+  // shared warning dialog used for the three warning types
+  Future<void> _showWarningDialog({
+    required String title,
+    required String message,
+  }) async {
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) {
+        return Dialog(
+          backgroundColor: const Color(0xFF141427),
+          insetPadding:
+              const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(40),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: const Color(0xFF1F1F33),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.red.withOpacity(0.6),
+                        blurRadius: 18,
+                        spreadRadius: 2,
+                      ),
+                    ],
+                    border: Border.all(
+                      color: Colors.redAccent,
+                      width: 3,
+                    ),
+                  ),
+                  child: const Center(
+                    child: Icon(
+                      Icons.error_outline,
+                      color: Colors.redAccent,
+                      size: 42,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Text(
+                  title,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  message,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 14,
+                    height: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 28),
+                SizedBox(
+                  width: 120,
+                  height: 44,
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.accent,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      elevation: 16,
+                      shadowColor: AppColors.accent.withOpacity(0.7),
+                    ),
+                    child: const Text(
+                      'OK',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _showSuccessDialog({required String message}) async {
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) {
+        return Dialog(
+          backgroundColor: const Color(0xFF141427),
+          insetPadding:
+              const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(40),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: const Color(0xFF1F1F33),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.green.withOpacity(0.6),
+                        blurRadius: 18,
+                        spreadRadius: 2,
+                      ),
+                    ],
+                    border: Border.all(
+                      color: Colors.greenAccent,
+                      width: 3,
+                    ),
+                  ),
+                  child: const Center(
+                    child: Icon(
+                      Icons.check_circle_outline,
+                      color: Colors.greenAccent,
+                      size: 42,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                const Text(
+                  'Done!',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  message,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 14,
+                    height: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 28),
+                SizedBox(
+                  width: 120,
+                  height: 44,
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.accent,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      elevation: 16,
+                      shadowColor: AppColors.accent.withOpacity(0.7),
+                    ),
+                    child: const Text(
+                      'OK',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _showOverspendNote(String msg) async {
+    await _showWarningDialog(
+      title: 'Warning!',
+      message: msg,
+    );
+  }
+
   Future<void> _submitToDb() async {
     final profileId = await _getProfileId();
 
@@ -729,6 +974,7 @@ class _LogTransactionManuallyPageState
           final createdName = await _createCategoryDialog();
           await _loadCategories();
           _selectedCategory = createdName;
+          _categoryErrorText = null;
         } catch (_) {
           throw Exception('Select or create a category');
         }
@@ -761,8 +1007,8 @@ class _LogTransactionManuallyPageState
           _selectedDate,
         );
         if (limit > 0 && spentNow > limit && mounted) {
-          _showOverspendNote(
-            'Category limit exceeded for ${catRow['name']}. Spent $spentNow over $limit.',
+          await _showOverspendNote(
+            'You have exceeded the monthly limit for ${catRow['name']}. You are overspending in this category.',
           );
         }
       }
@@ -776,22 +1022,16 @@ class _LogTransactionManuallyPageState
           ? currBalRow['current_balance'] as num
           : num.tryParse('${currBalRow['current_balance']}') ?? 0;
 
-      if (currentBalance <= 0) {
-        _showOverspendNote(
-          'Overspending Alert: your balance is now at $currentBalance ',
+      if (currentBalance < 0) {
+        await _showOverspendNote(
+          'This is an overspending warning. Your balance is now negative.',
+        );
+      } else if (currentBalance == 0) {
+        await _showOverspendNote(
+          'This is an overspending warning. Your balance is now zero.',
         );
       }
     }
-  }
-
-  void _showOverspendNote(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(msg),
-        behavior: SnackBarBehavior.floating,
-        backgroundColor: const Color.fromRGBO(49, 47, 55, 1),
-      ),
-    );
   }
 
   // confirmation dialog and zero balance info
@@ -933,30 +1173,10 @@ class _LogTransactionManuallyPageState
   }) async {
     if (!isExpense || newBalance != 0) return;
 
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.card,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text(
-          'Heads up',
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: 20,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        content: const Text(
-          'This expense will bring your balance to 0. We will log it and continue. Future expenses will make your balance negative.',
-          style: TextStyle(color: Colors.white70, fontSize: 14),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
+    await _showWarningDialog(
+      title: 'Warning!',
+      message:
+          'This expense will bring your balance to zero. Future expenses will make your balance negative.',
     );
   }
 
@@ -986,81 +1206,93 @@ class _LogTransactionManuallyPageState
       setState(() {
         _selectedDate = picked;
         _datePicked = true;
+        _dateErrorText = null;
       });
     }
   }
 
-Future<void> _submit() async {
-  if (_formKey.currentState?.validate() != true) return;
+  Future<void> _submit() async {
+    if (_formKey.currentState?.validate() != true) return;
 
-  // NEW date validation: disallow future dates
-  final now = DateTime.now();
-  final today = DateTime(now.year, now.month, now.day);
-  final picked = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day);
-  if (picked.isAfter(today)) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Please choose a valid date (today or a past date)')),
-    );
-    return;
-  }
-
-  if (_type == 'Expense' && _selectedCategory == null) {
-    try {
-      final created = await _createCategoryDialog();
-      await _loadCategories();
-      setState(() => _selectedCategory = created);
-    } catch (_) {
+    // date validation: disallow future dates (inline under date)
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final picked =
+        DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day);
+    if (picked.isAfter(today)) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select or create a category')),
-      );
+      setState(() {
+        _dateErrorText =
+            'Please choose a valid date (today or a past date)';
+      });
       return;
+    } else {
+      if (_dateErrorText != null) {
+        setState(() {
+          _dateErrorText = null;
+        });
+      }
+    }
+
+    if (_type == 'Expense' && _selectedCategory == null) {
+      try {
+        final created = await _createCategoryDialog();
+        await _loadCategories();
+        setState(() {
+          _selectedCategory = created;
+          _categoryErrorText = null;
+        });
+      } catch (_) {
+        if (!mounted) return;
+        setState(() {
+          _categoryErrorText = 'Please select or create a category';
+        });
+        return;
+      }
+    }
+
+    try {
+      final isExpense = _type == 'Expense';
+      final amount = double.parse(_amountCtrl.text.trim());
+      final currentBalance = (await _getCurrentBalance()).toDouble();
+
+      final confirmed = await _showConfirmTransactionDialog(
+        currentBalance: currentBalance,
+        amount: amount,
+        isExpense: isExpense,
+        categoryName: isExpense ? _selectedCategory : null,
+        dateText: _fmt(_selectedDate),
+      );
+      if (!confirmed) return;
+
+      final newBalance =
+          isExpense ? currentBalance - amount : currentBalance + amount;
+
+      await _showZeroBalanceInfoIfNeeded(
+        isExpense: isExpense,
+        newBalance: newBalance,
+      );
+
+      await _submitToDb();
+
+      final preview =
+          '$_type • ${_selectedCategory ?? ''} • ${_amountCtrl.text.trim()} • ${_fmt(_selectedDate)}';
+      if (!mounted) return;
+
+      await _showSuccessDialog(
+        message: _type == 'Expense'
+            ? 'Your expense has been transacted.'
+            : 'Your earning has been added.',
+      );
+
+      // If you still want to log preview somewhere, it's ready in `preview`.
+      Navigator.pop(context);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Could not save: $e')));
     }
   }
-
-  try {
-    final isExpense = _type == 'Expense';
-    final amount = double.parse(_amountCtrl.text.trim());
-    final currentBalance = (await _getCurrentBalance()).toDouble();
-
-    final confirmed = await _showConfirmTransactionDialog(
-      currentBalance: currentBalance,
-      amount: amount,
-      isExpense: isExpense,
-      categoryName: isExpense ? _selectedCategory : null,
-      dateText: _fmt(_selectedDate),
-    );
-    if (!confirmed) return;
-
-    final newBalance = isExpense
-        ? currentBalance - amount
-        : currentBalance + amount;
-
-    await _showZeroBalanceInfoIfNeeded(
-      isExpense: isExpense,
-      newBalance: newBalance,
-    );
-
-    await _submitToDb();
-
-    final preview =
-        '$_type • ${_selectedCategory ?? ''} • ${_amountCtrl.text.trim()} • ${_fmt(_selectedDate)}';
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Saved: $preview'),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-    Navigator.pop(context);
-  } catch (e) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text('Could not save: $e')));
-  }
-}
-
 
   @override
   Widget build(BuildContext context) {
@@ -1168,7 +1400,10 @@ Future<void> _submit() async {
                         onChanged: (v) {
                           setState(() {
                             _type = v;
-                            if (v == 'Earning') _selectedCategory = null;
+                            if (v == 'Earning') {
+                              _selectedCategory = null;
+                              _categoryErrorText = null;
+                            }
                           });
                         },
                       ),
@@ -1198,9 +1433,10 @@ Future<void> _submit() async {
                                       .toList(),
                                   onChanged: _loadingCats
                                       ? null
-                                      : (v) => setState(
-                                          () => _selectedCategory = v,
-                                        ),
+                                      : (v) => setState(() {
+                                            _selectedCategory = v;
+                                            _categoryErrorText = null;
+                                          }),
                                   validator: (v) =>
                                       _type == 'Expense' && v == null
                                           ? 'Select a category'
@@ -1223,7 +1459,10 @@ Future<void> _submit() async {
                                     final created =
                                         await _createCategoryDialog();
                                     await _loadCategories();
-                                    setState(() => _selectedCategory = created);
+                                    setState(() {
+                                      _selectedCategory = created;
+                                      _categoryErrorText = null;
+                                    });
                                   } catch (_) {}
                                 },
                                 icon: const Icon(Icons.add),
@@ -1238,6 +1477,17 @@ Future<void> _submit() async {
                             child: Text(
                               'Loading categories...',
                               style: TextStyle(color: Colors.white70),
+                            ),
+                          ),
+                        if (_categoryErrorText != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 6),
+                            child: Text(
+                              _categoryErrorText!,
+                              style: const TextStyle(
+                                color: Colors.redAccent,
+                                fontSize: 12,
+                              ),
                             ),
                           ),
                         const SizedBox(height: 18),
@@ -1263,8 +1513,9 @@ Future<void> _submit() async {
                             final txt = v?.trim() ?? '';
                             if (txt.isEmpty) return 'Enter an amount';
                             final val = double.tryParse(txt);
-                            if (val == null || val <= 0)
+                            if (val == null || val <= 0) {
                               return 'Enter a valid amount';
+                            }
                             return null;
                           },
                         ),
@@ -1315,6 +1566,17 @@ Future<void> _submit() async {
                           ),
                         ),
                       ),
+                      if (_dateErrorText != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: Text(
+                            _dateErrorText!,
+                            style: const TextStyle(
+                              color: Colors.redAccent,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
                       const SizedBox(height: 28),
 
                       Center(

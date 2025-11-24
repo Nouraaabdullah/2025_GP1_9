@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:surra_application/theme/app_colors.dart';
 import 'package:surra_application/widgets/top_gradient.dart';
-import 'package:surra_application/widgets/curved_dark_section.dart';
 import 'package:surra_application/widgets/bottom_nav_bar.dart';
 import 'package:surra_application/screens/profile/spending_insight.dart';
 import 'package:surra_application/screens/profile/edit_profile/edit_profile.dart';
@@ -19,6 +18,9 @@ class _ProfileMainPageState extends State<ProfileMainPage> {
   final _sb = Supabase.instance.client;
   late Future<_DashboardData> _future;
   bool _isRefreshing = false;
+
+  bool _isIncomeExpanded = false;
+  bool _isExpenseExpanded = false;
 
   @override
   void initState() {
@@ -105,7 +107,6 @@ class _ProfileMainPageState extends State<ProfileMainPage> {
     }
   }
 
-  // ===== Helpers
   double _toDouble(dynamic v) {
     if (v == null) return 0.0;
     if (v is num) return v.toDouble();
@@ -121,13 +122,11 @@ class _ProfileMainPageState extends State<ProfileMainPage> {
       '${d.month.toString().padLeft(2, '0')}-'
       '${d.day.toString().padLeft(2, '0')}';
 
-  // ===== NEW: Reset is_transacted on day 1 for active rows only
   Future<void> _resetIsTransactedIfFirstOfMonth(String profileId) async {
     final now = DateTime.now();
     if (now.day != 1) return;
 
     try {
-      // Incomes
       await _sb
           .from('Fixed_Income')
           .update({'is_transacted': false})
@@ -135,7 +134,6 @@ class _ProfileMainPageState extends State<ProfileMainPage> {
           .filter('end_time', 'is', null)
           .eq('is_transacted', true);
 
-      // Expenses
       await _sb
           .from('Fixed_Expense')
           .update({'is_transacted': false})
@@ -149,13 +147,11 @@ class _ProfileMainPageState extends State<ProfileMainPage> {
     }
   }
 
-  // ===== NEW: Apply today movements exactly once per month using is_transacted
   Future<void> _applyTodayFixedMovements(String profileId) async {
     final now = DateTime.now();
     final todayDay = now.day;
 
     try {
-      // 1) Sum active incomes due today & not transacted
       final incomes = await _sb
           .from('Fixed_Income')
           .select('income_id, monthly_income')
@@ -174,7 +170,6 @@ class _ProfileMainPageState extends State<ProfileMainPage> {
         }
       }
 
-      // 2) Sum active expenses due today & not transacted
       final expenses = await _sb
           .from('Fixed_Expense')
           .select('expense_id, amount')
@@ -193,13 +188,11 @@ class _ProfileMainPageState extends State<ProfileMainPage> {
         }
       }
 
-      // Nothing to do
       if (incomeSum == 0.0 && expenseSum == 0.0) {
         debugPrint('ℹ️ No fixed movements to apply today.');
         return;
       }
 
-      // 3) Read current balance
       final prof = await _sb
           .from('User_Profile')
           .select('current_balance')
@@ -215,24 +208,22 @@ class _ProfileMainPageState extends State<ProfileMainPage> {
       final delta = incomeSum - expenseSum;
       final newBalance = currentBalance + delta;
 
-      // 4) Update balance
       await _sb
           .from('User_Profile')
           .update({'current_balance': newBalance})
           .eq('profile_id', profileId);
 
-      // 5) Mark the rows as transacted for this month (so they don't repeat)
-      if (incomeIdsToMark.isNotEmpty) {
+      for (final id in incomeIdsToMark) {
         await _sb
             .from('Fixed_Income')
             .update({'is_transacted': true})
-            .inFilter('income_id', incomeIdsToMark);
+            .eq('income_id', id);
       }
-      if (expenseIdsToMark.isNotEmpty) {
+      for (final id in expenseIdsToMark) {
         await _sb
             .from('Fixed_Expense')
             .update({'is_transacted': true})
-            .inFilter('expense_id', expenseIdsToMark);
+            .eq('expense_id', id);
       }
 
       debugPrint(
@@ -252,13 +243,9 @@ class _ProfileMainPageState extends State<ProfileMainPage> {
       final todayIso = _isoDate(now);
       final firstIso = _isoDate(firstOfMonth);
 
-      // 1) Reset flags if day 1 (active rows only)
       await _resetIsTransactedIfFirstOfMonth(profileId);
-
-      // 2) Apply today's fixed movements once per month using is_transacted
       await _applyTodayFixedMovements(profileId);
 
-      // 3) PROFILE INFO (after possible balance update)
       final prof = await _sb
           .from('User_Profile')
           .select('full_name, current_balance')
@@ -268,9 +255,6 @@ class _ProfileMainPageState extends State<ProfileMainPage> {
       final fullName = (prof?['full_name'] as String?) ?? 'User';
       final currentBalance = _toDouble(prof?['current_balance']);
 
-      // ===== The rest is unchanged (like your existing page) =====
-
-      // MONTHLY FINANCIAL RECORD (for the mini cards)
       final monthlyRecord = await _sb
           .from('Monthly_Financial_Record')
           .select('total_income, total_expense, total_earning')
@@ -283,7 +267,6 @@ class _ProfileMainPageState extends State<ProfileMainPage> {
       double totalExpense = _toDouble(monthlyRecord?['total_expense']);
       double totalEarnings = _toDouble(monthlyRecord?['total_earning']);
 
-      // Earnings from Transaction (as-is)
       final earnings = await _sb
           .from('Transaction')
           .select('amount, date')
@@ -299,7 +282,6 @@ class _ProfileMainPageState extends State<ProfileMainPage> {
         }
       }
 
-      // Fallback if no monthly record
       if (monthlyRecord == null) {
         final expenses = await _sb
             .from('Transaction')
@@ -332,7 +314,53 @@ class _ProfileMainPageState extends State<ProfileMainPage> {
         }
       }
 
-      // CATEGORIES
+      final fixedIncomeRows = await _sb
+          .from('Fixed_Income')
+          .select('income_id, name, payday, monthly_income, is_primary')
+          .eq('profile_id', profileId)
+          .filter('end_time', 'is', null);
+
+      final fixedExpenseRows = await _sb
+          .from('Fixed_Expense')
+          .select('expense_id, name, due_date, amount')
+          .eq('profile_id', profileId)
+          .filter('end_time', 'is', null);
+
+      final incomeItems = <_TransactionItem>[];
+      if (fixedIncomeRows is List) {
+        final sorted = List.from(fixedIncomeRows);
+        sorted.sort((a, b) {
+          final aIsPrimary = (a['is_primary'] as bool?) ?? false;
+          final bIsPrimary = (b['is_primary'] as bool?) ?? false;
+          if (bIsPrimary && !aIsPrimary) return 1;
+          if (!bIsPrimary && aIsPrimary) return -1;
+          return 0;
+        });
+
+        for (final row in sorted) {
+          final name = (row['name'] as String?) ?? 'Income';
+          final day = row['payday'];
+          final amount = _toDouble(row['monthly_income']);
+          final date = (day == null) ? 'No date' : 'Day $day of month';
+          incomeItems.add(
+            _TransactionItem(title: name, amount: amount, date: date),
+          );
+        }
+      }
+
+      final expenseItems = <_TransactionItem>[];
+      if (fixedExpenseRows is List) {
+        for (final row in fixedExpenseRows) {
+          final name = (row['name'] as String?) ?? 'Expense';
+          final day = row['due_date'];
+          final amount = _toDouble(row['amount']);
+          final date = (day == null) ? 'No date' : 'Day $day of month';
+          expenseItems.add(
+            _TransactionItem(title: name, amount: amount, date: date),
+          );
+        }
+      }
+
       final cats = await _sb
           .from('Category')
           .select('category_id, name, monthly_limit, icon, icon_color')
@@ -392,6 +420,8 @@ class _ProfileMainPageState extends State<ProfileMainPage> {
         totalExpense: totalExpense,
         totalEarnings: totalEarningsFromTransactions,
         categories: items,
+        incomeItems: incomeItems,
+        expenseItems: expenseItems,
       );
     } catch (e) {
       debugPrint('Error fetching dashboard data: $e');
@@ -402,18 +432,16 @@ class _ProfileMainPageState extends State<ProfileMainPage> {
         totalExpense: 0.0,
         totalEarnings: 0.0,
         categories: const [],
+        incomeItems: const [],
+        expenseItems: const [],
       );
     }
   }
 
-  // ===== UI (unchanged)
   String _fmt2(double v) => v.toStringAsFixed(2);
 
   @override
   Widget build(BuildContext context) {
-    final double bottomPad =
-        MediaQuery.of(context).padding.bottom + kBottomNavigationBarHeight + 24;
-
     return Scaffold(
       backgroundColor: AppColors.bg,
       extendBody: true,
@@ -457,232 +485,218 @@ class _ProfileMainPageState extends State<ProfileMainPage> {
             return Stack(
               children: [
                 const TopGradient(height: 450),
-
                 SafeArea(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 12,
-                    ),
+                  child: SingleChildScrollView(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Header
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Expanded(
-                              child: Text(
-                                'Welcome ${data.fullName}',
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 28,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                            Row(
-                              children: [
-                                if (_isRefreshing)
-                                  const Padding(
-                                    padding: EdgeInsets.only(right: 8),
-                                    child: SizedBox(
-                                      width: 16,
-                                      height: 16,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
+                        // ---------- TOP CONTENT WITH PADDING (UNCHANGED) ----------
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 12,
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      'Welcome ${data.fullName}',
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
                                         color: Colors.white,
+                                        fontSize: 28,
+                                        fontWeight: FontWeight.w600,
                                       ),
                                     ),
                                   ),
-                                IconButton(
-                                  icon: const Icon(
-                                    Icons.edit,
-                                    color: Colors.white,
+                                  Row(
+                                    children: [
+                                      if (_isRefreshing)
+                                        const Padding(
+                                          padding: EdgeInsets.only(right: 8),
+                                          child: SizedBox(
+                                            width: 16,
+                                            height: 16,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                              color: Colors.white,
+                                            ),
+                                          ),
+                                        ),
+                                      IconButton(
+                                        icon: const Icon(
+                                          Icons.edit,
+                                          color: Colors.white,
+                                        ),
+                                        onPressed: () => Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (context) =>
+                                                const EditProfilePage(),
+                                          ),
+                                        ).then((_) => _refreshData()),
+                                      ),
+                                      IconButton(
+                                        icon: const Icon(
+                                          Icons.logout,
+                                          color: Colors.white,
+                                        ),
+                                        onPressed: _logout,
+                                        tooltip: 'Logout',
+                                      ),
+                                    ],
                                   ),
-                                  onPressed: () => Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) =>
-                                          const EditProfilePage(),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(18),
+                                decoration: BoxDecoration(
+                                  color: AppColors.card,
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Column(
+                                  children: [
+                                    const Text(
+                                      'Total Balance',
+                                      style: TextStyle(
+                                        color: Color(0xFFD9D9D9),
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w500,
+                                        height: 1.1,
+                                      ),
                                     ),
-                                  ).then((_) => _refreshData()),
-                                ),
-                                IconButton(
-                                  icon: const Icon(
-                                    Icons.logout,
-                                    color: Colors.white,
-                                  ),
-                                  onPressed: _logout,
-                                  tooltip: 'Logout',
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-
-                        // Total Balance
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(18),
-                          decoration: BoxDecoration(
-                            color: AppColors.card,
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Column(
-                            children: [
-                              const Text(
-                                'Total Balance',
-                                style: TextStyle(
-                                  color: Color(0xFFD9D9D9),
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w500,
-                                  height: 1.1,
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      '${_fmt2(data.currentBalance)} SAR',
+                                      style: const TextStyle(
+                                        color: Color(0xFFD9D9D9),
+                                        fontSize: 28,
+                                        fontWeight: FontWeight.w700,
+                                        height: 1.1,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
-                              const SizedBox(height: 6),
-                              Text(
-                                '${_fmt2(data.currentBalance)} SAR',
-                                style: const TextStyle(
-                                  color: Color(0xFFD9D9D9),
-                                  fontSize: 28,
-                                  fontWeight: FontWeight.w700,
-                                  height: 1.1,
-                                ),
-                              ),
+                              const SizedBox(height: 24),
+                              _buildExpandableSummary(data),
+                              const SizedBox(height: 32),
                             ],
                           ),
                         ),
-                        const SizedBox(height: 16),
 
-                        // Expense / Income / Earnings
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _mini(
-                                'Expense',
-                                '${_fmt2(data.totalExpense)} SAR',
-                                Icons.arrow_downward,
-                                const Color(0xFFFF6B9D),
-                              ),
+                        // ---------- BIG CATEGORIES SECTION (UPDATED) ----------
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.fromLTRB(20, 28, 20, 24),
+                          decoration: const BoxDecoration(
+                            color: AppColors.bg, // solid dark, no transparency
+                            borderRadius: BorderRadius.only(
+                              topLeft: Radius.circular(40),
+                              topRight: Radius.circular(40),
                             ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: _mini(
-                                'Income',
-                                '${_fmt2(data.totalIncome)} SAR',
-                                Icons.arrow_upward,
-                                const Color(0xFF4ECDC4),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: _mini(
-                                'Earnings',
-                                '${_fmt2(data.totalEarnings)} SAR',
-                                Icons.arrow_upward,
-                                const Color(0xFFFFD93D),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-
-                // Categories section
-                CurvedDarkSection(
-                  top: 340,
-                  child: Padding(
-                    padding: EdgeInsets.fromLTRB(20, 32, 20, bottomPad),
-                    child: Column(
-                      children: [
-                        Row(
-                          children: [
-                            const Expanded(
-                              child: Text(
-                                'Categories',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w500,
-                                  height: 1.1,
-                                ),
-                              ),
-                            ),
-                            TextButton(
-                              style: TextButton.styleFrom(
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 6,
-                                ),
-                                minimumSize: Size.zero,
-                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                              ),
-                              onPressed: () {
-                                Navigator.of(context)
-                                    .push(
-                                      MaterialPageRoute(
-                                        builder: (_) =>
-                                            const SpendingInsightPage(),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  const Text(
+                                    'Categories',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w500,
+                                      height: 1.1,
+                                    ),
+                                  ),
+                                  TextButton(
+                                    style: TextButton.styleFrom(
+                                      foregroundColor: Colors.white,
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 6,
                                       ),
+                                      minimumSize: Size.zero,
+                                      tapTargetSize:
+                                          MaterialTapTargetSize.shrinkWrap,
+                                    ),
+                                    onPressed: () {
+                                      Navigator.of(context)
+                                          .push(
+                                            MaterialPageRoute(
+                                              builder: (_) =>
+                                                  const SpendingInsightPage(),
+                                            ),
+                                          )
+                                          .then((_) => _refreshData());
+                                    },
+                                    child: const Text(
+                                      'View Details',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w400,
+                                        height: 1.1,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 16),
+                              (data.categories.isEmpty)
+                                  ? GridView.count(
+                                      crossAxisCount: 3,
+                                      mainAxisSpacing: 12,
+                                      crossAxisSpacing: 12,
+                                      childAspectRatio: 0.82,
+                                      shrinkWrap: true,
+                                      physics:
+                                          const NeverScrollableScrollPhysics(),
+                                      children: const [
+                                        _EmptyCategoryCard(),
+                                        _EmptyCategoryCard(),
+                                        _EmptyCategoryCard(),
+                                      ],
                                     )
-                                    .then((_) => _refreshData());
-                              },
-                              child: const Text(
-                                'View Details',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w400,
-                                  height: 1.1,
-                                ),
-                              ),
-                            ),
-                          ],
+                                  : GridView.builder(
+                                      gridDelegate:
+                                          const SliverGridDelegateWithFixedCrossAxisCount(
+                                            crossAxisCount: 3,
+                                            mainAxisSpacing: 12,
+                                            crossAxisSpacing: 12,
+                                            childAspectRatio: 0.82,
+                                          ),
+                                      itemCount: data.categories.length,
+                                      shrinkWrap: true,
+                                      physics:
+                                          const NeverScrollableScrollPhysics(),
+                                      itemBuilder: (context, i) {
+                                        final c = data.categories[i];
+                                        final pct = c.percent == null
+                                            ? '—'
+                                            : '${c.percent!.clamp(0, 100).toStringAsFixed(0)}%';
+                                        return _CategoryCard(
+                                          title: c.name,
+                                          amount: '${_fmt2(c.amount)} SAR',
+                                          percent: pct,
+                                          icon: c.icon,
+                                          color: c.color,
+                                        );
+                                      },
+                                    ),
+                            ],
+                          ),
                         ),
-                        const SizedBox(height: 12),
-
-                        Expanded(
-                          child: (data.categories.isEmpty)
-                              ? GridView.count(
-                                  crossAxisCount: 3,
-                                  mainAxisSpacing: 12,
-                                  crossAxisSpacing: 12,
-                                  childAspectRatio: 0.82,
-                                  children: const [
-                                    _EmptyCategoryCard(),
-                                    _EmptyCategoryCard(),
-                                    _EmptyCategoryCard(),
-                                  ],
-                                )
-                              : GridView.builder(
-                                  gridDelegate:
-                                      const SliverGridDelegateWithFixedCrossAxisCount(
-                                        crossAxisCount: 3,
-                                        mainAxisSpacing: 12,
-                                        crossAxisSpacing: 12,
-                                        childAspectRatio: 0.82,
-                                      ),
-                                  itemCount: data.categories.length,
-                                  itemBuilder: (context, i) {
-                                    final c = data.categories[i];
-                                    final pct = c.percent == null
-                                        ? '—'
-                                        : '${c.percent!.clamp(0, 100).toStringAsFixed(0)}%';
-                                    return _CategoryCard(
-                                      title: c.name,
-                                      amount: '${_fmt2(c.amount)} SAR',
-                                      percent: pct,
-                                      icon: c.icon,
-                                      color: c.color,
-                                    );
-                                  },
-                                ),
-                        ),
+                        const SizedBox(height: 24),
                       ],
                     ),
                   ),
@@ -692,7 +706,6 @@ class _ProfileMainPageState extends State<ProfileMainPage> {
           },
         ),
       ),
-
       bottomNavigationBar: SurraBottomBar(
         onTapDashboard: () => Navigator.pushNamed(context, '/dashboard'),
         onTapSavings: () => Navigator.pushNamed(context, '/savings'),
@@ -701,47 +714,286 @@ class _ProfileMainPageState extends State<ProfileMainPage> {
     );
   }
 
-  Widget _mini(String label, String value, IconData icon, Color iconColor) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
+  Widget _buildExpandableSummary(_DashboardData data) {
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: _buildExpandableCard(
+                label: 'Expense',
+                icon: Icons.arrow_downward,
+                iconColor: const Color(0xFFFF6B9D),
+                amount: _fmt2(data.totalExpense),
+                items: data.expenseItems,
+                isExpanded: _isExpenseExpanded,
+                onToggle: () {
+                  setState(() => _isExpenseExpanded = !_isExpenseExpanded);
+                },
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildExpandableCard(
+                label: 'Income',
+                icon: Icons.arrow_upward,
+                iconColor: const Color(0xFF4ECDC4),
+                amount: _fmt2(data.totalIncome),
+                items: data.incomeItems,
+                isExpanded: _isIncomeExpanded,
+                onToggle: () {
+                  setState(() => _isIncomeExpanded = !_isIncomeExpanded);
+                },
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  vertical: 12,
+                  horizontal: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.card,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.arrow_upward,
+                          color: const Color(0xFFFFD93D),
+                          size: 14,
+                        ),
+                        const SizedBox(width: 4),
+                        const Text(
+                          'Earnings',
+                          style: TextStyle(
+                            color: Color(0xFFD9D9D9),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            height: 1.1,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${_fmt2(data.totalEarnings)} SAR',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: Color(0xFFD9D9D9),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        height: 1.1,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'This month',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Color(0xFFB0B0B0),
+                        fontSize: 9,
+                        fontWeight: FontWeight.w400,
+                        height: 1,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+        if (_isExpenseExpanded)
+          Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: _buildExpandedList(
+              data.expenseItems,
+              const Color(0xFFFF6B9D),
+            ),
+          ),
+        if (_isIncomeExpanded)
+          Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: _buildExpandedList(
+              data.incomeItems,
+              const Color(0xFF4ECDC4),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildExpandableCard({
+    required String label,
+    required IconData icon,
+    required Color iconColor,
+    required String amount,
+    required List<_TransactionItem> items,
+    required bool isExpanded,
+    required VoidCallback onToggle,
+  }) {
+    return Stack(
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+          decoration: BoxDecoration(
+            color: AppColors.card,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, color: iconColor, size: 14),
-              const SizedBox(width: 4),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(icon, color: iconColor, size: 14),
+                  const SizedBox(width: 4),
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      color: Color(0xFFD9D9D9),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      height: 1.1,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
               Text(
-                label,
+                '$amount SAR',
+                textAlign: TextAlign.center,
                 style: const TextStyle(
                   color: Color(0xFFD9D9D9),
                   fontSize: 12,
-                  fontWeight: FontWeight.w500,
+                  fontWeight: FontWeight.w600,
                   height: 1.1,
+                ),
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'This month',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Color(0xFFB0B0B0),
+                  fontSize: 9,
+                  fontWeight: FontWeight.w400,
+                  height: 1,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 4),
-          Text(
-            value,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: Color(0xFFD9D9D9),
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              height: 1.1,
+        ),
+        if (items.isNotEmpty)
+          Positioned(
+            bottom: 4,
+            right: 4,
+            child: GestureDetector(
+              onTap: onToggle,
+              child: Container(
+                width: 24,
+                height: 24,
+                decoration: BoxDecoration(
+                  color: AppColors.bg.withOpacity(0.6),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Icon(
+                  isExpanded ? Icons.expand_less : Icons.expand_more,
+                  color: Colors.white,
+                  size: 16,
+                ),
+              ),
             ),
           ),
-        ],
+      ],
+    );
+  }
+
+  Widget _buildExpandedList(List<_TransactionItem> items, Color accentColor) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.card.withOpacity(0.6),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: accentColor.withOpacity(0.3), width: 1),
+      ),
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        children: items.map((item) {
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Container(
+              decoration: BoxDecoration(
+                color: AppColors.card.withOpacity(0.5),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: accentColor.withOpacity(0.2),
+                  width: 1,
+                ),
+              ),
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    item.title,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      height: 1.1,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        '${_fmt2(item.amount)} SAR',
+                        style: TextStyle(
+                          color: accentColor,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          height: 1.1,
+                        ),
+                      ),
+                      Text(
+                        item.date,
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w400,
+                          height: 1,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          );
+        }).toList(),
       ),
     );
   }
+}
+
+// ===== Data Classes =====
+
+class _TransactionItem {
+  final String title;
+  final double amount;
+  final String date;
+
+  const _TransactionItem({
+    required this.title,
+    required this.amount,
+    required this.date,
+  });
 }
 
 class _DashboardData {
@@ -751,6 +1003,9 @@ class _DashboardData {
   final double totalExpense;
   final double totalEarnings;
   final List<_CategoryDash> categories;
+  final List<_TransactionItem> incomeItems;
+  final List<_TransactionItem> expenseItems;
+
   _DashboardData({
     required this.fullName,
     required this.currentBalance,
@@ -758,6 +1013,8 @@ class _DashboardData {
     required this.totalExpense,
     required this.totalEarnings,
     required this.categories,
+    required this.incomeItems,
+    required this.expenseItems,
   });
 }
 
@@ -767,6 +1024,7 @@ class _CategoryDash {
   final double? percent;
   final String icon;
   final String color;
+
   const _CategoryDash({
     required this.name,
     required this.amount,
@@ -776,8 +1034,11 @@ class _CategoryDash {
   });
 }
 
+// ===== Category Cards =====
+
 class _CategoryCard extends StatelessWidget {
   final String title, amount, percent, icon, color;
+
   const _CategoryCard({
     super.key,
     required this.title,
@@ -871,7 +1132,6 @@ class _CategoryCard extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          // Icon
           Container(
             width: 40,
             height: 40,
@@ -881,10 +1141,7 @@ class _CategoryCard extends StatelessWidget {
             ),
             child: Icon(iconData, color: iconColor, size: 20),
           ),
-
           const SizedBox(height: 6),
-
-          // Title
           Flexible(
             child: Text(
               title,
@@ -903,10 +1160,7 @@ class _CategoryCard extends StatelessWidget {
               ),
             ),
           ),
-
           const SizedBox(height: 4),
-
-          // Amount (2 decimals)
           Text(
             amount,
             textAlign: TextAlign.center,
@@ -923,10 +1177,7 @@ class _CategoryCard extends StatelessWidget {
               height: 1.1,
             ),
           ),
-
           const SizedBox(height: 6),
-
-          // Percent badge
           const _PercentBadgeSpacer(),
           _PercentBadge(
             text: percent == '—' ? 'No limit set' : '$percent budget used',
@@ -940,13 +1191,16 @@ class _CategoryCard extends StatelessWidget {
 
 class _PercentBadgeSpacer extends StatelessWidget {
   final double height;
+
   const _PercentBadgeSpacer({this.height = 0});
+
   @override
   Widget build(BuildContext context) => SizedBox(height: height);
 }
 
 class _PercentBadge extends StatelessWidget {
   final String text;
+
   const _PercentBadge({super.key, required this.text});
 
   @override
@@ -985,6 +1239,7 @@ class _PercentBadge extends StatelessWidget {
 
 class _EmptyCategoryCard extends StatelessWidget {
   const _EmptyCategoryCard();
+
   @override
   Widget build(BuildContext context) {
     return Container(

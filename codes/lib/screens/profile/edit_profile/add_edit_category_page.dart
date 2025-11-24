@@ -71,8 +71,8 @@ class _AddEditCategoryPageState extends State<AddEditCategoryPage> {
     // Pre-fill data if editing
     if (widget.category != null) {
       _nameController.text = widget.category!['name'] ?? '';
-      _limitController.text = (widget.category!['monthly_limit'] ?? 0.0)
-          .toString();
+      _limitController.text =
+          (widget.category!['monthly_limit'] ?? 0.0).toString();
       _selectedIcon = widget.category!['icon'] ?? 'category';
       _selectedColor = widget.category!['icon_color'] ?? '#7D5EF6';
     }
@@ -139,6 +139,104 @@ class _AddEditCategoryPageState extends State<AddEditCategoryPage> {
     }
   }
 
+  Future<void> _showSuccessDialog({required String message}) async {
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) {
+        return Dialog(
+          backgroundColor: const Color(0xFF141427),
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 32,
+            vertical: 24,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(40),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: const Color(0xFF1F1F33),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.green.withOpacity(0.6),
+                        blurRadius: 18,
+                        spreadRadius: 2,
+                      ),
+                    ],
+                    border: Border.all(
+                      color: Colors.greenAccent,
+                      width: 3,
+                    ),
+                  ),
+                  child: const Center(
+                    child: Icon(
+                      Icons.check_circle_outline,
+                      color: Colors.greenAccent,
+                      size: 42,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                const Text(
+                  'Done!',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  message,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 14,
+                    height: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 28),
+                SizedBox(
+                  width: 120,
+                  height: 44,
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF704EF4),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      elevation: 16,
+                      shadowColor:
+                          const Color(0xFF704EF4).withOpacity(0.7),
+                    ),
+                    child: const Text(
+                      'OK',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Future<void> _saveCategory() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -177,7 +275,9 @@ class _AddEditCategoryPageState extends State<AddEditCategoryPage> {
         'profile_id': widget.profileId,
       };
 
-      if (widget.category == null) {
+      final bool isNew = widget.category == null;
+
+      if (isNew) {
         // Add new category
         await _sb.from('Category').insert(payload);
       } else {
@@ -197,7 +297,14 @@ class _AddEditCategoryPageState extends State<AddEditCategoryPage> {
       }
 
       if (mounted) {
-        Navigator.pop(context, true); // Return success
+        await _showSuccessDialog(
+          message: isNew
+              ? 'Your category has been created.'
+              : 'Your category has been updated.',
+        );
+        if (mounted) {
+          Navigator.pop(context, true); // Return success
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -281,7 +388,10 @@ class _AddEditCategoryPageState extends State<AddEditCategoryPage> {
                             decoration: BoxDecoration(
                               color: tempColor,
                               shape: BoxShape.circle,
-                              border: Border.all(color: Colors.white, width: 3),
+                              border: Border.all(
+                                color: Colors.white,
+                                width: 3,
+                              ),
                             ),
                           ),
                         ),
@@ -393,9 +503,9 @@ class _AddEditCategoryPageState extends State<AddEditCategoryPage> {
           Container(
             height: 230,
             width: double.infinity,
-            decoration: BoxDecoration(
-              color: const Color(0xFF704EF4),
-              borderRadius: const BorderRadius.only(
+            decoration: const BoxDecoration(
+              color: Color(0xFF704EF4),
+              borderRadius: BorderRadius.only(
                 bottomLeft: Radius.circular(40),
                 bottomRight: Radius.circular(40),
               ),
@@ -501,7 +611,7 @@ class _AddEditCategoryPageState extends State<AddEditCategoryPage> {
                       _rounded(
                         child: TextFormField(
                           controller: _limitController,
-                          keyboardType: TextInputType.numberWithOptions(
+                          keyboardType: const TextInputType.numberWithOptions(
                             decimal: true,
                           ),
                           decoration: _inputDecoration().copyWith(
@@ -529,10 +639,10 @@ class _AddEditCategoryPageState extends State<AddEditCategoryPage> {
                           physics: const AlwaysScrollableScrollPhysics(),
                           gridDelegate:
                               const SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount: 5,
-                                crossAxisSpacing: 8,
-                                mainAxisSpacing: 8,
-                              ),
+                            crossAxisCount: 5,
+                            crossAxisSpacing: 8,
+                            mainAxisSpacing: 8,
+                          ),
                           itemCount: _availableIcons.length,
                           itemBuilder: (context, index) {
                             final iconInfo = _availableIcons[index];
@@ -683,13 +793,8 @@ class _FieldLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Text(
-      text,
-      style: const TextStyle(
-        color: Colors.white,
-        fontSize: 15,
-        fontWeight: FontWeight.w400,
-      ),
+    return const Text(
+      '',
     );
   }
 }

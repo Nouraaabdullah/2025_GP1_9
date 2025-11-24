@@ -240,6 +240,101 @@ class _AddEditExpensePageState extends State<AddEditExpensePage> {
     super.dispose();
   }
 
+  Future<void> _showSuccessDialog({required String message}) async {
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) {
+        return Dialog(
+          backgroundColor: const Color(0xFF141427),
+          insetPadding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(40),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: const Color(0xFF1F1F33),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.green.withOpacity(0.6),
+                        blurRadius: 18,
+                        spreadRadius: 2,
+                      ),
+                    ],
+                    border: Border.all(
+                      color: Colors.greenAccent,
+                      width: 3,
+                    ),
+                  ),
+                  child: const Center(
+                    child: Icon(
+                      Icons.check_circle_outline,
+                      color: Colors.greenAccent,
+                      size: 42,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                const Text(
+                  'Done!',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  message,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 14,
+                    height: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 28),
+                SizedBox(
+                  width: 120,
+                  height: 44,
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF704EF4),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      elevation: 16,
+                      shadowColor: const Color(0xFF704EF4).withOpacity(0.7),
+                    ),
+                    child: const Text(
+                      'OK',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Future<void> _saveExpense() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -482,7 +577,14 @@ class _AddEditExpensePageState extends State<AddEditExpensePage> {
       }
 
       if (mounted) {
-        Navigator.pop(context, true);
+        await _showSuccessDialog(
+          message: widget.expense == null
+              ? 'Fixed expense added successfully.'
+              : 'Fixed expense updated successfully.',
+        );
+        if (mounted) {
+          Navigator.pop(context, true);
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -793,7 +895,10 @@ class _AddEditExpensePageState extends State<AddEditExpensePage> {
                       const SizedBox(height: 8),
                       _rounded(
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
                           child: DropdownButtonHideUnderline(
                             child: DropdownButtonFormField<String>(
                               value: _selectedCategoryId,
@@ -822,22 +927,22 @@ class _AddEditExpensePageState extends State<AddEditExpensePage> {
                                 ),
                                 ..._uniqueCategories
                                     .map<DropdownMenuItem<String>>((category) {
-                                      final categoryId = category['category_id']
-                                          ?.toString();
-                                      final categoryName =
-                                          category['name'] as String? ??
-                                          'Unnamed Category';
-                                      return DropdownMenuItem<String>(
-                                        value: categoryId,
-                                        child: Text(
-                                          categoryName,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: const TextStyle(
-                                            color: Color(0xFF1E1E1E),
-                                          ),
-                                        ),
-                                      );
-                                    }),
+                                  final categoryId =
+                                      category['category_id']?.toString();
+                                  final categoryName =
+                                      category['name'] as String? ??
+                                      'Unnamed Category';
+                                  return DropdownMenuItem<String>(
+                                    value: categoryId,
+                                    child: Text(
+                                      categoryName,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        color: Color(0xFF1E1E1E),
+                                      ),
+                                    ),
+                                  );
+                                }),
                               ],
                               onChanged: (value) {
                                 setState(() => _selectedCategoryId = value);
@@ -909,9 +1014,8 @@ class _AddEditExpensePageState extends State<AddEditExpensePage> {
                               elevation: 10,
                               shadowColor: const Color(0xFF704EF4),
                             ),
-                            onPressed: _loading
-                                ? null
-                                : _showConfirmationDialog,
+                            onPressed:
+                                _loading ? null : _showConfirmationDialog,
                             child: _loading
                                 ? const SizedBox(
                                     width: 20,

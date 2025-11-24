@@ -18,7 +18,7 @@ class _EditBalancePageState extends State<EditBalancePage> {
 
   bool _loading = false;
 
-  // ======= GET PROFILE ID USING UTILITY FUNCTION =======
+  // ======= GET PROFILE ID =======
   Future<String> _getProfileId() async {
     final profileId = await getProfileId(context);
     if (profileId == null) {
@@ -30,7 +30,6 @@ class _EditBalancePageState extends State<EditBalancePage> {
   @override
   void initState() {
     super.initState();
-    // Pre-fill with current balance
     _balanceController.text = widget.currentBalance.toStringAsFixed(2);
   }
 
@@ -38,6 +37,102 @@ class _EditBalancePageState extends State<EditBalancePage> {
   void dispose() {
     _balanceController.dispose();
     super.dispose();
+  }
+
+  // ========== SUCCESS DIALOG ADDED ==========
+  Future<void> _showSuccessDialog({required String message}) async {
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) {
+        return Dialog(
+          backgroundColor: const Color(0xFF141427),
+          insetPadding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(40),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: const Color(0xFF1F1F33),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.green.withOpacity(0.6),
+                        blurRadius: 18,
+                        spreadRadius: 2,
+                      ),
+                    ],
+                    border: Border.all(
+                      color: Colors.greenAccent,
+                      width: 3,
+                    ),
+                  ),
+                  child: const Center(
+                    child: Icon(
+                      Icons.check_circle_outline,
+                      color: Colors.greenAccent,
+                      size: 42,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                const Text(
+                  'Done!',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  message,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 14,
+                    height: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 28),
+                SizedBox(
+                  width: 120,
+                  height: 44,
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF704EF4),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      elevation: 16,
+                      shadowColor: const Color(0xFF704EF4).withOpacity(0.7),
+                    ),
+                    child: const Text(
+                      'OK',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   void _showConfirmationDialog() {
@@ -157,8 +252,7 @@ class _EditBalancePageState extends State<EditBalancePage> {
     );
   }
 
-  /// Read-only: fetch the fixed "Other" category_id for this profile.
-  /// Throws if not found (your data guarantees it should exist).
+  /// Read-only: fetch the fixed "Other" category_id.
   Future<String> _getOtherCategoryId(String profileId) async {
     final row = await _sb
         .from('Category')
@@ -187,9 +281,8 @@ class _EditBalancePageState extends State<EditBalancePage> {
 
       final double oldBalance = widget.currentBalance;
       final double difference = (newBalance - oldBalance).abs();
-      final String transactionType = newBalance > oldBalance
-          ? 'Earning'
-          : 'Expense';
+      final String transactionType =
+          newBalance > oldBalance ? 'Earning' : 'Expense';
 
       // Update balance in User_Profile
       await _sb
@@ -197,38 +290,39 @@ class _EditBalancePageState extends State<EditBalancePage> {
           .update({'current_balance': newBalance})
           .eq('profile_id', profileId);
 
-      // Record transaction only if there's a difference
+      // Insert transaction if needed
       if (difference > 0) {
-        // Prepare base transaction data
         final Map<String, dynamic> transactionData = {
-          'type': transactionType, // 'Earning' | 'Expense'
+          'type': transactionType,
           'amount': difference,
           'date': _iso(DateTime.now()),
           'profile_id': profileId,
         };
 
-        // If expense, attach the fixed "Other" category
         if (transactionType == 'Expense') {
           final otherId = await _getOtherCategoryId(profileId);
           transactionData['category_id'] = otherId;
         }
-        // If earning: do not attach/change category (kept as you requested)
 
         await _sb.from('Transaction').insert(transactionData);
       }
 
+      // ========== SHOW SUCCESS DIALOG BEFORE POP ==========
       if (mounted) {
-        Navigator.pop(context, true); // Return success
+        await _showSuccessDialog(
+          message: 'Balance updated successfully.',
+        );
       }
+
+      if (mounted) Navigator.pop(context, true);
+
     } catch (e) {
       debugPrint('Error updating balance: $e');
       if (mounted) {
         _showError('Error updating balance: $e');
       }
     } finally {
-      if (mounted) {
-        setState(() => _loading = false);
-      }
+      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -245,9 +339,9 @@ class _EditBalancePageState extends State<EditBalancePage> {
   Widget build(BuildContext context) {
     final double difference =
         double.tryParse(_balanceController.text.trim()) != null
-        ? double.tryParse(_balanceController.text.trim())! -
-              widget.currentBalance
-        : 0.0;
+            ? double.tryParse(_balanceController.text.trim())! -
+                widget.currentBalance
+            : 0.0;
 
     final size = MediaQuery.of(context).size;
 
@@ -255,7 +349,6 @@ class _EditBalancePageState extends State<EditBalancePage> {
       backgroundColor: const Color(0xFF1F1F33),
       body: Stack(
         children: [
-          // Top gradient background
           Container(
             height: 230,
             width: double.infinity,
@@ -268,7 +361,6 @@ class _EditBalancePageState extends State<EditBalancePage> {
             ),
           ),
 
-          // Back button
           SafeArea(
             child: Align(
               alignment: Alignment.topLeft,
@@ -279,7 +371,7 @@ class _EditBalancePageState extends State<EditBalancePage> {
             ),
           ),
 
-          // Main content
+          // MAIN CONTENT
           Positioned(
             top: 150,
             left: 0,
@@ -309,7 +401,6 @@ class _EditBalancePageState extends State<EditBalancePage> {
                       ),
                       const SizedBox(height: 20),
 
-                      // Current Balance Display
                       const _FieldLabel('Current Balance'),
                       const SizedBox(height: 8),
                       _rounded(
@@ -350,7 +441,6 @@ class _EditBalancePageState extends State<EditBalancePage> {
                       ),
                       const SizedBox(height: 18),
 
-                      // New Balance Input
                       const _FieldLabel('New Balance'),
                       const SizedBox(height: 8),
                       _rounded(
@@ -376,7 +466,6 @@ class _EditBalancePageState extends State<EditBalancePage> {
                       ),
                       const SizedBox(height: 18),
 
-                      // Difference Display
                       if (difference != 0)
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -388,9 +477,7 @@ class _EditBalancePageState extends State<EditBalancePage> {
                                 decoration: BoxDecoration(
                                   color: difference > 0
                                       ? const Color(0xFF4CAF50).withOpacity(0.1)
-                                      : const Color(
-                                          0xFFF44336,
-                                        ).withOpacity(0.1),
+                                      : const Color(0xFFF44336).withOpacity(0.1),
                                   borderRadius: BorderRadius.circular(18),
                                 ),
                                 child: Padding(
@@ -447,9 +534,7 @@ class _EditBalancePageState extends State<EditBalancePage> {
                                           color: difference > 0
                                               ? const Color(0xFF4CAF50)
                                               : const Color(0xFFF44336),
-                                          borderRadius: BorderRadius.circular(
-                                            12,
-                                          ),
+                                          borderRadius: BorderRadius.circular(12),
                                         ),
                                         child: Text(
                                           difference > 0
@@ -483,7 +568,6 @@ class _EditBalancePageState extends State<EditBalancePage> {
 
                       const SizedBox(height: 28),
 
-                      // Update Button
                       Center(
                         child: SizedBox(
                           width: 200,
@@ -497,9 +581,7 @@ class _EditBalancePageState extends State<EditBalancePage> {
                               elevation: 10,
                               shadowColor: const Color(0xFF704EF4),
                             ),
-                            onPressed: _loading
-                                ? null
-                                : _showConfirmationDialog,
+                            onPressed: _loading ? null : _showConfirmationDialog,
                             child: _loading
                                 ? const SizedBox(
                                     width: 20,

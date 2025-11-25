@@ -120,6 +120,267 @@ class _SavingsPageState extends State<SavingsPage> with WidgetsBindingObserver {
     await _fetchGoals();
   }
 
+    Future<void> _showSurraSuccessDialog({
+    required IconData icon,
+    required Color ringColor,
+    required String title,
+    required String message,
+  }) {
+    return showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 32),
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(24, 32, 24, 26),
+            decoration: BoxDecoration(
+              color: const Color(0xFF151228),
+              borderRadius: BorderRadius.circular(32),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x66000000),
+                  blurRadius: 30,
+                  offset: Offset(0, 18),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Icon with glowing ring
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: RadialGradient(
+                      colors: [
+                        ringColor.withOpacity(0.40),
+                        Colors.transparent,
+                      ],
+                      radius: 1.1,
+                    ),
+                  ),
+                  child: Container(
+                    width: 84,
+                    height: 84,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: const Color(0xFF151228),
+                      boxShadow: [
+                        BoxShadow(
+                          color: ringColor.withOpacity(0.55),
+                          blurRadius: 22,
+                          spreadRadius: -2,
+                        ),
+                      ],
+                      border: Border.all(
+                        color: ringColor,
+                        width: 4,
+                      ),
+                    ),
+                    child: Icon(
+                      icon,
+                      size: 40,
+                      color: ringColor,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Text(
+                  title,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  message,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 14,
+                    height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 26),
+                SizedBox(
+                  width: 140,
+                  height: 48,
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF5B46F5),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(40),
+                      ),
+                      elevation: 16,
+                      shadowColor: const Color(0xFF5B46F5).withOpacity(0.7),
+                    ),
+                    child: const Text(
+                      'OK',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.4,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _showBasicSuccess({
+    required String title,
+    required String message,
+  }) async {
+  await showDialog<void>(
+    context: context,
+    barrierDismissible: true,
+    builder: (ctx) {
+      return Dialog(
+        backgroundColor: const Color(0xFF141427),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(40),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: const Color(0xFF1F1F33),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.green.withOpacity(0.6),
+                      blurRadius: 18,
+                      spreadRadius: 2,
+                    ),
+                  ],
+                  border: Border.all(
+                    color: Colors.greenAccent,
+                    width: 3,
+                  ),
+                ),
+                child: const Center(
+                  child: Icon(
+                    Icons.check_circle_outline,
+                    color: Colors.greenAccent,
+                    size: 42,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+              const Text(
+                'Done!',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 14,
+                  height: 1.5,
+                ),
+              ),
+              const SizedBox(height: 28),
+              SizedBox(
+                width: 120,
+                height: 44,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF704EF4),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    elevation: 16,
+                    shadowColor: const Color(0xFF704EF4).withOpacity(0.7),
+                  ),
+                  child: const Text(
+                    'OK',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      );
+    },
+  );
+  }
+
+  Future<void> _showGoalStatusAlert(String status) {
+    final s = status.toLowerCase();
+
+    if (s == 'achieved') {
+      // What An Achievement!
+      return _showSurraSuccessDialog(
+        icon: Icons.emoji_events_rounded,
+        ringColor: const Color(0xFFFFD54F),
+        title: 'What An Achievement!',
+        message: 'Goal Status Has Been Now Updated To Achieved.',
+      );
+    } else if (s == 'completed') {
+      // Goal Completed!
+      return _showSurraSuccessDialog(
+        icon: Icons.check_circle_rounded,
+        ringColor: const Color(0xFF4ADE80),
+        title: 'Goal Completed!',
+        message: 'Goal Status Has Been Now Updated To Completed.',
+      );
+    } else if (s == 'uncompleted' || s == 'failed' || s == 'incomplete') {
+      // Target Day Is Due!
+      return _showSurraSuccessDialog(
+        icon: Icons.error_outline_rounded,
+        ringColor: const Color(0xFFFF6B6B),
+        title: 'Target Day Is Due!',
+        message: 'Goal Status Has Been Now Updated To Incomplete.',
+      );
+    } else if (s == 'active' || s == 'Active') {
+      // Active Again!
+      return _showSurraSuccessDialog(
+        icon: Icons.flash_on_rounded,
+        ringColor: const Color(0xFF818CF8),
+        title: 'Active Again!',
+        message: 'Goal Status Has Been Now Updated To Active.',
+      );
+    }
+
+    // Fallback: do nothing
+    return Future.value();
+  }
+
+
   Future<void> _refreshCurrentSavingFromRecord() async {
     try {
       final profileId = await getProfileId(context);
@@ -261,7 +522,7 @@ Future<void> _logCompletedGoalExpense(Goal goal) async {
     final supabase = Supabase.instance.client;
     final amount = goal.targetAmount;
 
-    // Step 1️⃣ — Fetch user-specific, active categories (fixed + custom)
+    // Step 1 — Fetch user-specific, active categories (fixed + custom)
     final categories = await supabase
         .from('Category')
         .select('category_id, name, type, monthly_limit')
@@ -340,7 +601,7 @@ Future<void> _logCompletedGoalExpense(Goal goal) async {
     final now = DateTime.now();
     final monthStart = DateTime(now.year, now.month, 1);
 
-    //  Get current monthly record
+    // Get current monthly record
     final mfr = await supabase
         .from('Monthly_Financial_Record')
         .select('record_id')
@@ -351,7 +612,7 @@ Future<void> _logCompletedGoalExpense(Goal goal) async {
     if (mfr != null) {
       final recordId = mfr['record_id'];
 
-      //  Get total spent in this category this month
+      // Get total spent in this category this month
       final summary = await supabase
           .from('Category_Summary')
           .select('total_expense')
@@ -361,7 +622,7 @@ Future<void> _logCompletedGoalExpense(Goal goal) async {
 
       final double currentExpense = (summary?['total_expense'] ?? 0).toDouble();
 
-      //  Get the category’s monthly limit
+      // Get the category’s monthly limit
       final cat = categories.firstWhere(
         (c) => c['category_id'] == selectedCategory,
         orElse: () => {},
@@ -370,7 +631,7 @@ Future<void> _logCompletedGoalExpense(Goal goal) async {
 
       final double newTotal = currentExpense + amount;
 
-      //  Compare with limit
+      // Compare with limit
       if (limit > 0 && newTotal > limit) {
         await showDialog(
           context: context,
@@ -395,12 +656,12 @@ Future<void> _logCompletedGoalExpense(Goal goal) async {
             ],
           ),
         );
-        return; 
+        return;
       }
     }
 
     try {
-      // Insert expense transaction 
+      // Insert expense transaction
       await supabase.from('Transaction').insert({
         'profile_id': profileId,
         'category_id': selectedCategory,
@@ -408,8 +669,10 @@ Future<void> _logCompletedGoalExpense(Goal goal) async {
         'type': 'Expense',
         'date': DateTime.now().toIso8601String(),
       });
-  await UpdateCategorySummaryService.start(context);
-      //  Get current balance and deduct the amount 
+
+      await UpdateCategorySummaryService.start(context);
+
+      // Get current balance and deduct the amount
       final user = await supabase
           .from('User_Profile')
           .select('current_balance')
@@ -424,42 +687,46 @@ Future<void> _logCompletedGoalExpense(Goal goal) async {
           .update({'current_balance': newBalance})
           .eq('profile_id', profileId);
 
-      // Keep assigned amount as historical
+      // Mark goal as achieved
       await supabase
           .from('Goal')
           .update({'status': 'Achieved'})
           .eq('goal_id', goal.id);
 
-  
       await _generateMonthlySavings();
       await _fetchGoals();
       _recalculateBalances();
 
-      //  Move to achieved tab
+      // Move to achieved tab
       if (!mounted) return;
       setState(() => _selected = GoalType.achieved);
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Goal "${goal.title}" logged successfully as expense!')),
-      );
+      // Status alert: Achieved (gold trophy card)
+      await _showGoalStatusAlert('Achieved');
     } catch (dbError) {
-      debugPrint(' Rolled back due to: $dbError');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error logging expense: $dbError')),
-      );
+      debugPrint('Rolled back due to: $dbError');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error logging expense: $dbError')),
+        );
+      }
     }
   } catch (e) {
-    debugPrint(' Unexpected error logging goal as expense: $e');
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Error logging expense: $e')),
-    );
+    debugPrint('Unexpected error logging goal as expense: $e');
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error logging expense: $e')),
+      );
+    }
   }
 }
 
 
   Future<void> _markExpiredGoalsAsUncompleted() async {
     try {
-      final now = DateTime.now(); 
+      final now = DateTime.now();
+      bool anyUpdated = false;
+
       for (final goal in _goals) {
         if (goal.type == GoalType.active && goal.targetDate != null) {
           if (now.isAfter(goal.targetDate!)) {
@@ -467,15 +734,23 @@ Future<void> _logCompletedGoalExpense(Goal goal) async {
                 .from('Goal')
                 .update({'status': 'Uncompleted'})
                 .eq('goal_id', goal.id);
-            debugPrint(' Goal "${goal.title}" marked as Uncompleted');
+            debugPrint('Goal "${goal.title}" marked as Uncompleted');
+            anyUpdated = true;
           }
         }
       }
-      await _fetchGoals();
+
+      if (anyUpdated) {
+        await _fetchGoals();
+        if (mounted) {
+          await _showGoalStatusAlert('Uncompleted');
+        }
+      }
     } catch (e) {
       debugPrint('Error marking expired goals: $e');
     }
   }
+
 
 
 Future<void> _fetchGoals() async {
@@ -587,23 +862,39 @@ Future<void> _fetchGoals() async {
         if (dir == 'unassign') totalAssigned -= amt;
       }
       totalAssigned = max(0, totalAssigned);
-      final goal = await supabase
+
+      final goalRow = await supabase
           .from('Goal')
-          .select('target_amount')
+          .select('target_amount, status')
           .eq('goal_id', goalId)
           .single();
-      final target = (goal['target_amount'] ?? 0).toDouble();
-      final newStatus = totalAssigned >= target ? 'Completed' : 'Active';
+
+      final target = (goalRow['target_amount'] ?? 0).toDouble();
+      final String? oldStatus = goalRow['status'] as String?;
+      final String newStatus = totalAssigned >= target ? 'Completed' : 'Active';
+
+      if (oldStatus == newStatus) {
+        debugPrint('Goal $goalId status unchanged ($newStatus)');
+        await _fetchGoals();
+        return;
+      }
+
       await supabase
           .from('Goal')
           .update({'status': newStatus})
           .eq('goal_id', goalId);
       debugPrint('Goal $goalId status updated to $newStatus');
+
       await _fetchGoals();
+
+      if (mounted) {
+        await _showGoalStatusAlert(newStatus);
+      }
     } catch (e) {
       debugPrint('Error updating goal status: $e');
     }
   }
+
 
 
 Future<void> _autoAdjustOverAssignedGoals() async {
@@ -1288,7 +1579,7 @@ void _openAssignSheet() {
         ),
       );
 
-      try {
+            try {
         await supabase.from('Goal_Transfer').insert({
           'goal_id': goal.id,
           'amount': amount,
@@ -1300,19 +1591,12 @@ void _openAssignSheet() {
         await _fetchGoals();
         await _generateMonthlySavings();
 
-        
         if (mounted) {
-          ScaffoldMessenger.of(context)
-            ..hideCurrentSnackBar()
-            ..showSnackBar(
-              SnackBar(
-                backgroundColor: Colors.green.shade700,
-                content: Text(
-                  ' Assigned ${_fmt(amount)} SAR to ${goal.title}',
-                  style: const TextStyle(fontWeight: FontWeight.w600),
-                ),
-              ),
-            );
+          ScaffoldMessenger.of(context).hideCurrentSnackBar();
+          await _showBasicSuccess(
+            title: 'Amount Assigned',
+            message: 'Assigned ${_fmt(amount)} SAR to ${goal.title}.',
+          );
         }
       } catch (e) {
         debugPrint('Error assigning: $e');
@@ -1407,7 +1691,7 @@ void _openAssignSheet() {
       backgroundColor: Colors.transparent,
       builder: (_) => UnassignAmountSheet(
         goal: goal,
-        onUnassign: (amount) async {
+                onUnassign: (amount) async {
           try {
             await supabase.from('Goal_Transfer').insert({
               'goal_id': goal.id,
@@ -1420,8 +1704,9 @@ void _openAssignSheet() {
             await _generateMonthlySavings();
             Navigator.pop(context);
             if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Unassigned ${_fmt(amount)} SAR from ${goal.title}')),
+              await _showBasicSuccess(
+                title: 'Amount Unassigned',
+                message: 'Unassigned ${_fmt(amount)} SAR from ${goal.title}.',
               );
             }
           } catch (e) {
@@ -1462,7 +1747,6 @@ void _openAssignSheet() {
     );
     if (ok == true) _deleteGoal(goal);
   }
-
   Future<void> _deleteGoal(Goal goal) async {
     try {
       final profileId = await getProfileId(context);
@@ -1486,15 +1770,17 @@ void _openAssignSheet() {
           'direction': 'Unassign',
           'created_at': DateTime.now().toIso8601String(),
         });
-        debugPrint(' Returned $assignedAmount SAR to unassigned balance');
+        debugPrint('Returned $assignedAmount SAR to unassigned balance');
       }
       await supabase.from('Goal').delete().eq('goal_id', goal.id);
       await _fetchGoals();
       await _generateMonthlySavings();
       await _refreshCurrentSavingFromRecord();
+
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Deleted "${goal.title}" successfully!')),
+        await _showBasicSuccess(
+          title: 'Goal Deleted',
+          message: 'The goal "${goal.title}" has been deleted successfully.',
         );
       }
     } catch (e) {
@@ -1506,6 +1792,7 @@ void _openAssignSheet() {
       }
     }
   }
+
 }
 
 /// ---------------- Widgets ----------------

@@ -342,29 +342,29 @@ class _SavingsPageState extends State<SavingsPage> with WidgetsBindingObserver {
   Future<void> _showGoalStatusAlert(String status) {
     final s = status.toLowerCase();
 
-    if (s == 'achieved') {
+    if (s == 'achieved' || s == 'Achieved') {
       // What An Achievement!
       return _showSurraSuccessDialog(
         icon: Icons.emoji_events_rounded,
         ringColor: const Color(0xFFFFD54F),
-        title: 'What An Achievement!',
-        message: 'Goal Status Has Been Now Updated To Achieved.',
+        title: 'What an Achievement!',
+        message: 'Goal status sas been now updated to Achieved.',
       );
-    } else if (s == 'completed') {
+    } else if (s == 'completed' || s == 'Completed') {
       // Goal Completed!
       return _showSurraSuccessDialog(
         icon: Icons.check_circle_rounded,
         ringColor: const Color(0xFF4ADE80),
         title: 'Goal Completed!',
-        message: 'Goal Status Has Been Now Updated To Completed.',
+        message: 'Goal status sas been now updated to Completed.',
       );
-    } else if (s == 'uncompleted' || s == 'failed' || s == 'incomplete') {
+    } else if (s == 'uncompleted' || s == 'Uncomplete' || s == 'Incomplete' || s == 'incomplete') {
       // Target Day Is Due!
       return _showSurraSuccessDialog(
         icon: Icons.error_outline_rounded,
         ringColor: const Color(0xFFFF6B6B),
-        title: 'Target Day Is Due!',
-        message: 'Goal Status Has Been Now Updated To Incomplete.',
+        title: 'Target Day is Due!',
+        message: 'Goal status sas been now updated to Incomplete.',
       );
     } else if (s == 'active' || s == 'Active') {
       // Active Again!
@@ -372,7 +372,7 @@ class _SavingsPageState extends State<SavingsPage> with WidgetsBindingObserver {
         icon: Icons.flash_on_rounded,
         ringColor: const Color(0xFF818CF8),
         title: 'Active Again!',
-        message: 'Goal Status Has Been Now Updated To Active.',
+        message: 'Goal status sas been now updated to Active.',
       );
     }
 
@@ -1561,23 +1561,6 @@ void _openAssignSheet() {
       //  Immediately close the sheet to prevent double tap
       Navigator.pop(context);
 
-      //  Show loading feedback right away
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          duration: const Duration(seconds: 1),
-          backgroundColor: Colors.black87,
-          content: Row(
-            children: [
-              const CircularProgressIndicator(
-                color: Colors.white,
-                strokeWidth: 2,
-              ),
-              const SizedBox(width: 14),
-              Text('Assigning ${_fmt(amount)} SAR to ${goal.title}...'),
-            ],
-          ),
-        ),
-      );
 
             try {
         await supabase.from('Goal_Transfer').insert({

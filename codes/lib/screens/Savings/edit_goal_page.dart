@@ -113,6 +113,149 @@ class _EditGoalPageState extends State<EditGoalPage> {
     return d.isBefore(t) ? 'Target date cannot be in the past' : null;
   }
 
+  // ⭐ NEW: Show Surra Status Dialog (same as Savings Page)
+  Future<void> _showSurraSuccessDialog({
+    required IconData icon,
+    required Color ringColor,
+    required String title,
+    required String message,
+  }) async {
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 32),
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(24, 32, 24, 26),
+            decoration: BoxDecoration(
+              color: const Color(0xFF151228),
+              borderRadius: BorderRadius.circular(32),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: RadialGradient(
+                      colors: [
+                        ringColor.withOpacity(0.40),
+                        Colors.transparent,
+                      ],
+                      radius: 1.1,
+                    ),
+                  ),
+                  child: Container(
+                    width: 84,
+                    height: 84,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: const Color(0xFF151228),
+                      boxShadow: [
+                        BoxShadow(
+                          color: ringColor.withOpacity(0.55),
+                          blurRadius: 22,
+                        ),
+                      ],
+                      border: Border.all(
+                        color: ringColor,
+                        width: 4,
+                      ),
+                    ),
+                    child: Icon(icon, size: 40, color: ringColor),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Text(
+                  title,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  message,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 14,
+                    height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 26),
+                SizedBox(
+                  width: 140,
+                  height: 48,
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF5B46F5),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(40),
+                      ),
+                      elevation: 16,
+                    ),
+                    child: const Text(
+                      'OK',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // ⭐ NEW: Goal Status Alert (same logic as Savings Page)
+  Future<void> _showGoalStatusAlert(String status) {
+    final s = status.toLowerCase();
+
+    if (s == 'achieved') {
+      return _showSurraSuccessDialog(
+        icon: Icons.emoji_events_rounded,
+        ringColor: const Color(0xFFFFD54F),
+        title: 'What an Achievement!',
+        message: 'Goal status has been now updated to Achieved.',
+      );
+    } else if (s == 'completed') {
+      return _showSurraSuccessDialog(
+        icon: Icons.check_circle_rounded,
+        ringColor: const Color(0xFF4ADE80),
+        title: 'Goal Completed!',
+        message: 'Goal status has been now updated to Completed.',
+      );
+    } else if (s == 'uncompleted' || s == 'failed' || s == 'incomplete') {
+      return _showSurraSuccessDialog(
+        icon: Icons.error_outline_rounded,
+        ringColor: const Color(0xFFFF6B6B),
+        title: 'Target Day is Due!',
+        message: 'Goal status has been now updated to Incomplete.',
+      );
+    } else if (s == 'active') {
+      return _showSurraSuccessDialog(
+        icon: Icons.flash_on_rounded,
+        ringColor: const Color(0xFF818CF8),
+        title: 'Active Again!',
+        message: 'Goal status has been now updated to Active.',
+      );
+    }
+
+    return Future.value();
+  }
+
   Future<void> _save() async {
     _validateForm();
     if (_titleError != null || _amountError != null || _dateError != null) return;
@@ -146,10 +289,17 @@ class _EditGoalPageState extends State<EditGoalPage> {
           'created_at': DateTime.now().toIso8601String(),
         });
         totalAssigned -= excess;
-        debugPrint('Auto-unassigned $excess SAR from goal "${widget.id}"');
       }
+      // Get old status before update
+      final oldRow = await supabase
+          .from('Goal')
+          .select('status')
+          .eq('goal_id', widget.id)
+          .single();
 
+      final oldStatus = (oldRow['status'] ?? '').toString();
       final newStatus = totalAssigned >= newTarget ? 'Completed' : 'Active';
+
       await supabase.from('Goal').update({
         'name': newTitle,
         'target_amount': newTarget,
@@ -158,8 +308,14 @@ class _EditGoalPageState extends State<EditGoalPage> {
         'profile_id': profileId,
       }).eq('goal_id', widget.id);
 
-      await Future.delayed(const Duration(milliseconds: 250));
+      await Future.delayed(const Duration(milliseconds: 300));
 
+      // ⭐ NEW: Show Status Alert FIRST
+      if (newStatus.toLowerCase() != oldStatus.toLowerCase()) {
+        await _showGoalStatusAlert(newStatus);
+      }
+
+      // Refresh parent
       final parent = context.findAncestorStateOfType<State<StatefulWidget>>();
       if (parent != null) {
         final dyn = parent as dynamic;
@@ -167,11 +323,10 @@ class _EditGoalPageState extends State<EditGoalPage> {
           await dyn._fetchGoals?.call();
           await dyn._generateMonthlySavings?.call();
           dyn._recalculateBalances?.call();
-        } catch (e) {
-          debugPrint('Parent refresh failed: $e');
-        }
+        } catch (_) {}
       }
 
+      // Show your original success dialog second
       if (mounted) {
         await _showSuccessDialog(message: 'Goal updated successfully!');
         Future.delayed(const Duration(milliseconds: 500), () {
@@ -187,100 +342,99 @@ class _EditGoalPageState extends State<EditGoalPage> {
   }
 
   Future<void> _showSuccessDialog({required String message}) async {
-  await showDialog<void>(
-    context: context,
-    barrierDismissible: true,
-    builder: (ctx) {
-      return Dialog(
-        backgroundColor: const Color(0xFF141427),
-        insetPadding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(40),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 80,
-                height: 80,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: const Color(0xFF1F1F33),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.green.withOpacity(0.6),
-                      blurRadius: 18,
-                      spreadRadius: 2,
-                    ),
-                  ],
-                  border: Border.all(
-                    color: Colors.greenAccent,
-                    width: 3,
-                  ),
-                ),
-                child: const Center(
-                  child: Icon(
-                    Icons.check_circle_outline,
-                    color: Colors.greenAccent,
-                    size: 42,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 24),
-              const Text(
-                'Done!',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                message,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: Colors.white70,
-                  fontSize: 14,
-                  height: 1.5,
-                ),
-              ),
-              const SizedBox(height: 28),
-              SizedBox(
-                width: 120,
-                height: 44,
-                child: ElevatedButton(
-                  onPressed: () => Navigator.of(ctx).pop(),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF704EF4),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    elevation: 16,
-                    shadowColor: const Color(0xFF704EF4).withOpacity(0.7),
-                  ),
-                  child: const Text(
-                    'OK',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
-            ],
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) {
+        return Dialog(
+          backgroundColor: const Color(0xFF141427),
+          insetPadding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(40),
           ),
-        ),
-      );
-    },
-  );
-}
-
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: const Color(0xFF1F1F33),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.green.withOpacity(0.6),
+                        blurRadius: 18,
+                        spreadRadius: 2,
+                      ),
+                    ],
+                    border: Border.all(
+                      color: Colors.greenAccent,
+                      width: 3,
+                    ),
+                  ),
+                  child: const Center(
+                    child: Icon(
+                      Icons.check_circle_outline,
+                      color: Colors.greenAccent,
+                      size: 42,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                const Text(
+                  'Done!',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  message,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 14,
+                    height: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 28),
+                SizedBox(
+                  width: 120,
+                  height: 44,
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF704EF4),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      elevation: 16,
+                      shadowColor: const Color(0xFF704EF4).withOpacity(0.7),
+                    ),
+                    child: const Text(
+                      'OK',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -326,7 +480,6 @@ class _EditGoalPageState extends State<EditGoalPage> {
             ),
           ),
 
-          // Back arrow
           SafeArea(
             child: Align(
               alignment: Alignment.topLeft,
@@ -338,7 +491,6 @@ class _EditGoalPageState extends State<EditGoalPage> {
             ),
           ),
 
-          // Form Card
           Positioned(
             top: 150,
             left: 0,
@@ -480,7 +632,6 @@ class _EditGoalPageState extends State<EditGoalPage> {
     );
   }
 
-  
   InputDecoration _inputDecoration() {
     return const InputDecoration(
       contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),

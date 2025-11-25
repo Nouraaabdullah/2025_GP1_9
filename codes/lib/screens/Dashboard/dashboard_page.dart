@@ -756,7 +756,8 @@ for (int i = 0; i <= currentWeekIdx && i < 4; i++) {
         const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
         for (var i = 0; i < 12; i++) {
           if (byMonth[i] != 0) {
-            _savingsSeries.add(byMonth[i]);
+            final value = byMonth[i] < 0 ? 0 : byMonth[i];
+            _savingsSeries.add(value);
             _tmpSavingsLabels.add(monthNames[i]);
           }
         }
@@ -777,7 +778,8 @@ for (int i = 0; i <= currentWeekIdx && i < 4; i++) {
         for (final y in years) {
           final total = byYear[y] ?? 0;
           if (total != 0) {
-            _savingsSeries.add(total);
+            final value = total < 0 ? 0 : total; // clamp
+            _savingsSeries.add(value);
             _tmpSavingsLabels.add('$y');
           }
         }

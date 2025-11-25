@@ -104,10 +104,6 @@ class _CreateGoalPageState extends State<CreateGoalPage> {
     final amount = double.parse(_amountCtrl.text);
     final date = _targetDate!;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Creating goal...')),
-    );
-
     try {
       final profileId = await getProfileId(context);
       if (profileId == null) return;
@@ -123,10 +119,10 @@ class _CreateGoalPageState extends State<CreateGoalPage> {
 
       if (response.isEmpty) throw Exception('Insert failed');
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Goal created successfully!')),
-      );
-      Navigator.of(context).pop();
+      await _showSuccessDialog(message: 'Goal created successfully!');
+      Future.delayed(const Duration(milliseconds: 500), () {
+        Navigator.of(context).pop();
+      });
     } catch (e) {
       debugPrint('CreateGoal error: $e');
       ScaffoldMessenger.of(context).showSnackBar(
@@ -379,6 +375,102 @@ class _CreateGoalPageState extends State<CreateGoalPage> {
       ),
     );
   }
+
+  Future<void> _showSuccessDialog({required String message}) async {
+  await showDialog<void>(
+    context: context,
+    barrierDismissible: true,
+    builder: (ctx) {
+      return Dialog(
+        backgroundColor: const Color(0xFF141427),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(40),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: const Color(0xFF1F1F33),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.green.withOpacity(0.6),
+                      blurRadius: 18,
+                      spreadRadius: 2,
+                    ),
+                  ],
+                  border: Border.all(
+                    color: Colors.greenAccent,
+                    width: 3,
+                  ),
+                ),
+                child: const Center(
+                  child: Icon(
+                    Icons.check_circle_outline,
+                    color: Colors.greenAccent,
+                    size: 42,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+              const Text(
+                'Done!',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 14,
+                  height: 1.5,
+                ),
+              ),
+              const SizedBox(height: 28),
+              SizedBox(
+                width: 120,
+                height: 44,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF704EF4),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    elevation: 16,
+                    shadowColor: const Color(0xFF704EF4).withOpacity(0.7),
+                  ),
+                  child: const Text(
+                    'OK',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      );
+    },
+  );
+}
+
 
   Widget _rounded({required Widget child}) {
     return Container(

@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -984,14 +985,23 @@ return RefreshIndicator(
             child: Column(
               children: [
                 const SizedBox(height: 8),
-                TrendsGroupedBars(
-                  labels: _bucketLabels,
-                  seriesA: _seriesExpenses.map((e) => e.toDouble()).toList(),
-                  seriesB: _seriesEarnings.map((e) => e.toDouble()).toList(),
-                  seriesC: _seriesIncome.map((e) => e.toDouble()).toList(),
-                  colorA: _violet,
-                  colorB: _cyan,
-                  colorC: _muted,
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: SizedBox(
+                    width: max(
+                      MediaQuery.of(context).size.width,
+                      _bucketLabels.length * 60, // 60px per month/year, adjust as needed
+                    ),
+                    child: TrendsGroupedBars(
+                      labels: _bucketLabels,
+                      seriesA: _seriesExpenses.map((e) => e.toDouble()).toList(),
+                      seriesB: _seriesEarnings.map((e) => e.toDouble()).toList(),
+                      seriesC: _seriesIncome.map((e) => e.toDouble()).toList(),
+                      colorA: _violet,
+                      colorB: _cyan,
+                      colorC: _muted,
+                    ),
+                  ),
                 ),
                 const SizedBox(height: 12),
                 _LegendRow(items: monthlyLegends),

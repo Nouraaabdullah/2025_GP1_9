@@ -270,113 +270,206 @@ class _SetupExpensesScreenState extends State<SetupExpensesScreen> {
   }
 
   Widget buildExpenseCard(int index) {
-    final expense = expenses[index];
-    final errors = expense['errors'] as Map<String, String?>;
+  final expense = expenses[index];
+  final errors = expense['errors'] as Map<String, String?>;
 
-    return Card(
-      color: const Color(0xFF2A2550),
-      margin: const EdgeInsets.only(bottom: 20),
-      elevation: 6,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(
-          color: const Color(0xFF7959F5).withOpacity(0.3),
-          width: 1.5,
-        ),
+  return Card(
+    color: const Color(0xFF2A2550),
+    margin: const EdgeInsets.only(bottom: 20),
+    elevation: 6,
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(16),
+      side: BorderSide(
+        color: const Color(0xFF7959F5).withOpacity(0.3),
+        width: 1.5,
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Text(
-                  "Expense ${index + 1}",
-                  style: const TextStyle(
-                      color: Color(0xFFB8A8FF),
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold),
+    ),
+    child: Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                "Expense ${index + 1}",
+                style: const TextStyle(
+                  color: Color(0xFFB8A8FF),
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
                 ),
-                const Spacer(),
-                if (index > 0)
-                  IconButton(
-                    icon: const Icon(Icons.delete_outline,
-                        color: Colors.redAccent),
-                    onPressed: () => setState(() => expenses.removeAt(index)),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: expense['name'],
-              style: const TextStyle(color: Colors.white),
-              decoration: _inputDecoration('Expense name (e.g., Rent)'),
-            ),
-            if (errors['name'] != null) _errorText(errors['name']!),
-            const SizedBox(height: 12),
-            TextField(
-              controller: expense['amount'],
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              style: const TextStyle(color: Colors.white),
-              decoration: _inputDecoration('Amount (SAR)'),
-            ),
-            if (errors['amount'] != null) _errorText(errors['amount']!),
-            const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              value: expense['category'],
-              dropdownColor: const Color(0xFF2A2550),
-              style: const TextStyle(color: Colors.white),
-              iconEnabledColor: const Color(0xFFB8A8FF),
-              decoration: _inputDecoration('Select category').copyWith(
-                hintStyle:
-                    const TextStyle(color: Color(0xFFB0AFC5)),
               ),
-              items: ProfileData.categories
-                  .map<DropdownMenuItem<String>>((c) {
-                    final name = c['name'] as String? ?? '';
-                    return DropdownMenuItem(
-                      value: name,
-                      child: Text(name,
-                          style: const TextStyle(color: Colors.white)),
-                    );
-                  })
-                  .toList(),
-              onChanged: (value) => setState(() => expense['category'] = value),
+              const Spacer(),
+              if (index > 0)
+                IconButton(
+                  icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                  onPressed: () => setState(() => expenses.removeAt(index)),
+                ),
+            ],
+          ),
+
+          const SizedBox(height: 20),
+
+          // --- EXPENSE NAME ---
+          const Text(
+            "What is this expense for?",
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
             ),
-            if (errors['category'] != null) _errorText(errors['category']!),
-            TextField(
-              controller: TextEditingController(
-                text: expense['dueDate']?.toString() ?? '',
+          ),
+          const SizedBox(height: 6),
+
+          TextField(
+            controller: expense['name'],
+            style: const TextStyle(color: Colors.white),
+            decoration: _inputDecoration('e.g., Rent, Phone bill, Gym'),
+          ),
+          if (errors['name'] != null) _errorText(errors['name']!),
+
+          const SizedBox(height: 20),
+
+          // --- AMOUNT ---
+          const Text(
+            "How much does it cost each month?",
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 6),
+
+          TextField(
+            controller: expense['amount'],
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            style: const TextStyle(color: Colors.white),
+            decoration: _inputDecoration('Amount in SAR (e.g., 300)'),
+          ),
+          if (errors['amount'] != null) _errorText(errors['amount']!),
+
+          const SizedBox(height: 20),
+
+          // --- CATEGORY ---
+          const Text(
+            "Which category does this belong to?",
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 6),
+
+       DropdownButtonFormField<String>(
+  value: expense['category'],
+  dropdownColor: const Color(0xFF2A2550),
+  style: const TextStyle(color: Colors.white),
+  iconEnabledColor: const Color(0xFFB8A8FF),
+
+  // FIXED: remove hintText from decoration
+  decoration: _inputDecoration('').copyWith(
+    hintText: null,
+  ),
+
+  // FIXED: custom hint with correct color
+  hint: const Text(
+    'Select a category',
+    style: TextStyle(
+      color: Color(0xFFB0AFC5), // same hint color as other fields
+    ),
+  ),
+
+  items: [
+    ...ProfileData.categories.map<DropdownMenuItem<String>>((c) {
+      final name = c['name'] as String? ?? '';
+      return DropdownMenuItem(
+        value: name,
+        child: Text(name, style: const TextStyle(color: Colors.white)),
+      );
+    }).toList(),
+
+    const DropdownMenuItem(
+      value: 'Custom',
+      child: Text("Custom Category",
+          style: TextStyle(color: Colors.white)),
+    ),
+  ],
+
+  onChanged: (value) => setState(() => expense['category'] = value),
+),
+if (errors['category'] != null) _errorText(errors['category']!),
+
+const SizedBox(height: 12),
+
+
+          // --- CUSTOM CATEGORY NAME ---
+          if (expense['category'] == 'Custom') ...[
+            const Text(
+              "Enter your custom category name:",
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
               ),
-              keyboardType: TextInputType.number,
-              inputFormatters: [
-                FilteringTextInputFormatter.digitsOnly,
-                LengthLimitingTextInputFormatter(2),
-              ],
-              style: const TextStyle(color: Colors.white),
-              decoration: _inputDecoration('Enter due day (1–31)'),
-              onChanged: (val) {
-                final number = int.tryParse(val);
-                setState(() {
-                  if (number != null && number >= 1 && number <= 31) {
-                    expense['dueDate'] = number;
-                    (expense['errors'] as Map<String, String?>)['dueDate'] = null;
-                  } else {
-                    expense['dueDate'] = null;
-                    (expense['errors'] as Map<String, String?>)['dueDate'] =
-                        "Enter a valid day (1–31)";
-                  }
-                });
-              },
             ),
-            if (errors['dueDate'] != null) _errorText(errors['dueDate']!),
+            const SizedBox(height: 6),
+
+            TextField(
+              controller: expense['customCategory'],
+              style: const TextStyle(color: Colors.white),
+              decoration: _inputDecoration("e.g., Kids, Pets, Subscriptions"),
+            ),
+            if (errors['customCategory'] != null)
+              _errorText(errors['customCategory']!),
+
+            const SizedBox(height: 20),
           ],
-        ),
+
+          // --- DUE DATE ---
+          const Text(
+            "When is this expense due each month?",
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 6),
+
+          TextField(
+            controller: TextEditingController(
+              text: expense['dueDate']?.toString() ?? '',
+            ),
+            keyboardType: TextInputType.number,
+            inputFormatters: [
+              FilteringTextInputFormatter.digitsOnly,
+              LengthLimitingTextInputFormatter(2),
+            ],
+            style: const TextStyle(color: Colors.white),
+            decoration: _inputDecoration('Enter a day (1–31)'),
+            onChanged: (val) {
+              final number = int.tryParse(val);
+              setState(() {
+                if (number != null && number >= 1 && number <= 31) {
+                  expense['dueDate'] = number;
+                  errors['dueDate'] = null;
+                } else {
+                  expense['dueDate'] = null;
+                  errors['dueDate'] = "Enter a valid day (1–31)";
+                }
+              });
+            },
+          ),
+          if (errors['dueDate'] != null) _errorText(errors['dueDate']!),
+        ],
       ),
-    );
-  }
+    ),
+  );
+}
+
 
   Widget _errorText(String text) => Padding(
         padding: const EdgeInsets.only(top: 4, left: 4),

@@ -225,115 +225,155 @@ class _SetupIncomeScreenState extends State<SetupIncomeScreen> {
         child: Text(text, style: const TextStyle(color: Colors.grey, fontSize: 12)),
       );
 
-  Widget buildIncomeCard(int index) {
-    final income = incomes[index];
-    final isPrimary = index == 0;
-    final errors = income['errors'] as Map<String, String?>;
+ Widget buildIncomeCard(int index) {
+  final income = incomes[index];
+  final isPrimary = index == 0;
+  final errors = income['errors'] as Map<String, String?>;
 
-    return Card(
-      color: const Color(0xFF2A2550),
-      margin: const EdgeInsets.only(bottom: 20),
-      elevation: 6,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(
-          color: isPrimary ? const Color(0xFF7959F5) : Colors.white.withOpacity(0.1),
-          width: isPrimary ? 2 : 1,
-        ),
+  return Card(
+    color: const Color(0xFF2A2550),
+    margin: const EdgeInsets.only(bottom: 20),
+    elevation: 6,
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(16),
+      side: BorderSide(
+        color: isPrimary ? const Color(0xFF7959F5) : Colors.white.withOpacity(0.1),
+        width: isPrimary ? 2 : 1,
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Text(
-                  isPrimary ? "Primary Income (Required)" : "Additional Income ${index}",
-                  style: TextStyle(
-                    color: isPrimary ? const Color(0xFFB8A8FF) : Colors.white70,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const Spacer(),
-                if (!isPrimary)
-                  IconButton(
-                    icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                    onPressed: () => deleteIncomeField(index),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: income['source'],
-              style: const TextStyle(color: Colors.white),
-              decoration: const InputDecoration(
-                hintText: 'Income source (e.g., Salary)',
-                hintStyle: TextStyle(color: Color(0xFFB0AFC5)),
-                filled: true,
-                fillColor: Color(0xFF1F1B3A),
-                border: OutlineInputBorder(
-                    borderRadius: BorderRadius.all(Radius.circular(12))),
-              ),
-            ),
-            if (errors['source'] != null) _errorText(errors['source']!),
-            const SizedBox(height: 10),
-            TextField(
-              controller: income['amount'],
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              style: const TextStyle(color: Colors.white),
-              decoration: const InputDecoration(
-                hintText: 'Amount (SAR)',
-                hintStyle: TextStyle(color: Color(0xFFB0AFC5)),
-                filled: true,
-                fillColor: Color(0xFF1F1B3A),
-                border: OutlineInputBorder(
-                    borderRadius: BorderRadius.all(Radius.circular(12))),
-              ),
-            ),
-            if (errors['amount'] != null) _errorText(errors['amount']!),
-            const SizedBox(height: 10),
-            TextField(
-              controller: TextEditingController(
-                text: income['day']?.toString() ?? '',
-              ),
-              keyboardType: TextInputType.number,
-              inputFormatters: [
-                FilteringTextInputFormatter.digitsOnly,
-                LengthLimitingTextInputFormatter(2),
-              ],
-              style: const TextStyle(color: Colors.white),
-              decoration: const InputDecoration(
-                hintText: 'Enter payday (1–31)',
-                hintStyle: TextStyle(color: Color(0xFFB0AFC5)),
-                filled: true,
-                fillColor: Color(0xFF1F1B3A),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.all(Radius.circular(12)),
+    ),
+    child: Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                isPrimary ? "Primary Income (Required)" : "Additional Income $index",
+                style: TextStyle(
+                  color: isPrimary ? const Color(0xFFB8A8FF) : Colors.white70,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
                 ),
               ),
-              onChanged: (val) {
-                final number = int.tryParse(val);
-                setState(() {
-                  if (number != null && number >= 1 && number <= 31) {
-                    income['day'] = number;
-                    (income['errors'] as Map<String, String?>)['day'] = null;
-                  } else {
-                    income['day'] = null;
-                    (income['errors'] as Map<String, String?>)['day'] =
-                        "Enter 1–31 only";
-                  }
-                });
-              },
+              const Spacer(),
+              if (!isPrimary)
+                IconButton(
+                  icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                  onPressed: () => deleteIncomeField(index),
+                ),
+            ],
+          ),
+
+          const SizedBox(height: 20),
+
+          // --- INCOME NAME ---
+          const Text(
+            "What is the name of your income?",
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
             ),
-            if (errors['day'] != null) _errorText(errors['day']!),
-          ],
-        ),
+          ),
+          const SizedBox(height: 6),
+
+          TextField(
+            controller: income['source'],
+            style: const TextStyle(color: Colors.white),
+            decoration: const InputDecoration(
+              hintText: 'e.g., Salary, Allowance',
+              hintStyle: TextStyle(color: Color(0xFFB0AFC5)),
+              filled: true,
+              fillColor: Color(0xFF1F1B3A),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.all(Radius.circular(12)),
+              ),
+            ),
+          ),
+          if (errors['source'] != null) _errorText(errors['source']!),
+
+          const SizedBox(height: 20),
+
+          // --- AMOUNT ---
+          const Text(
+            "How much do you receive each month?",
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 6),
+
+          TextField(
+            controller: income['amount'],
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            style: const TextStyle(color: Colors.white),
+            decoration: const InputDecoration(
+              hintText: 'Amount in SAR (e.g., 5000)',
+              hintStyle: TextStyle(color: Color(0xFFB0AFC5)),
+              filled: true,
+              fillColor: Color(0xFF1F1B3A),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.all(Radius.circular(12)),
+              ),
+            ),
+          ),
+          if (errors['amount'] != null) _errorText(errors['amount']!),
+
+          const SizedBox(height: 20),
+
+          // --- PAYDAY ---
+          const Text(
+            "When do you get paid each month?",
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 6),
+
+          TextField(
+            controller: TextEditingController(
+              text: income['day']?.toString() ?? '',
+            ),
+            keyboardType: TextInputType.number,
+            inputFormatters: [
+              FilteringTextInputFormatter.digitsOnly,
+              LengthLimitingTextInputFormatter(2),
+            ],
+            style: const TextStyle(color: Colors.white),
+            decoration: const InputDecoration(
+              hintText: 'Enter a day (1–31)',
+              hintStyle: TextStyle(color: Color(0xFFB0AFC5)),
+              filled: true,
+              fillColor: Color(0xFF1F1B3A),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.all(Radius.circular(12)),
+              ),
+            ),
+            onChanged: (val) {
+              final number = int.tryParse(val);
+              setState(() {
+                if (number != null && number >= 1 && number <= 31) {
+                  income['day'] = number;
+                  errors['day'] = null;
+                } else {
+                  income['day'] = null;
+                  errors['day'] = "Enter 1–31 only";
+                }
+              });
+            },
+          ),
+          if (errors['day'] != null) _errorText(errors['day']!),
+        ],
       ),
-    );
-  }
+    ),
+  );
+}
 
   @override
   Widget build(BuildContext context) {

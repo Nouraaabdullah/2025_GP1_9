@@ -27,76 +27,127 @@ import 'screens/registeration/profile_setup/add_edit_category_page.dart';
 // 🟣 Chatbot
 import 'screens/chatbot/chatbot_screen.dart';
 
-class ChatbotLoader extends StatefulWidget {
-  const ChatbotLoader({super.key});
+class ChatbotLoader
+    extends
+        StatefulWidget {
+  const ChatbotLoader({
+    super.key,
+  });
 
   @override
-  State<ChatbotLoader> createState() => _ChatbotLoaderState();
+  State<
+    ChatbotLoader
+  >
+  createState() => _ChatbotLoaderState();
 }
 
-class _ChatbotLoaderState extends State<ChatbotLoader> {
+class _ChatbotLoaderState
+    extends
+        State<
+          ChatbotLoader
+        > {
   @override
   void initState() {
     super.initState();
     _load();
   }
 
-  Future<void> _load() async {
-    final profileId = await getProfileId(context);
+  Future<
+    void
+  >
+  _load() async {
+    final profileId = await getProfileId(
+      context,
+    );
     final userId = Supabase.instance.client.auth.currentUser?.id;
 
     if (!mounted) return;
 
-    if (profileId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Could not load profile")),
+    if (profileId ==
+        null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(
+        const SnackBar(
+          content: Text(
+            "Could not load profile",
+          ),
+        ),
       );
-      Navigator.pop(context);
+      Navigator.pop(
+        context,
+      );
       return;
     }
 
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(
-        builder: (_) => ChatBotScreen(
-          profileId: profileId,
-          userId: userId,
+        builder:
+            (
+              _,
+            ) => ChatBotScreen(
+              profileId: profileId,
+              userId: userId,
+            ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(
+    BuildContext context,
+  ) {
+    return const Scaffold(
+      backgroundColor: Color(
+        0xFF1D1B32,
+      ),
+      body: Center(
+        child: CircularProgressIndicator(
+          color: Color(
+            0xFF7959F5,
+          ),
         ),
       ),
     );
   }
-
-  @override
-  Widget build(BuildContext context) {
-    return const Scaffold(
-      backgroundColor: Color(0xFF1D1B32),
-      body: Center(
-        child: CircularProgressIndicator(color: Color(0xFF7959F5)),
-      ),
-    );
-  }
 }
 
-Future<void> main() async {
+Future<
+  void
+>
+main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await Supabase.initialize(
     url: 'https://xvnkuqqzlstzwgeecijn.supabase.co',
-    anonKey:
-        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh2bmt1cXF6bHN0endnZWVjaWpuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2ODI2NzYsImV4cCI6MjA3NjI1ODY3Nn0.o9qiOIa4WWNMxvF92uyojCPtDS4NGz5qyMBhwki8MDQ',
+    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh2bmt1cXF6bHN0endnZWVjaWpuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2ODI2NzYsImV4cCI6MjA3NjI1ODY3Nn0.o9qiOIa4WWNMxvF92uyojCPtDS4NGz5qyMBhwki8MDQ',
   );
 
-  runApp(const SurraApp());
+  runApp(
+    const SurraApp(),
+  );
 }
 
-class SurraApp extends StatefulWidget {
-  const SurraApp({super.key});
+class SurraApp
+    extends
+        StatefulWidget {
+  const SurraApp({
+    super.key,
+  });
 
   @override
-  State<SurraApp> createState() => _SurraAppState();
+  State<
+    SurraApp
+  >
+  createState() => _SurraAppState();
 }
 
-class _SurraAppState extends State<SurraApp> {
+class _SurraAppState
+    extends
+        State<
+          SurraApp
+        > {
   final _supabase = Supabase.instance.client;
 
   User? _user;
@@ -109,42 +160,74 @@ class _SurraAppState extends State<SurraApp> {
     _getInitialSession();
   }
 
-  Future<void> _getInitialSession() async {
+  Future<
+    void
+  >
+  _getInitialSession() async {
     try {
       final session = _supabase.auth.currentSession;
-      setState(() {
-        _user = session?.user;
-        _isLoading = false;
-      });
+      setState(
+        () {
+          _user = session?.user;
+          _isLoading = false;
+        },
+      );
 
-      if (session?.user != null) {
-        debugPrint('User already logged in – ensuring background updaters start once.');
-        await _ensureMonthlyAndCategoryServices(context);
+      if (session?.user !=
+          null) {
+        debugPrint(
+          'User already logged in – ensuring background updaters start once.',
+        );
+        await _ensureMonthlyAndCategoryServices(
+          context,
+        );
       }
 
-      _supabase.auth.onAuthStateChange.listen((event) async {
-        final session = event.session;
-        if (session != null) {
-          await _ensureMonthlyAndCategoryServices(context);
-        } else {
-          UpdateMonthlyRecordService.stop();
-          UpdateCategorySummaryService.stop();
-          _servicesStarted = false;
-          debugPrint('Updaters stopped after logout');
-        }
-      });
-    } catch (e) {
-      setState(() {
-        _user = null;
-        _isLoading = false;
-      });
-      debugPrint('Error initializing session: $e');
+      _supabase.auth.onAuthStateChange.listen(
+        (
+          event,
+        ) async {
+          final session = event.session;
+          if (session !=
+              null) {
+            await _ensureMonthlyAndCategoryServices(
+              context,
+            );
+          } else {
+            UpdateMonthlyRecordService.stop();
+            UpdateCategorySummaryService.stop();
+            _servicesStarted = false;
+            debugPrint(
+              'Updaters stopped after logout',
+            );
+          }
+        },
+      );
+    } catch (
+      e
+    ) {
+      setState(
+        () {
+          _user = null;
+          _isLoading = false;
+        },
+      );
+      debugPrint(
+        'Error initializing session: $e',
+      );
     }
   }
 
-  Future<void> _ensureMonthlyAndCategoryServices(BuildContext context) async {
+  Future<
+    void
+  >
+  _ensureMonthlyAndCategoryServices(
+    BuildContext context,
+  ) async {
     if (_servicesStarted) {
-      debugPrint('Updaters already running – skipping duplicate start.');
+      debugPrint(
+        'Updaters already running – skipping duplicate start.',
+      );
       return;
     }
     _servicesStarted = true;
@@ -152,76 +235,164 @@ class _SurraAppState extends State<SurraApp> {
     String? profileId;
     int retries = 0;
 
-    while (profileId == null && retries < 5) {
-      profileId = await getProfileId(context);
-      if (profileId == null) {
-        debugPrint('[main.dart] Profile not ready (retry $retries)');
-        await Future.delayed(const Duration(seconds: 1));
+    while (profileId ==
+            null &&
+        retries <
+            5) {
+      profileId = await getProfileId(
+        context,
+      );
+      if (profileId ==
+          null) {
+        debugPrint(
+          '[main.dart] Profile not ready (retry $retries)',
+        );
+        await Future.delayed(
+          const Duration(
+            seconds: 1,
+          ),
+        );
         retries++;
       }
     }
 
-    if (profileId == null) {
-      debugPrint('[main.dart] Failed to fetch profile ID after retries.');
+    if (profileId ==
+        null) {
+      debugPrint(
+        '[main.dart] Failed to fetch profile ID after retries.',
+      );
       _servicesStarted = false;
       return;
     }
 
-    await UpdateMonthlyRecordService.startWithoutContext(profileId);
-    debugPrint('Ensured monthly record exists for $profileId');
+    await UpdateMonthlyRecordService.startWithoutContext(
+      profileId,
+    );
+    debugPrint(
+      'Ensured monthly record exists for $profileId',
+    );
 
-    await UpdateMonthlyRecordService.start(context);
-    await UpdateCategorySummaryService.start(context);
+    await UpdateMonthlyRecordService.start(
+      context,
+    );
+    await UpdateCategorySummaryService.start(
+      context,
+    );
 
-    debugPrint('Background updaters started successfully.');
+    debugPrint(
+      'Background updaters started successfully.',
+    );
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(
+    BuildContext context,
+  ) {
     if (_isLoading) {
       return MaterialApp(
         home: Scaffold(
-          backgroundColor: const Color(0xFF1D1B32),
+          backgroundColor: const Color(
+            0xFF1D1B32,
+          ),
           body: const Center(
-            child: CircularProgressIndicator(color: Color(0xFF7959F5)),
+            child: CircularProgressIndicator(
+              color: Color(
+                0xFF7959F5,
+              ),
+            ),
           ),
         ),
       );
     }
 
-    final bool isLoggedIn = _user != null;
-    final String initialRoute = isLoggedIn ? '/dashboard' : '/welcome';
+    final bool isLoggedIn =
+        _user !=
+        null;
+    final String initialRoute = isLoggedIn
+        ? '/profile'
+        : '/welcome';
 
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Surra',
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF7959F5)),
-        scaffoldBackgroundColor: const Color(0xFF1D1B32),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(
+            0xFF7959F5,
+          ),
+        ),
+        scaffoldBackgroundColor: const Color(
+          0xFF1D1B32,
+        ),
         useMaterial3: true,
         fontFamily: 'Poppins',
       ),
       initialRoute: initialRoute,
       routes: {
-
-        '/welcome': (context) => const WelcomeScreen(),
-        '/startpage': (context) => const StartPage(),
-        '/login': (context) => const LoginScreen(),
-        '/signup': (context) => const SignUpScreen(),
-        '/dashboard': (context) => const DashboardPage(),
-        '/profile': (context) => const ProfileMainPage(),
-        '/editProfile': (context) => const EditProfilePage(),
-        '/savings': (context) => const SavingsPage(),
-        '/setupName': (context) => const SetupNameScreen(),
-        '/setupIncome': (context) => const SetupIncomeScreen(),
-        '/setupExpenses': (context) => const SetupExpensesScreen(),
-        '/setupBalance': (context) => const SetupBalanceScreen(),
-        '/setupComplete': (context) => const SetupCompleteScreen(),
-        '/setupCategories': (context) => SetupCategoriesScreen(),
-        '/addEditCategory': (context) => const AddEditCategoryPage(),
-        '/chatbot': (context) => const ChatbotLoader(),
-        
-
+        '/welcome':
+            (
+              context,
+            ) => const WelcomeScreen(),
+        '/startpage':
+            (
+              context,
+            ) => const StartPage(),
+        '/login':
+            (
+              context,
+            ) => const LoginScreen(),
+        '/signup':
+            (
+              context,
+            ) => const SignUpScreen(),
+        '/dashboard':
+            (
+              context,
+            ) => const DashboardPage(),
+        '/profile':
+            (
+              context,
+            ) => const ProfileMainPage(),
+        '/editProfile':
+            (
+              context,
+            ) => const EditProfilePage(),
+        '/savings':
+            (
+              context,
+            ) => const SavingsPage(),
+        '/setupName':
+            (
+              context,
+            ) => const SetupNameScreen(),
+        '/setupIncome':
+            (
+              context,
+            ) => const SetupIncomeScreen(),
+        '/setupExpenses':
+            (
+              context,
+            ) => const SetupExpensesScreen(),
+        '/setupBalance':
+            (
+              context,
+            ) => const SetupBalanceScreen(),
+        '/setupComplete':
+            (
+              context,
+            ) => const SetupCompleteScreen(),
+        '/setupCategories':
+            (
+              context,
+            ) => SetupCategoriesScreen(),
+        '/addEditCategory':
+            (
+              context,
+            ) => const AddEditCategoryPage(),
+        '/chatbot':
+            (
+              context,
+            ) => const ChatbotLoader(),
       },
     );
   }

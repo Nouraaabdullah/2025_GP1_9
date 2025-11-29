@@ -1794,18 +1794,40 @@ class _CategoryCard
   });
 
   Color _hexToColor(
-    String hex,
+    String value,
   ) {
-    hex = hex.replaceAll(
+    // Remove leading #
+    value = value.replaceAll(
       '#',
       '',
     );
-    if (hex.length ==
-        6)
-      hex = 'FF$hex';
+
+    // If it’s only digits and longer than 8 chars, treat as decimal Color.value
+    final isDecimal =
+        RegExp(
+          r'^[0-9]+$',
+        ).hasMatch(
+          value,
+        ) &&
+        value.length >
+            8;
+    if (isDecimal) {
+      final dec = int.parse(
+        value,
+      ); // decimal
+      return Color(
+        dec,
+      ); // directly use ARGB int
+    }
+
+    // Otherwise treat as hex string (old users)
+    if (value.length ==
+        6) {
+      value = 'FF$value'; // add full alpha
+    }
     return Color(
       int.parse(
-        hex,
+        value,
         radix: 16,
       ),
     );

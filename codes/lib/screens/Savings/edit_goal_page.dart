@@ -10,6 +10,8 @@ class EditGoalPage extends StatefulWidget {
   final String initialTitle;
   final double initialTargetAmount;
   final DateTime? initialTargetDate;
+  final String? initialStatus;
+
 
   const EditGoalPage({
     super.key,
@@ -17,6 +19,7 @@ class EditGoalPage extends StatefulWidget {
     required this.initialTitle,
     required this.initialTargetAmount,
     required this.initialTargetDate,
+    required this.initialStatus,
   });
 
   @override
@@ -38,14 +41,17 @@ class _EditGoalPageState extends State<EditGoalPage> {
   String _formatDate(DateTime d) =>
       '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
-  @override
-  void initState() {
-    super.initState();
-    _titleCtrl = TextEditingController(text: widget.initialTitle);
-    _amountCtrl = TextEditingController(text: widget.initialTargetAmount.toStringAsFixed(0));
-    _targetDate = widget.initialTargetDate;
-    if (_targetDate != null) _dateCtrl.text = _formatDate(_targetDate!);
-  }
+@override
+void initState() {
+  super.initState();
+
+
+  _titleCtrl = TextEditingController();
+  _amountCtrl = TextEditingController();
+
+
+  _loadFreshGoal();
+}
 
   @override
   void dispose() {
@@ -54,44 +60,56 @@ class _EditGoalPageState extends State<EditGoalPage> {
     _dateCtrl.dispose();
     super.dispose();
   }
+Future<void> _pickDate() async {
+  final now = DateTime.now();
 
-  Future<void> _pickDate() async {
-    final now = DateTime.now();
-    final earliest = DateTime(now.year - 5);
-    final latest = DateTime(now.year + 5);
-
-    final safeInitialDate = _targetDate ?? widget.initialTargetDate ?? now;
-    final adjustedInitialDate = safeInitialDate.isBefore(earliest)
-        ? earliest
-        : safeInitialDate.isAfter(latest)
-            ? latest
-            : safeInitialDate;
-
-    final picked = await showDatePicker(
-      context: context,
-      firstDate: earliest,
-      lastDate: latest,
-      initialDate: adjustedInitialDate,
-      builder: (ctx, child) => Theme(
-        data: Theme.of(ctx).copyWith(
-          colorScheme: ColorScheme.dark(
-            primary: AppColors.accent,
-            surface: AppColors.card,
-            onSurface: Colors.white,
+  final picked = await showDatePicker(
+    context: context,
+    initialDate: _targetDate ?? widget.initialTargetDate ?? now,
+    firstDate: DateTime(now.year - 3),
+    lastDate: DateTime(now.year + 3),
+    builder: (context, child) {
+      return Theme(
+        data: Theme.of(context).copyWith(
+          colorScheme: const ColorScheme.light(
+            primary: Color(0xFF704EF4),   
+            onPrimary: Colors.white,      
+            onSurface: Colors.black,    
           ),
         ),
         child: child!,
-      ),
-    );
+      );
+    },
+  );
 
-    if (picked != null) {
-      setState(() {
-        _targetDate = DateTime(picked.year, picked.month, picked.day);
-        _dateCtrl.text = _formatDate(_targetDate!);
-        _validateDate();
-      });
-    }
+  if (picked != null) {
+    setState(() {
+      _targetDate = DateTime(picked.year, picked.month, picked.day);
+      _dateCtrl.text = _formatDate(_targetDate!);
+      _validateDate();                 // show message if past
+    });
   }
+}
+
+Future<void> _loadFreshGoal() async {
+  final row = await supabase
+      .from('Goal')
+      .select()
+      .eq('goal_id', widget.id)
+      .single();
+
+  setState(() {
+    _titleCtrl.text = row['name'] ?? widget.initialTitle;
+    _amountCtrl.text = (row['target_amount'] ?? widget.initialTargetAmount).toString();
+    
+    if (row['target_date'] != null) {
+      _targetDate = DateTime.parse(row['target_date']);
+      _dateCtrl.text = _formatDate(_targetDate!);
+    }
+  });
+}
+
+
 
   void _validateForm() {
     setState(() {
@@ -105,15 +123,27 @@ class _EditGoalPageState extends State<EditGoalPage> {
     });
   }
 
-  String? _validateDate() {
-    if (_targetDate == null) return 'Target date is required';
-    final today = DateTime.now();
-    final d = DateTime(_targetDate!.year, _targetDate!.month, _targetDate!.day);
-    final t = DateTime(today.year, today.month, today.day);
-    return d.isBefore(t) ? 'Target date cannot be in the past' : null;
+String? _validateDate() {
+  if (_targetDate == null) return 'Target date is required';
+
+  final today = DateTime.now();
+  final d = DateTime(_targetDate!.year, _targetDate!.month, _targetDate!.day);
+  final t = DateTime(today.year, today.month, today.day);
+
+
+  if ((widget.initialStatus ?? '').toLowerCase() == 'completed') {
+    return null;
   }
 
-  // ⭐ NEW: Show Surra Status Dialog (same as Savings Page)
+  
+  if (d.isBefore(t)) return 'Target date cannot be in the past';
+
+  return null;
+}
+
+
+
+
   Future<void> _showSurraSuccessDialog({
     required IconData icon,
     required Color ringColor,
@@ -237,7 +267,7 @@ class _EditGoalPageState extends State<EditGoalPage> {
         title: 'Goal Completed!',
         message: 'Goal status has been now updated to Completed.',
       );
-    } else if (s == 'uncompleted' || s == 'failed' || s == 'incomplete') {
+    } else if ( s == 'failed' || s == 'incomplete') {
       return _showSurraSuccessDialog(
         icon: Icons.error_outline_rounded,
         ringColor: const Color(0xFFFF6B6B),
@@ -298,7 +328,43 @@ class _EditGoalPageState extends State<EditGoalPage> {
           .single();
 
       final oldStatus = (oldRow['status'] ?? '').toString();
-      final newStatus = totalAssigned >= newTarget ? 'Completed' : 'Active';
+
+        String newStatus;
+
+        final now = DateTime.now();
+        final today = DateTime(now.year, now.month, now.day);
+        final goalDate = DateTime(_targetDate!.year, _targetDate!.month, _targetDate!.day);
+
+        final bool targetIncreased = newTarget > widget.initialTargetAmount;
+
+        //  If date is old
+        if (goalDate.isBefore(today)) {
+          // old date + enough money → Completed
+          if (totalAssigned >= newTarget) {
+            newStatus = 'Completed';
+          } 
+          // old date + not enough money → Incomplete
+          else {
+            newStatus = 'Incomplete';
+          }
+        }
+        //  Date is future
+        else {
+          // If user increased target → Active
+          if (targetIncreased) {
+            newStatus = 'Active';
+          }
+          // If fully funded → Completed
+          else if (totalAssigned >= newTarget) {
+            newStatus = 'Completed';
+          }
+          // Otherwise → Active
+          else {
+            newStatus = 'Active';
+          }
+        }
+
+
 
       await supabase.from('Goal').update({
         'name': newTitle,
@@ -546,11 +612,13 @@ class _EditGoalPageState extends State<EditGoalPage> {
                           inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                           style: const TextStyle(color: Colors.black),
                           decoration: _inputDecoration().copyWith(
-                            suffixIcon: const Padding(
-                              padding: EdgeInsets.only(right: 12),
-                              child: Icon(Icons.attach_money, size: 18, color: Color(0xFF7A7A8C)),
-                            ),
-                            suffixIconConstraints: const BoxConstraints(minHeight: 24, minWidth: 24),
+                                  prefixText: 'SAR  ',
+                                  prefixStyle: const TextStyle(
+                                    fontSize: 12,
+                                    color: Color(0xFF7A7A8C),
+                                    fontWeight: FontWeight.w600,
+                                  ),
+
                           ),
                           onChanged: (_) => setState(() => _amountError = null),
                         ),

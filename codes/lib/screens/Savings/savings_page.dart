@@ -11,7 +11,7 @@ import '/../../services/category_summary_service.dart';
 
 
 /// ---------------- Domain ----------------
-enum GoalType { active, completed, uncompleted, achieved }
+enum GoalType { active, completed, incompleted, achieved }
 class Goal {
   final String id;
   final String title;
@@ -358,7 +358,7 @@ class _SavingsPageState extends State<SavingsPage> with WidgetsBindingObserver {
         title: 'Goal Completed!',
         message: 'Goal status sas been now updated to Completed.',
       );
-    } else if (s == 'uncompleted' || s == 'Uncomplete' || s == 'Incomplete' || s == 'incomplete') {
+    } else if (s == 'Incomplete' || s == 'incomplete') {
       // Target Day Is Due!
       return _showSurraSuccessDialog(
         icon: Icons.error_outline_rounded,
@@ -493,7 +493,7 @@ class _SavingsPageState extends State<SavingsPage> with WidgetsBindingObserver {
           debugPrint('Goal table changed: ${payload.eventType}');
           if (mounted) {
             await _fetchGoals();
-            await _markExpiredGoalsAsUncompleted();
+            await _markExpiredGoalsAsIncompleted();
           }
         },
       )
@@ -722,7 +722,7 @@ Future<void> _logCompletedGoalExpense(Goal goal) async {
 }
 
 
-  Future<void> _markExpiredGoalsAsUncompleted() async {
+  Future<void> _markExpiredGoalsAsIncompleted() async {
     try {
       final now = DateTime.now();
       bool anyUpdated = false;
@@ -732,9 +732,9 @@ Future<void> _logCompletedGoalExpense(Goal goal) async {
           if (now.isAfter(goal.targetDate!)) {
             await supabase
                 .from('Goal')
-                .update({'status': 'Uncompleted'})
+                .update({'status': 'Incompleted'})
                 .eq('goal_id', goal.id);
-            debugPrint('Goal "${goal.title}" marked as Uncompleted');
+            debugPrint('Goal "${goal.title}" marked as Incompleted');
             anyUpdated = true;
           }
         }
@@ -743,7 +743,7 @@ Future<void> _logCompletedGoalExpense(Goal goal) async {
       if (anyUpdated) {
         await _fetchGoals();
         if (mounted) {
-          await _showGoalStatusAlert('Uncompleted');
+          await _showGoalStatusAlert('Incompleted');
         }
       }
     } catch (e) {
@@ -839,7 +839,7 @@ Future<void> _fetchGoals() async {
     await Future.delayed(const Duration(milliseconds: 100));
     if (mounted) {
       _recalculateBalances();
-      await _markExpiredGoalsAsUncompleted();
+      await _markExpiredGoalsAsIncompleted();
     }
 
     debugPrint('Goals fetched successfully: ${_goals.length}');
@@ -899,8 +899,11 @@ Future<void> _fetchGoals() async {
 
 Future<void> _autoAdjustOverAssignedGoals() async {
   try {
-    //  Compute total assigned (only Active or Achieved goals)
-    final activeGoals = _goals.where((g) => g.status != 'Archived').toList();
+    //  Compute total assigned (only Active)
+    final activeGoals = _goals
+    .where((g) => g.type == GoalType.active || g.type == GoalType.completed)
+    .toList();
+
     final totalAssigned = activeGoals.fold<double>(0.0, (sum, g) => sum + g.savedAmount);
 
     
@@ -947,27 +950,66 @@ if (idx != -1) _goals[idx] = updatedGoal;
 
 
 
-void _recalculateBalances() {
-  //  Compute total assigned from all goals (Active + Achieved)
-  final rawAssigned = _goals.fold(0.0, (sum, g) => sum + g.savedAmount);
+// void _recalculateBalances() {
+//   //  Compute total assigned from all goals 
+//   final rawAssigned = _goals
+//     .where((g) => g.type != GoalType.achieved)
+//     .fold(0.0, (sum, g) => sum + g.savedAmount);
 
-  //  Make sure total saving is never negative
-  _totalSaving = _totalSaving.clamp(0.0, double.infinity);
 
-  //  If total < assigned, cap assigned to total
-  // (so that it never exceeds available savings)
-  final effectiveAssigned = min(rawAssigned, _totalSaving);
+//   //  Make sure total saving is never negative
+//   _totalSaving = _totalSaving.clamp(0.0, double.infinity);
 
-  //  Unassigned = whatever remains, never negative
-  final unassigned = (_totalSaving - effectiveAssigned).clamp(0.0, double.infinity);
+//   //  If total < assigned, cap assigned to total
+//   // (so that it never exceeds available savings)
+//   final effectiveAssigned = min(rawAssigned, _totalSaving);
+
+//   //  Unassigned = whatever remains, never negative
+//   final unassigned = (_totalSaving - effectiveAssigned).clamp(0.0, double.infinity);
 
   
+//   if (!mounted) return;
+//   setState(() {
+//     _assignedBalanceCached = effectiveAssigned;
+//     _unassignedBalance = unassigned;
+//   });
+
+// }
+
+void _recalculateBalances() {
+  // Always keep totalSaving non-negative
+  _totalSaving = _totalSaving.clamp(0.0, double.infinity);
+
+  //  Get total money saved into Achieved goals
+  //    This money is considered "used" and should be removed from the pool.
+  final double achievedTotal = _goals
+      .where((g) => g.type == GoalType.achieved)
+      .fold(0.0, (sum, g) => sum + g.savedAmount);
+
+  //  Assigned money from Active / Completed / Incompleted goals
+  final double activeAssigned = _goals
+      .where((g) =>
+          g.type == GoalType.active ||
+          g.type == GoalType.completed ||
+          g.type == GoalType.incompleted)
+      .fold(0.0, (sum, g) => sum + g.savedAmount);
+
+  //  Remove achieved money from total pool
+  final double effectiveTotal = (_totalSaving - achievedTotal).clamp(0.0, double.infinity);
+
+  //  Assigned cannot exceed what’s left
+  final double effectiveAssigned = activeAssigned > effectiveTotal
+      ? effectiveTotal
+      : activeAssigned;
+
+  //  Unassigned = remaining pool after assigning
+  final double unassigned = (effectiveTotal - effectiveAssigned).clamp(0.0, double.infinity);
+
   if (!mounted) return;
   setState(() {
     _assignedBalanceCached = effectiveAssigned;
     _unassignedBalance = unassigned;
   });
-
 }
 
 
@@ -1057,7 +1099,7 @@ Future<void> _generateMonthlySavings() async {
         case 2:
           return GoalType.completed;
         case 3:
-          return GoalType.uncompleted;
+          return GoalType.incompleted;
         case 4:
           return GoalType.achieved;
         default:
@@ -1067,7 +1109,7 @@ Future<void> _generateMonthlySavings() async {
     final s = status.toString().toLowerCase();
     if (s == 'achieved') return GoalType.achieved;
     if (s == 'completed') return GoalType.completed;
-    if (s == 'uncompleted' || s == 'failed') return GoalType.uncompleted;
+    if (s == 'incompleted' ||s == 'incomplete' || s == 'failed') return GoalType.incompleted;
     return GoalType.active;
   }
 
@@ -1232,7 +1274,7 @@ Widget build(BuildContext context) {
                     Row(
                       children: [
                         Text(
-                          'Total Savings',
+                          'Total Monthly Savings',
                           style: TextStyle(
                             color: AppColors.textGrey.withValues(alpha:0.80),
                             fontSize: 13,
@@ -1297,7 +1339,6 @@ Widget build(BuildContext context) {
                                     ),
                                     const SizedBox(height: 20),
 
-                                    // Dismiss line (the white line at the bottom of the screenshot)
                                     Center(
                                       child: Container(
                                         width: 40,
@@ -1326,7 +1367,7 @@ Widget build(BuildContext context) {
                       '${_fmt(_totalSaving)} SAR',
                       style: const TextStyle(
                         color: Colors.white,
-                        fontSize: 25,
+                        fontSize: 21,
                         fontWeight: FontWeight.w900,
                         letterSpacing: -0.5,
                         shadows: [
@@ -1380,75 +1421,86 @@ Widget build(BuildContext context) {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                padding: const EdgeInsets.only(bottom: 8),
-                decoration: BoxDecoration(
-                  border: Border(
-                    bottom: BorderSide(
-                      color: AppColors.accent.withValues(alpha:0.3),
-                      width: 2,
+              SizedBox(height: 24),
+              Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Container(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  decoration: BoxDecoration(
+                    border: Border(
+                      bottom: BorderSide(
+                        color: AppColors.accent.withValues(alpha:0.3),
+                        width: 2,
+                      ),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: AppColors.accent.withValues(alpha:0.15),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(Icons.flag_rounded, color: AppColors.accent, size: 18),
+                      ),
+                      const SizedBox(width: 10),
+                      const Text(
+                        'Savings Goals',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.3,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                Positioned(
+                  right: 0,
+                  top: -20,
+                  child: Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          AppColors.accent,
+                          AppColors.accent.withOpacity(0.8),
+                        ],
+                      ),
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.accent.withOpacity(0.40),
+                          blurRadius: 12,
+                          offset: Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: () async {
+                          await Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => const CreateGoalPage()),
+                          );
+                          await _fetchGoals();
+                          await _refreshCurrentSavingFromRecord();
+                        },
+                        borderRadius: BorderRadius.circular(24),
+                        child: const Icon(Icons.add_rounded, color: Colors.white, size: 24),
+                      ),
                     ),
                   ),
                 ),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                        color: AppColors.accent.withValues(alpha:0.15),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Icon(Icons.flag_rounded, color: AppColors.accent, size: 18),
-                    ),
-                    const SizedBox(width: 10),
-                    const Text('Savings Goals',
-                        style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700, letterSpacing: 0.3)),
-                  ],
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.only(top: 12, right: 4),
-                child: Row(
-                  mainAxisSize: MainAxisSize.max,
-                  children: [
-                    const Spacer(),
-                    Container(
-                      width: 48,
-                      height: 48,
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [AppColors.accent, AppColors.accent.withValues(alpha:0.80)],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppColors.accent.withValues(alpha:0.40),
-                            blurRadius: 12,
-                            offset: const Offset(0, 4),
-                          )
-                        ],
-                      ),
-                      child: Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          onTap: () async {
-                            await Navigator.push(
-                              context,
-                              MaterialPageRoute(builder: (_) => const CreateGoalPage()),
-                            );
-                            await _fetchGoals();
-                            await _refreshCurrentSavingFromRecord();
-                          },
-                          borderRadius: BorderRadius.circular(24),
-                          child: const Icon(Icons.add_rounded, color: Colors.white, size: 24),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+              ],
+            ),
+
               const SizedBox(height: 14),
               _GoalTypeSelector(
                 selected: _selected,
@@ -1855,12 +1907,12 @@ class _MonthCard extends StatelessWidget {
             const SizedBox(height: 10),
             Text(
               month,
-              style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700, letterSpacing: 0.3),
+              style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700, letterSpacing: 0.3),
             ),
             Text(
               amount,
               style: TextStyle(
-                color: Colors.white, fontSize: 23, fontWeight: FontWeight.w900, letterSpacing: -0.5,
+                color: Colors.white, fontSize: 20, fontWeight: FontWeight.w900, letterSpacing: -0.5,
                 shadows: current ? [Shadow(color: AppColors.accent.withValues(alpha:0.30), blurRadius: 8)] : const [],
               ),
               softWrap: true,
@@ -1876,6 +1928,7 @@ class _MonthCard extends StatelessWidget {
 class _SummaryCard extends StatelessWidget {
   final String title, amount, buttonText;
   final IconData icon;
+  
   final VoidCallback? onPressed;
   const _SummaryCard({
     required this.title,
@@ -1892,6 +1945,7 @@ class _SummaryCard extends StatelessWidget {
     );
     return Container(
       padding: const EdgeInsets.all(20),
+
       decoration: BoxDecoration(
         gradient: gradient,
         borderRadius: BorderRadius.circular(24),
@@ -1900,17 +1954,102 @@ class _SummaryCard extends StatelessWidget {
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          Expanded(
-            child: Text(
-              title,
-              style: TextStyle(color: AppColors.textGrey.withValues(alpha:0.90), fontSize: 13, fontWeight: FontWeight.w600, letterSpacing: 0.3),
+Expanded(
+  child: SizedBox(
+    height: 34,          // <<< THIS FIXES THE CARD HEIGHT
+    child: Text(
+      title,
+      maxLines: 2,
+      overflow: TextOverflow.ellipsis,
+      style: TextStyle(
+        color: AppColors.textGrey.withValues(alpha:0.90),
+        fontSize: 13,
+        fontWeight: FontWeight.w600,
+        letterSpacing: 0.3,
+      ),
+    ),
+  ),
+),
+
+GestureDetector(
+  onTap: () {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+        decoration: BoxDecoration(
+          color: AppColors.card,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: AppColors.accent.withOpacity(0.2),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.info_outline_rounded,
+                    color: AppColors.accent,
+                    size: 18,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 16,
+                  ),
+                ),
+              ],
             ),
-          ),
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(color: Colors.white.withValues(alpha:0.10), borderRadius: BorderRadius.circular(10)),
-            child: Icon(icon, color: AppColors.accent.withValues(alpha:0.80), size: 20),
-          ),
+            const SizedBox(height: 12),
+
+            Text(
+              title == 'Assigned Savings'
+                  ? 'Savings that you have already assigned to your active or completed goals.'
+                  : 'Savings you have not assigned to any goal yet',
+              style: const TextStyle(
+                color: Colors.white70,
+                height: 1.4,
+                fontSize: 13,
+              ),
+            ),
+
+            const SizedBox(height: 20),
+
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.white24,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  },
+  child: const Icon(
+    Icons.info_outline_rounded,
+    color: AppColors.textGrey,
+    size: 20,
+  ),
+),
+
+
         ]),
         const SizedBox(height: 14),
         Text(amount, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w900, letterSpacing: -0.5),
@@ -2033,9 +2172,9 @@ class _GoalTypeSelector extends StatelessWidget {
             fancyTab('Active', Icons.flash_on_rounded, GoalType.active,
                 const Color(0xFF6C63FF)),
             fancyTab('Completed', Icons.check_circle_rounded,
-                GoalType.completed, const Color.fromARGB(255, 31, 160, 57)),
-            fancyTab('Uncompleted', Icons.error_rounded,
-                GoalType.uncompleted, const Color(0xFFFF5252)),
+                GoalType.completed,  Colors.blueAccent),
+            fancyTab('Incompleted', Icons.error_rounded,
+                GoalType.incompleted, const Color(0xFFFF5252)),
             fancyTab('Achieved', Icons.emoji_events_rounded,
                 GoalType.achieved, const Color(0xFFFFD54F)),
             const SizedBox(width: 4),
@@ -2089,21 +2228,21 @@ class _GoalTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final isActive = goal.type == GoalType.active;
     final isCompleted = goal.type == GoalType.completed;
-    final isUncompleted = goal.type == GoalType.uncompleted;
+    final isIncompleted = goal.type == GoalType.incompleted;
     final isAchieved = goal.type == GoalType.achieved;
 
 
     final Color accentColor = isCompleted
-        ? const Color.fromARGB(255, 30, 163, 57) 
-        : isUncompleted
+        ? Colors.blueAccent
+        : isIncompleted
             ? const Color(0xFFEF4444) 
             : isAchieved
                 ? const Color(0xFFFBBF24) 
-                : const Color(0xFF8B5CF6); 
+                : const Color(0xFF6C63FF); 
     
     final Color bgColor = isCompleted
         ? const Color(0xFF064E3B).withValues(alpha:0.15) 
-        : isUncompleted
+        : isIncompleted
             ? const Color(0xFF7F1D1D).withValues(alpha:0.15) 
             : isAchieved
                 ? const Color(0xFF78350F).withValues(alpha:0.15) 
@@ -2159,7 +2298,7 @@ class _GoalTile extends StatelessWidget {
         ),
         child: Icon(Icons.check_circle_rounded, color: accentColor, size: 20),
       );
-    } else if (isUncompleted) {
+    } else if (isIncompleted) {
       statusChip = Container(
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
@@ -2206,6 +2345,7 @@ class _GoalTile extends StatelessWidget {
             initialTitle: goal.title,
             initialTargetAmount: goal.targetAmount,
             initialTargetDate: goal.targetDate,
+            initialStatus: goal.status,
           ),
         ),
       );
@@ -2234,7 +2374,7 @@ class _GoalTile extends StatelessWidget {
     }
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 12), // Added bottom margin for space between tiles
+      margin: const EdgeInsets.only(bottom: 12), 
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
@@ -2316,7 +2456,7 @@ class _GoalTile extends StatelessWidget {
                                   ? 'In Progress'
                                   : isCompleted
                                       ? 'Goal Completed'
-                                      : isUncompleted
+                                      : isIncompleted
                                           ? 'Not Completed'
                                           : 'Achieved',
                               style: TextStyle(
@@ -2334,11 +2474,11 @@ class _GoalTile extends StatelessWidget {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           if (goal.type == GoalType.active ||
-                              goal.type == GoalType.uncompleted ||
+                              goal.type == GoalType.incompleted ||
                               goal.type == GoalType.completed) ...[
                             _EnhancedIconButton(
                               icon: Icons.edit_rounded,
-                              color: const Color.fromARGB(255, 167, 166, 166),
+                              color: const Color(0xFF9BA4B5),
                               onTap: _openEdit,
                             ),
                             const SizedBox(width: 8),

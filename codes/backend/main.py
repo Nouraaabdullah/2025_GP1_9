@@ -1151,7 +1151,7 @@ def build_messages(body: ChatIn) -> List[Dict[str, str]]:
 "\n"
 "When the user asks:\n"
 "- \"active goals\" → return only ACTIVE.\n"
-"- \"uncompleted goals\" → return only INCOMPLETE.\n"
+"- \"incompleted goals\" → return only INCOMPLETE.\n"
 "- \"completed goals\" → return only COMPLETED.\n"
 "- \"achieved goals\" → return only ACHIEVED.\n"
 "\n"

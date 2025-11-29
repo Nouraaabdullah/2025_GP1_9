@@ -1,8 +1,134 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'shared_profile_data.dart';
 
-
-class SetupCompleteScreen extends StatelessWidget {
+class SetupCompleteScreen extends StatefulWidget {
   const SetupCompleteScreen({super.key});
+
+  @override
+  State<SetupCompleteScreen> createState() => _SetupCompleteScreenState();
+}
+
+class _SetupCompleteScreenState extends State<SetupCompleteScreen> {
+  final supabase = Supabase.instance.client;
+  bool saving = false;
+
+  Future<void> _submitFinalData(BuildContext context) async {
+    if (saving) return;
+    setState(() => saving = true);
+
+    try {
+      final user = supabase.auth.currentUser;
+      if (user == null) throw Exception("No logged-in user");
+
+      // ---------------------------------------
+      // 1) Get profile_id
+      // ---------------------------------------
+      final profileResponse = await supabase
+          .from('User_Profile')
+          .select('profile_id')
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+      if (profileResponse == null) throw Exception("Profile not found");
+      final profileId = profileResponse['profile_id'];
+
+      // ---------------------------------------
+      // 2) Update profile (name + balance)
+      // ---------------------------------------
+      await supabase.from('User_Profile').update({
+        'full_name': ProfileData.userName,
+        'current_balance': ProfileData.currentBalance,
+      }).eq('profile_id', profileId);
+
+      // ---------------------------------------
+      // 3) Insert incomes
+      // ---------------------------------------
+      if (ProfileData.incomes.isNotEmpty) {
+        final incomeRecords = ProfileData.incomes.map((i) {
+          return {
+            'profile_id': profileId,
+            'name': i['source'],
+            'monthly_income': i['amount'],
+            'payday': i['payday'],
+            'is_primary': false,
+          };
+        }).toList();
+
+        await supabase.from('Fixed_Income').insert(incomeRecords);
+      }
+
+      // ---------------------------------------
+      // 4) Insert fixed expenses WITH CATEGORY ID
+      // ---------------------------------------
+      if (ProfileData.fixedExpenses.isNotEmpty) {
+        final expenseRecords = [];
+
+        for (var e in ProfileData.fixedExpenses) {
+          final categoryName = e['category'];
+
+          // find category_id (limit 1 so no error)
+          final categoryRows = await supabase
+              .from('Category')
+              .select('category_id')
+              .eq('name', categoryName)
+              .limit(1);
+
+          if (categoryRows.isEmpty) {
+            throw Exception("Category not found: $categoryName");
+          }
+
+          final categoryId = categoryRows.first['category_id'];
+
+          expenseRecords.add({
+            'profile_id': profileId,
+            'name': e['name'],
+            'amount': e['amount'],
+            'due_date': e['dueDate'],
+            'category_id': categoryId,
+            'is_transacted': false,
+          });
+        }
+
+        await supabase.from('Fixed_Expense').insert(expenseRecords);
+      }
+
+      // ---------------------------------------
+      // 5) Insert categories
+      // ---------------------------------------
+      if (ProfileData.categories.isNotEmpty) {
+        final categoryRecords = ProfileData.categories.map((c) {
+          return {
+            'profile_id': profileId,
+            'name': c['name'],
+            'monthly_limit': c['limit'] ?? 0.0,
+            'icon': c['icon'],
+            'icon_color': c['color'].toString(),
+            'type': 'Custom',
+            'is_archived': false,
+          };
+        }).toList();
+
+        await supabase.from('Category').insert(categoryRecords);
+      }
+
+      // ---------------------------------------
+      // 6) Reset local temporary data
+      // ---------------------------------------
+      ProfileData.reset();
+
+      // Go to profile
+      if (mounted) {
+        Navigator.pushNamedAndRemoveUntil(context, '/profile', (_) => false);
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error: $e")),
+      );
+    } finally {
+      setState(() => saving = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -16,13 +142,11 @@ class SetupCompleteScreen extends StatelessWidget {
             children: [
               const Spacer(flex: 1),
 
-              // ✅ Animated success icon
-             const Icon(
-  Icons.check_circle,
-  color: Color(0xFF7959F5),
-  size: 140,
-),
-
+              const Icon(
+                Icons.check_circle,
+                color: Color(0xFF7959F5),
+                size: 140,
+              ),
 
               const SizedBox(height: 24),
 
@@ -39,8 +163,7 @@ class SetupCompleteScreen extends StatelessWidget {
               const SizedBox(height: 12),
 
               const Text(
-                "Your financial profile has been successfully created. "
-                "You can now view and manage all your goals, categories, and expenses from your profile page.",
+                "Your financial profile has been successfully created.",
                 style: TextStyle(
                   color: Color(0xFFB3B3C7),
                   fontSize: 16,
@@ -64,72 +187,28 @@ class SetupCompleteScreen extends StatelessWidget {
                 ),
               ),
 
-              const SizedBox(height: 48),
-
-              // 🎉 Summary box
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF2A2550),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.white.withOpacity(0.1)),
-                ),
-                child: const Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      "🎯 Summary",
-                      style: TextStyle(
-                        color: Color(0xFFB8A8FF),
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    SizedBox(height: 8),
-                    Text(
-                      "- Profile and balance saved successfully\n"
-                      "- Incomes and expenses added\n"
-                      "- Categories created and limits set",
-                      style: TextStyle(
-                        color: Color(0xFFDADAF0),
-                        fontSize: 14,
-                        height: 1.6,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
               const Spacer(flex: 2),
 
-              // ✅ Go to Profile button
               ElevatedButton(
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF7959F5),
-                  padding:
-                      const EdgeInsets.symmetric(vertical: 16, horizontal: 32),
+                  padding: const EdgeInsets.symmetric(
+                      vertical: 16, horizontal: 32),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  elevation: 8,
-                  shadowColor: const Color(0xFF7959F5).withOpacity(0.5),
                 ),
-                onPressed: () {
-                  Navigator.pushNamedAndRemoveUntil(
-                    context,
-                    '/profile', // 🔹 Route to your profile page
-                    (route) => false,
-                  );
-                },
-                child: const Text(
-                  "Go to Profile",
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+                onPressed: saving ? null : () => _submitFinalData(context),
+                child: saving
+                    ? const CircularProgressIndicator(color: Colors.white)
+                    : const Text(
+                        "Go to Profile",
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
               ),
 
               const Spacer(flex: 1),

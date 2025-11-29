@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'shared_profile_data.dart';
 
 class SetupBalanceScreen extends StatefulWidget {
@@ -10,7 +9,6 @@ class SetupBalanceScreen extends StatefulWidget {
 }
 
 class _SetupBalanceScreenState extends State<SetupBalanceScreen> {
-  final supabase = Supabase.instance.client;
   final balanceController = TextEditingController();
   bool loading = false;
   String? errorText;
@@ -22,63 +20,6 @@ class _SetupBalanceScreenState extends State<SetupBalanceScreen> {
           style: const TextStyle(color: Colors.grey, fontSize: 12),
         ),
       );
-
-  // ✅ Function to apply today’s fixed incomes & expenses after setting balance
-  Future<void> _applyTodayFixedTransactions(String profileId) async {
-    final today = DateTime.now().day;
-    double balance = double.tryParse(balanceController.text.trim()) ?? 0.0;
-
-    // Fetch active incomes and expenses
-    final incomes = await supabase
-        .from('Fixed_Income')
-        .select('income_id, monthly_income, payday, is_transacted, end_time')
-        .eq('profile_id', profileId)
-        .filter('end_time', 'is', null);
-
-    final expenses = await supabase
-        .from('Fixed_Expense')
-        .select('expense_id, amount, due_date, is_transacted, end_time')
-        .eq('profile_id', profileId)
-        .filter('end_time', 'is', null);
-
-    // Apply incomes
-    for (final inc in incomes) {
-      final int? payday = inc['payday'] as int?;
-      final bool transacted = (inc['is_transacted'] ?? false) as bool;
-      final double amount = (inc['monthly_income'] ?? 0.0).toDouble();
-
-      if (payday == today && !transacted && amount != 0) {
-        balance += amount;
-        await supabase
-            .from('Fixed_Income')
-            .update({'is_transacted': true})
-            .eq('income_id', inc['income_id']);
-      }
-    }
-
-    // Apply expenses
-    for (final exp in expenses) {
-      final int? due = exp['due_date'] as int?;
-      final bool transacted = (exp['is_transacted'] ?? false) as bool;
-      final double amount = (exp['amount'] ?? 0.0).toDouble();
-
-      if (due == today && !transacted && amount != 0) {
-        balance -= amount;
-        await supabase
-            .from('Fixed_Expense')
-            .update({'is_transacted': true})
-            .eq('expense_id', exp['expense_id']);
-      }
-    }
-
-    // Update balance in User_Profile
-    await supabase
-        .from('User_Profile')
-        .update({'current_balance': balance})
-        .eq('profile_id', profileId);
-
-    ProfileData.currentBalance = balance;
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -246,8 +187,11 @@ class _SetupBalanceScreenState extends State<SetupBalanceScreen> {
                             ),
                             onPressed: loading
                                 ? null
-                                : () => saveBalance(context, totalIncome,
-                                    totalCategoryLimits),
+                                : () => _saveBalance(
+                                    context,
+                                    totalIncome,
+                                    totalCategoryLimits,
+                                  ),
                             child: loading
                                 ? const CircularProgressIndicator(
                                     color: Colors.white)
@@ -274,8 +218,10 @@ class _SetupBalanceScreenState extends State<SetupBalanceScreen> {
     );
   }
 
-  Future<void> saveBalance(
-      BuildContext context, double totalIncome, double totalCategoryLimits) async {
+  // ---------------- SAVE BALANCE LOCALLY ---------------- //
+
+  Future<void> _saveBalance(BuildContext context, double totalIncome,
+      double totalCategoryLimits) async {
     final balanceText = balanceController.text.trim();
 
     if (balanceText.isEmpty) {
@@ -291,84 +237,53 @@ class _SetupBalanceScreenState extends State<SetupBalanceScreen> {
     setState(() => loading = true);
     final balanceValue = double.tryParse(balanceText) ?? 0.0;
 
-    try {
-      final user = supabase.auth.currentUser;
-      if (user == null) throw Exception("No user found.");
+    // Save locally ONLY
+    ProfileData.currentBalance = balanceValue;
 
-      final profileResponse = await supabase
-          .from('User_Profile')
-          .select('profile_id')
-          .eq('user_id', user.id)
-          .maybeSingle();
+    // ----- Show warning if limits exceed income -----
+    if (totalIncome > 0 && totalCategoryLimits > totalIncome) {
+      final exceeded = totalCategoryLimits - totalIncome;
 
-      if (profileResponse == null) throw Exception("User profile not found.");
-      final profileId = profileResponse['profile_id'];
-
-      // ✅ Save base balance first
-      await supabase
-          .from('User_Profile')
-          .update({'current_balance': balanceValue})
-          .eq('profile_id', profileId);
-
-      ProfileData.currentBalance = balanceValue;
-
-      // ✅ Apply today’s incomes/expenses after saving
-      await _applyTodayFixedTransactions(profileId);
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('✅ Balance saved successfully!')),
-      );
-
-      // ⚠ Category limit vs income warning
-      if (totalIncome > 0 && totalCategoryLimits > totalIncome) {
-        final exceeded = totalCategoryLimits - totalIncome;
-        showDialog(
-          context: context,
-          builder: (context) => AlertDialog(
-            backgroundColor: const Color(0xFF2A2550),
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16)),
-            title: const Text("⚠ Budget Exceeded",
-                style: TextStyle(
-                    color: Colors.white, fontWeight: FontWeight.bold)),
-            content: Text(
-              "Your total category limits (SAR ${totalCategoryLimits.toStringAsFixed(2)}) "
-              "exceed your total income (SAR ${totalIncome.toStringAsFixed(2)}).\n\n"
-              "You’ve exceeded by SAR ${exceeded.toStringAsFixed(2)}.\n\n"
-              "Would you like to adjust your limits or continue?",
-              style:
-                  const TextStyle(color: Color(0xFFB0AFC5), fontSize: 14),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                  Navigator.pushNamed(context, '/setupFixedCategory');
-                },
-                child: const Text("Adjust Limits",
-                    style: TextStyle(color: Colors.white)),
-              ),
-              TextButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                  Navigator.pushNamed(context, '/setupComplete');
-                },
-                child: const Text("Continue",
-                    style: TextStyle(color: Color(0xFFB8A8FF))),
-              ),
-            ],
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          backgroundColor: const Color(0xFF2A2550),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text("⚠ Budget Exceeded",
+              style: TextStyle(
+                  color: Colors.white, fontWeight: FontWeight.bold)),
+          content: Text(
+            "Your total category limits (SAR ${totalCategoryLimits.toStringAsFixed(2)}) "
+            "exceed your total income (SAR ${totalIncome.toStringAsFixed(2)}).\n\n"
+            "You’ve exceeded by SAR ${exceeded.toStringAsFixed(2)}.\n\n"
+            "Would you like to adjust your limits or continue?",
+            style: const TextStyle(color: Color(0xFFB0AFC5), fontSize: 14),
           ),
-        );
-      } else {
-        Navigator.pushNamed(context, '/setupComplete');
-      }
-    } catch (e) {
-      debugPrint("❌ Error updating balance: $e");
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error updating balance: $e')),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                Navigator.pushNamed(context, '/setupFixedCategory');
+              },
+              child: const Text("Adjust Limits",
+                  style: TextStyle(color: Colors.white)),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                Navigator.pushNamed(context, '/setupComplete');
+              },
+              child: const Text("Continue",
+                  style: TextStyle(color: Color(0xFFB8A8FF))),
+            ),
+          ],
+        ),
       );
-    } finally {
-      setState(() => loading = false);
+    } else {
+      Navigator.pushNamed(context, '/setupComplete');
     }
+
+    setState(() => loading = false);
   }
 }

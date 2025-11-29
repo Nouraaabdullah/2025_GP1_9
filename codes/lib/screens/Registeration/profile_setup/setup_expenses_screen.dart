@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'shared_profile_data.dart';
 
 class SetupExpensesScreen extends StatefulWidget {
@@ -11,7 +10,6 @@ class SetupExpensesScreen extends StatefulWidget {
 }
 
 class _SetupExpensesScreenState extends State<SetupExpensesScreen> {
-  final supabase = Supabase.instance.client;
   bool loading = false;
   bool _dueDateConfirmed = false;
 
@@ -32,6 +30,9 @@ class _SetupExpensesScreenState extends State<SetupExpensesScreen> {
     }
   ];
 
+  //────────────────────────────────────────────
+  // Add new expense
+  //────────────────────────────────────────────
   void addExpenseField() {
     setState(() {
       expenses.add({
@@ -51,6 +52,9 @@ class _SetupExpensesScreenState extends State<SetupExpensesScreen> {
     });
   }
 
+  //────────────────────────────────────────────
+  // Input Validation (Required fields)
+  //────────────────────────────────────────────
   bool _validateFields() {
     bool isValid = true;
 
@@ -58,6 +62,7 @@ class _SetupExpensesScreenState extends State<SetupExpensesScreen> {
       final errors = e['errors'] as Map<String, String?>;
       errors.updateAll((key, value) => null);
 
+      // If fully empty → skip
       if (e['name'].text.trim().isEmpty &&
           e['amount'].text.trim().isEmpty &&
           e['dueDate'] == null &&
@@ -66,6 +71,7 @@ class _SetupExpensesScreenState extends State<SetupExpensesScreen> {
         continue;
       }
 
+      // Name required if starting to fill
       if (e['name'].text.trim().isEmpty) {
         errors['name'] = "Required";
         isValid = false;
@@ -88,157 +94,65 @@ class _SetupExpensesScreenState extends State<SetupExpensesScreen> {
     return isValid;
   }
 
-  Future<String> _getProfileId() async {
-    final user = supabase.auth.currentUser;
-    if (user == null) throw Exception("No logged-in user found.");
-    final p = await supabase
-        .from('User_Profile')
-        .select('profile_id')
-        .eq('user_id', user.id)
-        .maybeSingle();
-    if (p == null) throw Exception("User profile not found.");
-    return p['profile_id'] as String;
+  //────────────────────────────────────────────
+  // Due-date WARNING detection
+  //────────────────────────────────────────────
+  bool _hasDueDateWarnings(List expenses) {
+    for (var e in expenses) {
+      final due = e['dueDate'];
+      if (due == null) return true;
+      if (due < 1 || due > 31) return true;
+    }
+    return false;
   }
 
-  // ✅ Used only when pressing Back — ends outdated fixed expenses
-  Future<void> _softEndSupersededExpenses(String profileId) async {
-    final current = expenses
-        .map((e) => (
-              (e['name'] as TextEditingController).text.trim(),
-              double.tryParse((e['amount'] as TextEditingController).text.trim()) ?? 0.0,
-              e['dueDate'] as int?,
-              (e['category'] as String?)
-            ))
-        .where((t) => t.$1.isNotEmpty)
-        .toSet();
-
-    final active = await supabase
-        .from('Fixed_Expense')
-        .select('expense_id,name,amount,due_date,category_id')
-        .eq('profile_id', profileId)
-        .filter('end_time', 'is', null);
-
-    final categoryResponse =
-        await supabase.from('Category').select('category_id,name');
-    final catNameById = {
-      for (final c in categoryResponse) c['category_id']: (c['name'] as String?)?.trim()
-    };
-
-    final nowIso = DateTime.now().toIso8601String();
-    final toEnd = <dynamic>[];
-
-    for (final r in active) {
-      final tuple = (
-        (r['name'] as String).trim(),
-        (r['amount'] ?? 0.0).toDouble(),
-        r['due_date'] as int?,
-        catNameById[r['category_id']]
-      );
-      if (!current.contains(tuple)) {
-        toEnd.add(r['expense_id']);
-      }
-    }
-
-    if (toEnd.isNotEmpty) {
-      await supabase
-          .from('Fixed_Expense')
-          .update({'end_time': nowIso})
-          .inFilter('expense_id', toEnd.cast());
-    }
+  //────────────────────────────────────────────
+  // Due-date WARNING dialog
+  //────────────────────────────────────────────
+  Future<bool> _showDueDateWarningDialog() async {
+    return await showDialog<bool>(
+          context: context,
+          builder: (_) => AlertDialog(
+            backgroundColor: const Color(0xFF1D1B32),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16)),
+            title: const Text(
+              "⚠️ Invalid Due Date",
+              style:
+                  TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+            ),
+            content: const Text(
+              "Some expenses have missing or invalid due dates.\n"
+              "Do you want to continue?",
+              style: TextStyle(color: Colors.white70, height: 1.4),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text("Fix",
+                    style: TextStyle(color: Colors.white70)),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text("Continue",
+                    style: TextStyle(color: Color(0xFF7959F5))),
+              ),
+            ],
+          ),
+        ) ??
+        false;
   }
 
-  Future<void> saveExpensesToSupabase() async {
-    if (!_validateFields()) return;
-
-    setState(() => loading = true);
-    try {
-      final user = supabase.auth.currentUser;
-      if (user == null) throw Exception("No logged-in user found.");
-
-      final profileResponse = await supabase
-          .from('User_Profile')
-          .select('profile_id')
-          .eq('user_id', user.id)
-          .maybeSingle();
-
-      if (profileResponse == null) throw Exception("User profile not found.");
-      final profileId = profileResponse['profile_id'];
-
-      final filledExpenses = expenses.where((e) =>
-          e['name'].text.trim().isNotEmpty ||
-          e['amount'].text.trim().isNotEmpty ||
-          e['dueDate'] != null ||
-          e['category'] != null).toList();
-
-      if (filledExpenses.isEmpty) {
-        Navigator.pushNamed(context, '/setupBalance');
-        return;
-      }
-
-      final categoryResponse =
-          await supabase.from('Category').select('category_id, name');
-      final categoryMap = {
-        for (var cat in categoryResponse)
-          cat['name'].toString(): cat['category_id']
-      };
-
-      final today = DateTime.now();
-      final formattedDate =
-          "${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}";
-
-      final expenseRecords = filledExpenses.map((e) {
-        final categoryName = e['category'] == 'Custom'
-            ? e['customCategory'].text
-            : e['category'];
-        final categoryId = categoryMap[categoryName];
-        return {
-          'profile_id': profileId,
-          'name': e['name'].text,
-          'amount': double.tryParse(e['amount'].text) ?? 0.0,
-          'due_date': e['dueDate'],
-          'category_id': categoryId,
-          'start_time': today.toIso8601String(),
-          'end_time': null,
-          'last_update': formattedDate,
-          'is_transacted': false,
-        };
-      }).toList();
-
-      if (expenseRecords.isNotEmpty) {
-        await supabase.from('Fixed_Expense').insert(expenseRecords);
-      }
-
-      for (final e in filledExpenses) {
-        final categoryName = e['category'] == 'Custom'
-            ? e['customCategory'].text
-            : e['category'];
-        ProfileData.addFixedExpense(
-          name: e['name'].text,
-          amount: double.tryParse(e['amount'].text) ?? 0.0,
-          dueDate: e['dueDate'],
-          category: categoryName,
-        );
-      }
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("✅ Expenses saved successfully!")),
-      );
-      Navigator.pushNamed(context, '/setupBalance');
-    } catch (e) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text("Error: $e")));
-    } finally {
-      setState(() => loading = false);
-    }
-  }
-
+  //────────────────────────────────────────────
+  // Due-Date CONFIRMATION dialog (first-time lock)
+  //────────────────────────────────────────────
   Future<bool> _confirmDueDateLock(BuildContext context) async {
     return await showDialog<bool>(
           context: context,
           builder: (ctx) => AlertDialog(
             backgroundColor: const Color(0xFF2B2B48),
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16)),
             title: const Text(
               'Confirm Due Date',
               style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
@@ -260,8 +174,7 @@ class _SetupExpensesScreenState extends State<SetupExpensesScreen> {
                       borderRadius: BorderRadius.circular(12)),
                 ),
                 onPressed: () => Navigator.pop(ctx, true),
-                child: const Text('Confirm',
-                    style: TextStyle(color: Colors.white)),
+                child: const Text('Confirm', style: TextStyle(color: Colors.white)),
               ),
             ],
           ),
@@ -269,363 +182,219 @@ class _SetupExpensesScreenState extends State<SetupExpensesScreen> {
         false;
   }
 
-  Widget buildExpenseCard(int index) {
-  final expense = expenses[index];
-  final errors = expense['errors'] as Map<String, String?>;
+  //────────────────────────────────────────────
+  // LOCAL SAVE (final)
+  //────────────────────────────────────────────
+  void saveLocalExpenses() async {
+    if (!_validateFields()) return;
 
-  return Card(
-    color: const Color(0xFF2A2550),
-    margin: const EdgeInsets.only(bottom: 20),
-    elevation: 6,
-    shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(16),
-      side: BorderSide(
-        color: const Color(0xFF7959F5).withOpacity(0.3),
-        width: 1.5,
-      ),
-    ),
-    child: Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text(
-                "Expense ${index + 1}",
-                style: const TextStyle(
-                  color: Color(0xFFB8A8FF),
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const Spacer(),
-              if (index > 0)
-                IconButton(
-                  icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                  onPressed: () => setState(() => expenses.removeAt(index)),
-                ),
-            ],
-          ),
+    // Filter filled ones
+    final filledExpenses = expenses.where((e) =>
+        e['name'].text.trim().isNotEmpty ||
+        e['amount'].text.trim().isNotEmpty ||
+        e['dueDate'] != null ||
+        e['category'] != null).toList();
 
-          const SizedBox(height: 20),
+    // Show due-date warning if needed
+    if (_hasDueDateWarnings(filledExpenses)) {
+      final proceed = await _showDueDateWarningDialog();
+      if (!proceed) return;
+    }
 
-          // --- EXPENSE NAME ---
-          const Text(
-            "What is this expense for?",
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 6),
+    // Save to ProfileData
+    ProfileData.fixedExpenses = filledExpenses.map((e) {
+      final categoryName = e['category'] == 'Custom'
+          ? e['customCategory'].text.trim()
+          : e['category'];
 
-          TextField(
-            controller: expense['name'],
-            style: const TextStyle(color: Colors.white),
-            decoration: _inputDecoration('e.g., Rent, Phone bill, Gym'),
-          ),
-          if (errors['name'] != null) _errorText(errors['name']!),
+      return {
+        'name': e['name'].text.trim(),
+        'amount': double.tryParse(e['amount'].text.trim()) ?? 0.0,
+        'dueDate': e['dueDate'],
+        'category': categoryName,
+      };
+    }).toList();
 
-          const SizedBox(height: 20),
+    Navigator.pushNamed(context, '/setupBalance');
+  }
 
-          // --- AMOUNT ---
-          const Text(
-            "How much does it cost each month?",
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 6),
-
-          TextField(
-            controller: expense['amount'],
-            keyboardType: TextInputType.number,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            style: const TextStyle(color: Colors.white),
-            decoration: _inputDecoration('Amount in SAR (e.g., 300)'),
-          ),
-          if (errors['amount'] != null) _errorText(errors['amount']!),
-
-          const SizedBox(height: 20),
-
-          // --- CATEGORY ---
-          const Text(
-            "Which category does this belong to?",
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 6),
-
-       DropdownButtonFormField<String>(
-  value: expense['category'],
-  dropdownColor: const Color(0xFF2A2550),
-  style: const TextStyle(color: Colors.white),
-  iconEnabledColor: const Color(0xFFB8A8FF),
-
-  // FIXED: remove hintText from decoration
-  decoration: _inputDecoration('').copyWith(
-    hintText: null,
-  ),
-
-  // FIXED: custom hint with correct color
-  hint: const Text(
-    'Select a category',
-    style: TextStyle(
-      color: Color(0xFFB0AFC5), // same hint color as other fields
-    ),
-  ),
-
-  items: [
-    ...ProfileData.categories.map<DropdownMenuItem<String>>((c) {
-      final name = c['name'] as String? ?? '';
-      return DropdownMenuItem(
-        value: name,
-        child: Text(name, style: const TextStyle(color: Colors.white)),
+  //────────────────────────────────────────────
+  // Error text widget
+  //────────────────────────────────────────────
+  Widget _errorText(String text) => Padding(
+        padding: const EdgeInsets.only(top: 4, left: 4),
+        child:
+            Text(text, style: const TextStyle(color: Colors.grey, fontSize: 12)),
       );
-    }).toList(),
 
-    const DropdownMenuItem(
-      value: 'Custom',
-      child: Text("Custom Category",
-          style: TextStyle(color: Colors.white)),
-    ),
-  ],
+  //────────────────────────────────────────────
+  // Expense Card UI
+  //────────────────────────────────────────────
+  Widget buildExpenseCard(int index) {
+    final expense = expenses[index];
+    final errors = expense['errors'] as Map<String, String?>;
 
-  onChanged: (value) => setState(() => expense['category'] = value),
-),
-if (errors['category'] != null) _errorText(errors['category']!),
-
-const SizedBox(height: 12),
-
-
-          // --- CUSTOM CATEGORY NAME ---
-          if (expense['category'] == 'Custom') ...[
-            const Text(
-              "Enter your custom category name:",
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-              ),
+    return Card(
+      color: const Color(0xFF2A2550),
+      margin: const EdgeInsets.only(bottom: 20),
+      elevation: 6,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: const Color(0xFF7959F5).withOpacity(0.3),
+          width: 1.5,
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text(
+                  "Expense ${index + 1}",
+                  style: const TextStyle(
+                    color: Color(0xFFB8A8FF),
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const Spacer(),
+                if (index > 0)
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline,
+                        color: Colors.redAccent),
+                    onPressed: () => setState(() => expenses.removeAt(index)),
+                  ),
+              ],
             ),
+            const SizedBox(height: 20),
+
+            const Text("What is this expense for?",
+                style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600)),
+            const SizedBox(height: 6),
+            TextField(
+              controller: expense['name'],
+              style: const TextStyle(color: Colors.white),
+              decoration: _inputDecoration('e.g., Rent, Phone bill, Gym'),
+            ),
+            if (errors['name'] != null) _errorText(errors['name']!),
+
+            const SizedBox(height: 20),
+
+            const Text("How much does it cost each month?",
+                style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600)),
+            const SizedBox(height: 6),
+            TextField(
+              controller: expense['amount'],
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              style: const TextStyle(color: Colors.white),
+              decoration: _inputDecoration('Amount in SAR (e.g., 300)'),
+            ),
+            if (errors['amount'] != null) _errorText(errors['amount']!),
+
+            const SizedBox(height: 20),
+
+            const Text("Which category does this belong to?",
+                style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600)),
+            const SizedBox(height: 6),
+
+            DropdownButtonFormField<String>(
+              value: expense['category'],
+              dropdownColor: const Color(0xFF2A2550),
+              style: const TextStyle(color: Colors.white),
+              iconEnabledColor: const Color(0xFFB8A8FF),
+              decoration: _inputDecoration('').copyWith(hintText: null),
+              hint: const Text('Select a category',
+                  style: TextStyle(color: Color(0xFFB0AFC5))),
+              items: [
+                ...ProfileData.categories.map((c) {
+                  final name = c['name'] as String? ?? '';
+                  return DropdownMenuItem(
+                      value: name,
+                      child: Text(name,
+                          style: const TextStyle(color: Colors.white)));
+                }).toList(),
+                const DropdownMenuItem(
+                  value: 'Custom',
+                  child: Text("Custom Category",
+                      style: TextStyle(color: Colors.white)),
+                )
+              ],
+              onChanged: (value) => setState(() => expense['category'] = value),
+            ),
+            if (errors['category'] != null) _errorText(errors['category']!),
+            const SizedBox(height: 12),
+
+            if (expense['category'] == 'Custom') ...[
+              const Text("Enter your custom category name:",
+                  style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600)),
+              const SizedBox(height: 6),
+              TextField(
+                controller: expense['customCategory'],
+                style: const TextStyle(color: Colors.white),
+                decoration:
+                    _inputDecoration("e.g., Kids, Pets, Subscriptions"),
+              ),
+              if (errors['customCategory'] != null)
+                _errorText(errors['customCategory']!),
+              const SizedBox(height: 20),
+            ],
+
+            const Text("When is this expense due each month?",
+                style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600)),
             const SizedBox(height: 6),
 
             TextField(
-              controller: expense['customCategory'],
+              controller: TextEditingController(
+                  text: expense['dueDate']?.toString() ?? ''),
+              keyboardType: TextInputType.number,
+              inputFormatters: [
+                FilteringTextInputFormatter.digitsOnly,
+                LengthLimitingTextInputFormatter(2),
+              ],
               style: const TextStyle(color: Colors.white),
-              decoration: _inputDecoration("e.g., Kids, Pets, Subscriptions"),
+              decoration: _inputDecoration('Enter a day (1–31)'),
+              onChanged: (val) {
+                final number = int.tryParse(val);
+                setState(() {
+                  if (number != null && number >= 1 && number <= 31) {
+                    expense['dueDate'] = number;
+                    errors['dueDate'] = null;
+                  } else {
+                    expense['dueDate'] = null;
+                    errors['dueDate'] = "Enter a valid day (1–31)";
+                  }
+                });
+              },
             ),
-            if (errors['customCategory'] != null)
-              _errorText(errors['customCategory']!),
-
-            const SizedBox(height: 20),
+            if (errors['dueDate'] != null) _errorText(errors['dueDate']!),
           ],
-
-          // --- DUE DATE ---
-          const Text(
-            "When is this expense due each month?",
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 6),
-
-          TextField(
-            controller: TextEditingController(
-              text: expense['dueDate']?.toString() ?? '',
-            ),
-            keyboardType: TextInputType.number,
-            inputFormatters: [
-              FilteringTextInputFormatter.digitsOnly,
-              LengthLimitingTextInputFormatter(2),
-            ],
-            style: const TextStyle(color: Colors.white),
-            decoration: _inputDecoration('Enter a day (1–31)'),
-            onChanged: (val) {
-              final number = int.tryParse(val);
-              setState(() {
-                if (number != null && number >= 1 && number <= 31) {
-                  expense['dueDate'] = number;
-                  errors['dueDate'] = null;
-                } else {
-                  expense['dueDate'] = null;
-                  errors['dueDate'] = "Enter a valid day (1–31)";
-                }
-              });
-            },
-          ),
-          if (errors['dueDate'] != null) _errorText(errors['dueDate']!),
-        ],
-      ),
-    ),
-  );
-}
-
-
-  Widget _errorText(String text) => Padding(
-        padding: const EdgeInsets.only(top: 4, left: 4),
-        child: Text(text,
-            style: const TextStyle(color: Colors.grey, fontSize: 12)),
-      );
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF1D1B32),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Stack(
-                children: [
-                  Container(height: 4, width: double.infinity, color: Colors.white12),
-                  Container(
-                    height: 4,
-                    width: MediaQuery.of(context).size.width * 0.85,
-                    decoration: const BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [Color(0xFF7959F5), Color(0xFFA27CFF)],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 28),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF7959F5).withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: const Text(
-                  "STEP 5 OF 6",
-                  style: TextStyle(
-                    color: Color(0xFFB8A8FF),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                "Fixed Expenses",
-                style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 30,
-                    fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                "Add your regular monthly expenses, due dates, and categories (optional).",
-                style: TextStyle(color: Color(0xFFB3B3C7), fontSize: 15),
-              ),
-              const SizedBox(height: 20),
-              Expanded(
-                child: ListView.builder(
-                  itemCount: expenses.length,
-                  itemBuilder: (context, index) => buildExpenseCard(index),
-                ),
-              ),
-              const SizedBox(height: 10),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton.icon(
-                  onPressed: addExpenseField,
-                  icon: const Icon(Icons.add_circle_outline,
-                      color: Color(0xFFB8A8FF)),
-                  label: const Text(
-                    "Add another expense",
-                    style: TextStyle(color: Color(0xFFB8A8FF)),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      style: OutlinedButton.styleFrom(
-                        side: BorderSide(color: Colors.white.withOpacity(0.3)),
-                        foregroundColor: Colors.white,
-                        backgroundColor:
-                            const Color(0xFF2E2C4A).withOpacity(0.5),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12)),
-                      ),
-                      onPressed: () async {
-                        try {
-                          final profileId = await _getProfileId();
-                          await _softEndSupersededExpenses(profileId);
-                        } catch (_) {}
-                        if (mounted) Navigator.pop(context);
-                      },
-                      child: const Text("Back"),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    flex: 2,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF7959F5),
-                        padding:
-                            const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12)),
-                        elevation: 6,
-                        shadowColor:
-                            const Color(0xFF7959F5).withOpacity(0.4),
-                      ),
-onPressed: loading
-    ? null
-    : () async {
-        if (!_dueDateConfirmed) {
-          final confirmed =
-              await _confirmDueDateLock(context);
-          if (!confirmed) return;
-          _dueDateConfirmed = true;
-        }
-
-        try {
-          final profileId = await _getProfileId();
-          await _softEndSupersededExpenses(profileId);
-        } catch (_) {}
-
-        await saveExpensesToSupabase();
-      },
-
-                      child: loading
-                          ? const CircularProgressIndicator(color: Colors.white)
-                          : const Text(
-                              "Continue",
-                              style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.white),
-                            ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
         ),
       ),
     );
   }
 
+  //────────────────────────────────────────────
+  // Input Decoration
+  //────────────────────────────────────────────
   InputDecoration _inputDecoration(String hint) {
     return InputDecoration(
       hintText: hint,
@@ -639,6 +408,156 @@ onPressed: loading
       focusedBorder: const OutlineInputBorder(
         borderRadius: BorderRadius.all(Radius.circular(12)),
         borderSide: BorderSide(color: Color(0xFF7959F5), width: 2),
+      ),
+    );
+  }
+
+  //────────────────────────────────────────────
+  // MAIN UI
+  //────────────────────────────────────────────
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF1D1B32),
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Stack(
+                children: [
+                  Container(
+                      height: 4, width: double.infinity, color: Colors.white12),
+                  Container(
+                    height: 4,
+                    width: MediaQuery.of(context).size.width * 0.85,
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [Color(0xFF7959F5), Color(0xFFA27CFF)],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 28),
+
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF7959F5).withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Text(
+                  "STEP 5 OF 6",
+                  style: TextStyle(
+                    color: Color(0xFFB8A8FF),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              const Text("Fixed Expenses",
+                  style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 30,
+                      fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+
+              const Text(
+                "Add your regular monthly expenses, due dates, and categories (optional).",
+                style: TextStyle(color: Color(0xFFB3B3C7), fontSize: 15),
+              ),
+
+              const SizedBox(height: 20),
+
+              Expanded(
+                child: ListView.builder(
+                  itemCount: expenses.length,
+                  itemBuilder: (_, i) => buildExpenseCard(i),
+                ),
+              ),
+
+              const SizedBox(height: 10),
+
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: addExpenseField,
+                  icon: const Icon(Icons.add_circle_outline,
+                      color: Color(0xFFB8A8FF)),
+                  label: const Text("Add another expense",
+                      style: TextStyle(color: Color(0xFFB8A8FF))),
+                ),
+              ),
+
+              const SizedBox(height: 20),
+
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        side: BorderSide(color: Colors.white.withOpacity(0.3)),
+                        foregroundColor: Colors.white,
+                        backgroundColor:
+                            const Color(0xFF2E2C4A).withOpacity(0.5),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                      ),
+                      onPressed: () {
+                        Navigator.pop(context);
+                      },
+                      child: const Text("Back"),
+                    ),
+                  ),
+
+                  const SizedBox(width: 12),
+
+                  Expanded(
+                    flex: 2,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF7959F5),
+                        padding:
+                            const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                        elevation: 6,
+                        shadowColor:
+                            const Color(0xFF7959F5).withOpacity(0.4),
+                      ),
+                      onPressed: loading
+                          ? null
+                          : () async {
+                              if (!_dueDateConfirmed) {
+                                final confirmed = await _confirmDueDateLock(context);
+                                if (!confirmed) return;
+                                _dueDateConfirmed = true;
+                              }
+                              saveLocalExpenses();
+                            },
+                      child: loading
+                          ? const CircularProgressIndicator(color: Colors.white)
+                          : const Text(
+                              "Continue",
+                              style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white),
+                            ),
+                    ),
+                  ),
+                ],
+              )
+            ],
+          ),
+        ),
       ),
     );
   }

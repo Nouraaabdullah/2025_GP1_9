@@ -354,7 +354,7 @@ class _SavingsPageState extends State<SavingsPage> with WidgetsBindingObserver {
       // Goal Completed!
       return _showSurraSuccessDialog(
         icon: Icons.check_circle_rounded,
-        ringColor: const Color(0xFF4ADE80),
+        ringColor: Colors.blueAccent,
         title: 'Goal Completed!',
         message: 'Goal status sas been now updated to Completed.',
       );

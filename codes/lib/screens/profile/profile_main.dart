@@ -157,7 +157,7 @@ class _ProfileMainPageState
                           ),
                       child: const Text(
                         'Logout',
-                         style: TextStyle(
+                        style: TextStyle(
                           color: Colors.white,
                         ),
                       ),
@@ -172,7 +172,7 @@ class _ProfileMainPageState
         if (mounted) {
           Navigator.pushNamedAndRemoveUntil(
             context,
-            '/welcome',
+            '/startpage',
             (
               route,
             ) => false,

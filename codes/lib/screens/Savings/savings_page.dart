@@ -358,7 +358,7 @@ class _SavingsPageState extends State<SavingsPage> with WidgetsBindingObserver {
         title: 'Goal Completed!',
         message: 'Goal status sas been now updated to Completed.',
       );
-    } else if (s == 'Incomplete' || s == 'incomplete') {
+    } else if (s == 'incomplete' || s == 'incompleted') {
       // Target Day Is Due!
       return _showSurraSuccessDialog(
         icon: Icons.error_outline_rounded,
@@ -493,7 +493,7 @@ class _SavingsPageState extends State<SavingsPage> with WidgetsBindingObserver {
           debugPrint('Goal table changed: ${payload.eventType}');
           if (mounted) {
             await _fetchGoals();
-            await _markExpiredGoalsAsIncompleted();
+            
           }
         },
       )
@@ -722,36 +722,109 @@ Future<void> _logCompletedGoalExpense(Goal goal) async {
 }
 
 
-  Future<void> _markExpiredGoalsAsIncompleted() async {
-    try {
-      final now = DateTime.now();
-      bool anyUpdated = false;
-
-      for (final goal in _goals) {
-        if (goal.type == GoalType.active && goal.targetDate != null) {
-          if (now.isAfter(goal.targetDate!)) {
-            await supabase
-                .from('Goal')
-                .update({'status': 'Incompleted'})
-                .eq('goal_id', goal.id);
-            debugPrint('Goal "${goal.title}" marked as Incompleted');
-            anyUpdated = true;
-          }
-        }
-      }
-
-      if (anyUpdated) {
-        await _fetchGoals();
-        if (mounted) {
-          await _showGoalStatusAlert('Incompleted');
-        }
-      }
-    } catch (e) {
-      debugPrint('Error marking expired goals: $e');
-    }
-  }
 
 
+// Future<void> _fetchGoals() async {
+//   try {
+//     final profileId = await getProfileId(context);
+//     if (profileId == null) return; // not logged in
+
+//     final response = await supabase
+//         .from('Goal')
+//         .select()
+//         .eq('profile_id', profileId);
+
+//     if (response == null || response.isEmpty) {
+//       debugPrint('No goals found.');
+//       if (mounted) setState(() => _goals.clear());
+//       return;
+//     }
+
+//     final data = response as List;
+
+    
+//     await Future.delayed(const Duration(milliseconds: 250));
+
+//     final transferResponse = await supabase
+//         .from('Goal_Transfer')
+//         .select('goal_id, amount, direction, created_at')
+//         .inFilter(
+//           'goal_id',
+//           data.map((g) => g['goal_id']).whereType<String>().toList(),
+//         )
+//         // process oldest → newest
+//         .order('created_at', ascending: true);
+
+//     final Map<String, double> goalSaved = {};
+//     final Map<String, DateTime?> latestAssignDate = {};
+
+//     for (final t in transferResponse) {
+//       final id = t['goal_id'];
+//       final amt = (t['amount'] ?? 0).toDouble();
+//       final dir = (t['direction'] ?? '').toString().toLowerCase();
+//       final createdAt =
+//           t['created_at'] != null ? DateTime.parse(t['created_at']) : null;
+
+//       if (dir == 'assign') {
+//         goalSaved[id] = (goalSaved[id] ?? 0) + amt;
+//         if (createdAt != null) {
+//           if (latestAssignDate[id] == null ||
+//               createdAt.isAfter(latestAssignDate[id]!)) {
+//             latestAssignDate[id] = createdAt;
+//           }
+//         }
+//       } else if (dir == 'unassign') {
+//         goalSaved[id] = (goalSaved[id] ?? 0) - amt;
+//       }
+
+//       goalSaved[id] = max(0, goalSaved[id]!);
+//     }
+
+//     final fetchedGoals = data.map((g) {
+//       final id = g['goal_id'] ?? '';
+//       final saved = goalSaved[id] ?? 0.0;
+//       return Goal(
+//         id: id,
+//         title: g['name'] ?? '',
+//         targetAmount: (g['target_amount'] ?? 0).toDouble(),
+//         savedAmount: saved,
+//         createdAt: DateTime.parse(g['created_at']),
+//         targetDate: g['target_date'] != null
+//     ? DateTime.parse(g['target_date'])
+//     : null,
+
+//         type: _statusToType(g['status']),
+//         status: g['status'],
+//       );
+//     }).toList();
+
+//     if (mounted) {
+//       setState(() {
+//         _goals
+//           ..clear()
+//           ..addAll(fetchedGoals);
+//       });
+//     }
+
+   
+//     await Future.delayed(const Duration(milliseconds: 100));
+// if (mounted) {
+//   _recalculateBalances();
+
+ 
+//   for (final g in _goals.where((g) =>
+//       g.type == GoalType.active ||
+//       g.type == GoalType.completed ||
+//       g.type == GoalType.incompleted)) {
+//     await _checkAndUpdateGoalStatus(g.id);
+//   }
+// }
+
+//     debugPrint('Goals fetched successfully: ${_goals.length}');
+//   } catch (e) {
+//     debugPrint('Error fetching goals: $e');
+//   }
+// }
 
 Future<void> _fetchGoals() async {
   try {
@@ -771,9 +844,7 @@ Future<void> _fetchGoals() async {
 
     final data = response as List;
 
-    
-    await Future.delayed(const Duration(milliseconds: 250));
-
+    // --- recompute savedAmount from Goal_Transfer ---
     final transferResponse = await supabase
         .from('Goal_Transfer')
         .select('goal_id, amount, direction, created_at')
@@ -781,49 +852,67 @@ Future<void> _fetchGoals() async {
           'goal_id',
           data.map((g) => g['goal_id']).whereType<String>().toList(),
         )
-        // process oldest → newest
         .order('created_at', ascending: true);
 
     final Map<String, double> goalSaved = {};
-    final Map<String, DateTime?> latestAssignDate = {};
-
     for (final t in transferResponse) {
       final id = t['goal_id'];
       final amt = (t['amount'] ?? 0).toDouble();
       final dir = (t['direction'] ?? '').toString().toLowerCase();
-      final createdAt =
-          t['created_at'] != null ? DateTime.parse(t['created_at']) : null;
 
       if (dir == 'assign') {
         goalSaved[id] = (goalSaved[id] ?? 0) + amt;
-        if (createdAt != null) {
-          if (latestAssignDate[id] == null ||
-              createdAt.isAfter(latestAssignDate[id]!)) {
-            latestAssignDate[id] = createdAt;
-          }
-        }
       } else if (dir == 'unassign') {
         goalSaved[id] = (goalSaved[id] ?? 0) - amt;
       }
 
-      goalSaved[id] = max(0, goalSaved[id]!);
+      goalSaved[id] = max(0, goalSaved[id] ?? 0);
     }
 
-    final fetchedGoals = data.map((g) {
+    // --- build Goal objects with *computed* status ---
+    final fetchedGoals = data.map<Goal>((g) {
       final id = g['goal_id'] ?? '';
       final saved = goalSaved[id] ?? 0.0;
+
+      // Safe target_date parsing (String or DateTime)
+      DateTime? targetDate;
+      final rawDate = g['target_date'];
+      if (rawDate != null) {
+        if (rawDate is DateTime) {
+          targetDate = DateTime(rawDate.year, rawDate.month, rawDate.day);
+        } else if (rawDate is String && rawDate.trim().isNotEmpty) {
+          final dt = DateTime.parse(rawDate.trim());
+          targetDate = DateTime(dt.year, dt.month, dt.day);
+        }
+      }
+
+      final String dbStatus = (g['status'] ?? 'Active').toString();
+      final bool expired = _isExpired(targetDate);
+
+      // If DB says Active but date is expired → treat as Incompleted
+      String effectiveStatus = dbStatus;
+      if (expired) {
+        final sLower = dbStatus.toLowerCase();
+        if (sLower == 'active') {
+          effectiveStatus = 'Incompleted';
+        }
+        // (Completed / Achieved stay as they are)
+      }
+
+      debugPrint(
+        '[FetchGoals] id=$id, targetDate=$targetDate, '
+        'expired=$expired, dbStatus=$dbStatus, effective=$effectiveStatus',
+      );
+
       return Goal(
         id: id,
         title: g['name'] ?? '',
         targetAmount: (g['target_amount'] ?? 0).toDouble(),
         savedAmount: saved,
         createdAt: DateTime.parse(g['created_at']),
-        targetDate: latestAssignDate[g['goal_id']] ??
-            (g['target_date'] != null
-                ? DateTime.parse(g['target_date'])
-                : null),
-        type: _statusToType(g['status']),
-        status: g['status'],
+        targetDate: targetDate,
+        type: _statusToType(effectiveStatus),
+        status: effectiveStatus,
       );
     }).toList();
 
@@ -835,11 +924,17 @@ Future<void> _fetchGoals() async {
       });
     }
 
-   
-    await Future.delayed(const Duration(milliseconds: 100));
+    // Recalc balances and then update DB statuses in background
     if (mounted) {
       _recalculateBalances();
-      await _markExpiredGoalsAsIncompleted();
+
+      for (final g in _goals.where((g) =>
+          g.type == GoalType.active ||
+          g.type == GoalType.completed ||
+          g.type == GoalType.incompleted)) {
+        // this will persist the effective status back to DB
+        _checkAndUpdateGoalStatus(g.id);
+      }
     }
 
     debugPrint('Goals fetched successfully: ${_goals.length}');
@@ -848,52 +943,165 @@ Future<void> _fetchGoals() async {
   }
 }
 
-  Future<void> _checkAndUpdateGoalStatus(String goalId) async {
-    try {
-      final transfers = await supabase
-          .from('Goal_Transfer')
-          .select('amount, direction')
-          .eq('goal_id', goalId);
-      double totalAssigned = 0.0;
-      for (final t in (transfers as List? ?? [])) {
-        final amt = (t['amount'] ?? 0).toDouble();
-        final dir = (t['direction'] ?? '').toString().toLowerCase();
-        if (dir == 'assign') totalAssigned += amt;
-        if (dir == 'unassign') totalAssigned -= amt;
-      }
-      totalAssigned = max(0, totalAssigned);
+bool _isExpired(DateTime? targetDate) {
+  if (targetDate == null) return false;
 
-      final goalRow = await supabase
-          .from('Goal')
-          .select('target_amount, status')
-          .eq('goal_id', goalId)
-          .single();
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  final d = DateTime(targetDate.year, targetDate.month, targetDate.day);
 
-      final target = (goalRow['target_amount'] ?? 0).toDouble();
-      final String? oldStatus = goalRow['status'] as String?;
-      final String newStatus = totalAssigned >= target ? 'Completed' : 'Active';
+  // expired if today is after the target day
+  return today.isAfter(d);
+}
 
-      if (oldStatus == newStatus) {
-        debugPrint('Goal $goalId status unchanged ($newStatus)');
-        await _fetchGoals();
-        return;
-      }
 
-      await supabase
-          .from('Goal')
-          .update({'status': newStatus})
-          .eq('goal_id', goalId);
-      debugPrint('Goal $goalId status updated to $newStatus');
+// Future<void> _checkAndUpdateGoalStatus(String goalId) async {
+//   try {
+//     // 1) how much is assigned
+//     final transfers = await supabase
+//         .from('Goal_Transfer')
+//         .select('amount, direction')
+//         .eq('goal_id', goalId);
 
-      await _fetchGoals();
+//     double totalAssigned = 0.0;
+//     for (final t in (transfers as List? ?? [])) {
+//       final amt = (t['amount'] ?? 0).toDouble();
+//       final dir = (t['direction'] ?? '').toString().toLowerCase();
+//       if (dir == 'assign') totalAssigned += amt;
+//       if (dir == 'unassign') totalAssigned -= amt;
+//     }
+//     totalAssigned = max(0, totalAssigned);
 
-      if (mounted) {
-        await _showGoalStatusAlert(newStatus);
-      }
-    } catch (e) {
-      debugPrint('Error updating goal status: $e');
+//     // 2) get goal info (including target_date)
+//     final goalRow = await supabase
+//         .from('Goal')
+//         .select('target_amount, status, target_date')
+//         .eq('goal_id', goalId)
+//         .maybeSingle();
+
+//     if (goalRow == null) return;
+
+//     final target = (goalRow['target_amount'] ?? 0).toDouble();
+//     final String? oldStatus = goalRow['status'] as String?;
+
+//     DateTime? targetDate;
+//     if (goalRow['target_date'] != null) {
+//       targetDate = DateTime.parse(goalRow['target_date'] as String);
+//     }
+
+//     final bool expired = _isExpired(targetDate);
+
+//     // 3) Decide new status
+//     late final String newStatus;
+//     if (totalAssigned >= target && target > 0) {
+//       newStatus = 'Completed';
+//     } else if (expired) {
+//       newStatus = 'Incompleted';
+//     } else {
+//       newStatus = 'Active';
+//     }
+
+//     if (newStatus == oldStatus) {
+//       debugPrint('Goal $goalId status unchanged ($newStatus)');
+//       await _fetchGoals();
+//       return;
+//     }
+
+//     await supabase
+//         .from('Goal')
+//         .update({'status': newStatus})
+//         .eq('goal_id', goalId);
+
+//     debugPrint('Goal $goalId status updated to $newStatus');
+
+//     await _fetchGoals();
+
+//     if (mounted) {
+//       await _showGoalStatusAlert(newStatus);
+//     }
+//   } catch (e) {
+//     debugPrint('Error updating goal status: $e');
+//   }
+// }
+
+Future<void> _checkAndUpdateGoalStatus(String goalId) async {
+  try {
+    // 1) assigned amount
+    final transfers = await supabase
+        .from('Goal_Transfer')
+        .select('amount, direction')
+        .eq('goal_id', goalId);
+
+    double totalAssigned = 0.0;
+    for (final t in (transfers as List? ?? [])) {
+      final amt = (t['amount'] ?? 0).toDouble();
+      final dir = (t['direction'] ?? '').toString().toLowerCase();
+      if (dir == 'assign') totalAssigned += amt;
+      if (dir == 'unassign') totalAssigned -= amt;
     }
+    totalAssigned = max(0, totalAssigned);
+
+    // 2) goal info
+    final goalRow = await supabase
+        .from('Goal')
+        .select('target_amount, status, target_date')
+        .eq('goal_id', goalId)
+        .maybeSingle();
+
+    if (goalRow == null) return;
+
+    final target = (goalRow['target_amount'] ?? 0).toDouble();
+    final String? oldStatus = goalRow['status'] as String?;
+
+    // robust target_date parsing
+    DateTime? targetDate;
+    final raw = goalRow['target_date'];
+    if (raw != null) {
+      if (raw is DateTime) {
+        targetDate = DateTime(raw.year, raw.month, raw.day);
+      } else if (raw is String && raw.trim().isNotEmpty) {
+        final dt = DateTime.parse(raw.trim());
+        targetDate = DateTime(dt.year, dt.month, dt.day);
+      }
+    }
+
+    final expired = _isExpired(targetDate);
+
+    // 3) decide new status
+    late final String newStatus;
+    if (totalAssigned >= target && target > 0) {
+      newStatus = 'Completed';
+    } else if (expired) {
+      newStatus = 'Incompleted';
+    } else {
+      newStatus = 'Active';
+    }
+
+    debugPrint(
+      '[StatusCheck] goal=$goalId, assigned=$totalAssigned, '
+      'target=$target, expired=$expired, old=$oldStatus, new=$newStatus',
+    );
+
+    // If nothing changed, don't loop back into _fetchGoals()
+    if (newStatus == oldStatus) return;
+
+    await supabase
+        .from('Goal')
+        .update({'status': newStatus})
+        .eq('goal_id', goalId);
+
+    debugPrint('Goal $goalId status updated to $newStatus');
+
+    // optional: refresh just once after a batch, but if you want:
+    await _fetchGoals();
+
+    if (mounted) {
+      await _showGoalStatusAlert(newStatus);
+    }
+  } catch (e) {
+    debugPrint('Error updating goal status: $e');
   }
+}
 
 
 
@@ -948,33 +1156,6 @@ if (idx != -1) _goals[idx] = updatedGoal;
   }
 }
 
-
-
-// void _recalculateBalances() {
-//   //  Compute total assigned from all goals 
-//   final rawAssigned = _goals
-//     .where((g) => g.type != GoalType.achieved)
-//     .fold(0.0, (sum, g) => sum + g.savedAmount);
-
-
-//   //  Make sure total saving is never negative
-//   _totalSaving = _totalSaving.clamp(0.0, double.infinity);
-
-//   //  If total < assigned, cap assigned to total
-//   // (so that it never exceeds available savings)
-//   final effectiveAssigned = min(rawAssigned, _totalSaving);
-
-//   //  Unassigned = whatever remains, never negative
-//   final unassigned = (_totalSaving - effectiveAssigned).clamp(0.0, double.infinity);
-
-  
-//   if (!mounted) return;
-//   setState(() {
-//     _assignedBalanceCached = effectiveAssigned;
-//     _unassignedBalance = unassigned;
-//   });
-
-// }
 
 void _recalculateBalances() {
   // Always keep totalSaving non-negative

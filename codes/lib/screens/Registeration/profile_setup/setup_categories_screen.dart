@@ -155,105 +155,73 @@ class _SetupCategoriesScreenState extends State<SetupCategoriesScreen> {
     return true;
   }
 
-  Future<void> saveCategoriesToSupabase() async {
-    setState(() => loading = true);
-    try {
-      final user = supabase.auth.currentUser;
-      if (user == null) throw Exception("No logged-in user found");
+ void saveLocalCategories() async {
+  final allCategories = [...fixedCategories, ...customCategories];
 
-      final profileResponse = await supabase
-          .from('User_Profile')
-          .select('profile_id')
-          .eq('user_id', user.id)
-          .maybeSingle();
-
-      if (profileResponse == null) throw Exception("User profile not found");
-      final profileId = profileResponse['profile_id'];
-
-      final allCategories = [...fixedCategories, ...customCategories];
-
-      // 🟢 Validate numeric inputs before continuing
-      if (!_validateNumericInputs(allCategories)) {
-        setState(() => loading = false);
-        return;
-      }
-
-      // ✅ Retrieve monthly income BEFORE saving
-      final incomeResponse = await supabase
-          .from('Fixed_Income')
-          .select('monthly_income')
-          .eq('is_primary', true)
-          .eq('profile_id', profileId)
-          .maybeSingle();
-
-      final monthlyIncome = (incomeResponse?['monthly_income'] ?? 0).toDouble();
-
-      // ✅ Calculate total limits
-      final totalLimits = allCategories.fold<double>(
-        0,
-        (sum, c) => sum + (int.tryParse(c['limit'].text.trim()) ?? 0),
-      );
-
-      // ✅ Warn if limits exceed income
-      if (totalLimits > monthlyIncome) {
-        final proceed = await showDialog<bool>(
-          context: context,
-          builder: (_) => AlertDialog(
-            backgroundColor: const Color(0xFF1D1B32),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            title: const Text("⚠️ Limit Warning",
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-            content: Text(
-              "Your total limits (SAR $totalLimits) exceed your monthly income (SAR $monthlyIncome). "
-              "Would you like to continue or adjust them?",
-              style: const TextStyle(color: Colors.white70, height: 1.4),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text("Adjust", style: TextStyle(color: Colors.white70)),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text("Continue", style: TextStyle(color: Color(0xFF7959F5))),
-              ),
-            ],
-          ),
-        );
-
-        if (proceed != true) {
-          setState(() => loading = false);
-          return;
-        }
-      }
-
-      // ✅ Prepare records for saving
-      final categoryRecords = allCategories.map((c) {
-        final limit = c['limit'].text.trim().isEmpty
-            ? null
-            : int.tryParse(c['limit'].text.trim()) ?? 0;
-        return {
-          'profile_id': profileId,
-          'name': c['name'],
-          'type': c['type'] ?? 'Custom',
-          'monthly_limit': limit,
-          'icon': c['icon'].toString().split('.').last,
-          'icon_color': c['color'].value.toRadixString(16),
-          'is_archived': false,
-        };
-      }).toList();
-
-      await supabase.from('Category').insert(categoryRecords);
-      ProfileData.categories = categoryRecords;
-
-      Navigator.pushNamed(context, '/setupExpenses');
-    } catch (e) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text("Error saving: $e")));
-    } finally {
-      setState(() => loading = false);
-    }
+  // 1️⃣ Validate number inputs
+  if (!_validateNumericInputs(allCategories)) {
+    return;
   }
+
+  // 2️⃣ Calculate total limits
+  final totalLimits = allCategories.fold<double>(
+    0,
+    (sum, c) => sum + (int.tryParse(c['limit'].text.trim()) ?? 0),
+  );
+
+  // 3️⃣ Get income from ProfileData (since setup is local-only now)
+  final totalIncome = ProfileData.incomes.fold<double>(
+    0,
+    (sum, i) => sum + (i['amount'] ?? 0.0),
+  );
+
+  // 4️⃣ Show the warning if limits > income
+  if (totalLimits > totalIncome) {
+    final proceed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: const Color(0xFF1D1B32),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          "⚠️ Limit Warning",
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        content: Text(
+          "Your total category limits (SAR $totalLimits) exceed your income (SAR $totalIncome).\n\n"
+          "Do you want to continue or adjust limits?",
+          style: const TextStyle(color: Colors.white70, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text("Adjust", style: TextStyle(color: Colors.white70)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text("Continue", style: TextStyle(color: Color(0xFF7959F5))),
+          ),
+        ],
+      ),
+    );
+
+    // User chose to adjust → stop here
+    if (proceed != true) return;
+  }
+
+  // 5️⃣ Save locally into ProfileData
+  ProfileData.categories = allCategories.map((c) {
+    return {
+      'name': c['name'],
+      'limit': int.tryParse(c['limit'].text.trim()) ?? 0,
+      'color': c['color'].value,
+      'icon': c['icon'].toString().split('.').last,
+      'type': c['type'] ?? 'Custom',
+    };
+  }).toList();
+
+  // 6️⃣ Next screen
+  Navigator.pushNamed(context, '/setupExpenses');
+}
 
   Widget _buildCompactRow(Map<String, dynamic> category,
       {bool isCustom = false, int? index}) {
@@ -446,7 +414,7 @@ class _SetupCategoriesScreenState extends State<SetupCategoriesScreen> {
                         shadowColor:
                             const Color(0xFF7959F5).withOpacity(0.4),
                       ),
-                      onPressed: loading ? null : saveCategoriesToSupabase,
+                     onPressed: loading ? null : saveLocalCategories,
                       child: loading
                           ? const CircularProgressIndicator(color: Colors.white)
                           : const Text(

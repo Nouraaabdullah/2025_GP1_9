@@ -14,46 +14,22 @@ class _SetupNameScreenState extends State<SetupNameScreen> {
   final supabase = Supabase.instance.client;
   bool loading = false;
 
-  Future<void> saveName() async {
-    final name = controller.text.trim();
+  void saveName() {
+  final name = controller.text.trim();
 
-    if (name.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter your name')),
-      );
-      return;
-    }
-
-    setState(() => loading = true);
-
-    try {
-      final user = supabase.auth.currentUser;
-      if (user == null) {
-        throw Exception("No logged-in user found.");
-      }
-
-      // ✅ Update the User_Profile table
-      final updateResponse = await supabase
-          .from('User_Profile')
-          .update({'full_name': name})
-          .eq('user_id', user.id);
-
-      debugPrint("✅ Name updated in User_Profile: $updateResponse");
-
-      // ✅ Store locally for later setup pages
-      ProfileData.userName = name;
-
-      // ✅ Navigate to the next setup screen
-      Navigator.pushNamed(context, '/setupIncome');
-    } catch (e) {
-      debugPrint("❌ Error updating name: $e");
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error saving name: $e')),
-      );
-    } finally {
-      setState(() => loading = false);
-    }
+  if (name.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Please enter your name')),
+    );
+    return;
   }
+
+  // Save locally only
+  ProfileData.userName = name;
+
+  // Go to next screen
+  Navigator.pushNamed(context, '/setupIncome');
+}
 
   @override
   Widget build(BuildContext context) {

@@ -169,7 +169,7 @@ class _ProfileMainPageState
         if (mounted) {
           Navigator.pushNamedAndRemoveUntil(
             context,
-            '/welcome',
+            '/login',
             (
               route,
             ) => false,

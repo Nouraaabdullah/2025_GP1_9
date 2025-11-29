@@ -23,6 +23,8 @@ class _LoginScreenState
   final emailController = TextEditingController();
   final passwordController = TextEditingController();
   final supabase = Supabase.instance.client;
+  bool showPassword = false;
+
 
   bool loading = false;
 
@@ -345,66 +347,59 @@ class _LoginScreenState
   }
 
   // ===================== Input Field =====================
-  Widget _inputField({
-    required TextEditingController controller,
-    required String hint,
-    bool isPassword = false,
-  }) {
-    return Focus(
-      child: Builder(
-        builder:
-            (
-              context,
-            ) {
-              final bool isFocused = Focus.of(
-                context,
-              ).hasFocus;
+Widget _inputField({
+  required TextEditingController controller,
+  required String hint,
+  bool isPassword = false,
+}) {
+  return Focus(
+    child: Builder(builder: (context) {
+      final bool isFocused = Focus.of(context).hasFocus;
 
-              return AnimatedContainer(
-                duration: const Duration(
-                  milliseconds: 200,
-                ),
-                decoration: BoxDecoration(
-                  color: const Color(
-                    0xFF121225,
-                  ), // same background always
-                  borderRadius: BorderRadius.circular(
-                    18,
-                  ),
-                  border: Border.all(
-                    color: isFocused
-                        ? const Color(
-                            0xFF7C5CFF,
-                          )
-                        : const Color(
-                            0xFF2C284A,
-                          ),
-                    width: isFocused
-                        ? 2
-                        : 1.4,
-                  ),
-                ),
-                child: TextField(
-                  controller: controller,
-                  obscureText: isPassword,
-                  style: const TextStyle(
-                    color: Colors.white,
-                  ),
-                  decoration: InputDecoration(
-                    hintText: hint,
-                    hintStyle: const TextStyle(
-                      color: Colors.white38,
-                    ),
-                    border: InputBorder.none,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 18,
-                    ),
+      return AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        decoration: BoxDecoration(
+          color: const Color(0xFF121225),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+            color: isFocused ? const Color(0xFF7C5CFF) : const Color(0xFF2C284A),
+            width: isFocused ? 2 : 1.4,
+          ),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: controller,
+                obscureText: isPassword && !showPassword,
+                style: const TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  hintText: hint,
+                  hintStyle: const TextStyle(color: Colors.white38),
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 18,
                   ),
                 ),
-              );
-            },
-      ),
-    );
-  }
+              ),
+            ),
+
+            // 👁 Show/Hide Icon
+            if (isPassword)
+              IconButton(
+                icon: Icon(
+                  showPassword ? Icons.visibility_off : Icons.visibility,
+                  color: Colors.white54,
+                ),
+                onPressed: () {
+                  setState(() => showPassword = !showPassword);
+                },
+              ),
+          ],
+        ),
+      );
+    }),
+  );
 }
+   }

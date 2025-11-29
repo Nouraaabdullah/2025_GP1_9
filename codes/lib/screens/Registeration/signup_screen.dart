@@ -16,6 +16,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
   bool loading = false;
   bool showPassword = false;
 
+  // NEW VALIDATION FIELDS
+  String? emailError;
+  String? passwordError;
+
   // Password validation states
   bool hasMinLength = false;
   bool hasUpper = false;
@@ -23,33 +27,55 @@ class _SignUpScreenState extends State<SignUpScreen> {
   bool hasNumber = false;
   bool hasSpecial = false;
 
-void validatePassword(String password) {
-  setState(() {
-    hasMinLength = password.length >= 8;
-    hasUpper = RegExp(r'[A-Z]').hasMatch(password);
-    hasLower = RegExp(r'[a-z]').hasMatch(password);
-    hasNumber = RegExp(r'[0-9]').hasMatch(password);
-    hasSpecial   = RegExp(r'[^A-Za-z0-9]').hasMatch(password);
-  });
-}
+  // EMAIL FORMAT VALIDATION
+  bool isValidEmail(String email) {
+    final regex = RegExp(r'^[^@]+@[^@]+\.[^@]+$');
+    return regex.hasMatch(email);
+  }
+
+  void validatePassword(String password) {
+    setState(() {
+      hasMinLength = password.length >= 8;
+      hasUpper = RegExp(r'[A-Z]').hasMatch(password);
+      hasLower = RegExp(r'[a-z]').hasMatch(password);
+      hasNumber = RegExp(r'[0-9]').hasMatch(password);
+      hasSpecial = RegExp(r'[^A-Za-z0-9]').hasMatch(password);
+      passwordError = null; // clear on change
+    });
+  }
 
   // ===== SIGN UP USER =====
   Future<void> signUpUser() async {
     final email = emailController.text.trim();
     final password = passwordController.text.trim();
 
-    // Validation
-    if (email.isEmpty || password.isEmpty) {
-      showMessage("Please enter email and password.");
-      return;
+    setState(() {
+      emailError = null;
+      passwordError = null;
+    });
+
+    bool hasError = false;
+
+    // EMAIL CHECKS
+    if (email.isEmpty) {
+      emailError = "Email is required.";
+      hasError = true;
+    } else if (!isValidEmail(email)) {
+      emailError = "Please enter a valid email address.";
+      hasError = true;
     }
 
-    if (!(hasMinLength &&
-        hasUpper &&
-        hasLower &&
-        hasNumber &&
-        hasSpecial)) {
-      showMessage("Your password does not meet all requirements.");
+    // PASSWORD CHECKS
+    if (password.isEmpty) {
+      passwordError = "Password is required.";
+      hasError = true;
+    } else if (!(hasMinLength && hasUpper && hasLower && hasNumber && hasSpecial)) {
+      passwordError = "Your password does not meet all requirements.";
+      hasError = true;
+    }
+
+    if (hasError) {
+      setState(() {});
       return;
     }
 
@@ -72,29 +98,14 @@ void validatePassword(String password) {
         'current_balance': 0,
       });
 
-      showMessage("Account created successfully!");
       Navigator.pushReplacementNamed(context, '/setupName');
     } catch (e) {
-      showMessage("Signup failed: $e");
+      setState(() {
+        passwordError = "Signup failed. Please try again.";
+      });
     } finally {
       setState(() => loading = false);
     }
-  }
-
-  void showMessage(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        behavior: SnackBarBehavior.floating,
-        backgroundColor: const Color(0xFF3C2C71),
-        content: Text(
-          msg,
-          style: const TextStyle(
-            color: Color(0xFFE6DDFC),
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ),
-    );
   }
 
   // ========================= UI =========================
@@ -200,6 +211,10 @@ void validatePassword(String password) {
                       controller: emailController,
                       hint: "you@example.com",
                       isPassword: false,
+                      error: emailError,
+                      onChanged: (_) {
+                        setState(() => emailError = null);
+                      },
                     ),
 
                     const SizedBox(height: 28),
@@ -219,6 +234,7 @@ void validatePassword(String password) {
                       hint: "********",
                       isPassword: true,
                       onChanged: validatePassword,
+                      error: passwordError,
                     ),
 
                     // ==== PASSWORD REQUIREMENTS ====
@@ -261,8 +277,6 @@ void validatePassword(String password) {
                     ),
 
                     const SizedBox(height: 24),
-
-
                   ],
                 ),
               ),
@@ -279,55 +293,74 @@ void validatePassword(String password) {
     required String hint,
     bool isPassword = false,
     void Function(String)? onChanged,
+    String? error,
   }) {
-    return Focus(
-      child: Builder(builder: (context) {
-        final bool isFocused = Focus.of(context).hasFocus;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Focus(
+          child: Builder(builder: (context) {
+            final bool isFocused = Focus.of(context).hasFocus;
 
-        return AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          decoration: BoxDecoration(
-            color: const Color(0xFF121225),
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(
-              color:
-                  isFocused ? const Color(0xFF7C5CFF) : const Color(0xFF2C284A),
-              width: isFocused ? 2 : 1.4,
-            ),
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: controller,
-                  obscureText: isPassword && !showPassword,
-                  onChanged: onChanged,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(
-                    hintText: hint,
-                    hintStyle: const TextStyle(color: Colors.white38),
-                    border: InputBorder.none,
-                    contentPadding:
-                        const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-                  ),
+            return AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              decoration: BoxDecoration(
+                color: const Color(0xFF121225),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(
+                  color: isFocused
+                      ? const Color(0xFF7C5CFF)
+                      : const Color(0xFF2C284A),
+                  width: isFocused ? 2 : 1.4,
                 ),
               ),
-
-              // 👁 Show/Hide Icon
-              if (isPassword)
-                IconButton(
-                  icon: Icon(
-                    showPassword ? Icons.visibility_off : Icons.visibility,
-                    color: Colors.white54,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: controller,
+                      obscureText: isPassword && !showPassword,
+                      onChanged: onChanged,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: InputDecoration(
+                        hintText: hint,
+                        hintStyle: const TextStyle(color: Colors.white38),
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 18,
+                        ),
+                      ),
+                    ),
                   ),
-                  onPressed: () {
-                    setState(() => showPassword = !showPassword);
-                  },
-                ),
-            ],
+                  if (isPassword)
+                    IconButton(
+                      icon: Icon(
+                        showPassword ? Icons.visibility_off : Icons.visibility,
+                        color: Colors.white54,
+                      ),
+                      onPressed: () {
+                        setState(() => showPassword = !showPassword);
+                      },
+                    ),
+                ],
+              ),
+            );
+          }),
+        ),
+
+        if (error != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 6, left: 4),
+            child: Text(
+              error,
+              style: const TextStyle(
+                color: Colors.redAccent,
+                fontSize: 13,
+              ),
+            ),
           ),
-        );
-      }),
+      ],
     );
   }
 

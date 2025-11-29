@@ -179,6 +179,27 @@ class _DashboardPageState
       );
     }
   }
+  Color _hexToColor(String value) {
+  value = value.replaceAll('#', '');
+
+  // CASE 1: database stored a decimal int (long number)
+  final isDecimal =
+      RegExp(r'^[0-9]+$').hasMatch(value) && value.length > 8;
+
+  if (isDecimal) {
+    final dec = int.parse(value);
+    return Color(dec);
+  }
+
+  // CASE 2: 6-char hex → add FF alpha
+  if (value.length == 6) {
+    value = 'FF$value';
+  }
+
+  // CASE 3: Normal hex ARGB
+  return Color(int.parse(value, radix: 16));
+}
+
 
   Future<
     void
@@ -497,23 +518,12 @@ class _DashboardPageState
                   (r['name']
                       as String),
           };
-      final catColorById =
-          <
-            String,
-            Color
-          >{
-            for (final r
-                in catRows)
-              r['category_id']
-                  as String: colorFromIconOrSeed(
-                categoryId:
-                    r['category_id']
-                        as String,
-                iconHex:
-                    r['icon_color']
-                        as String?,
-              ),
-          };
+      final catColorById = <String, Color>{
+          for (final r in catRows)
+            r['category_id'] as String: _hexToColor(
+              (r['icon_color'] ?? '').toString(),
+            ),
+        };
 
       int bucketIndex(
         DateTime d,

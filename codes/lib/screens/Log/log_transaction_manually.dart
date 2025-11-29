@@ -259,24 +259,25 @@ class _LogTransactionManuallyPageState
     return num.tryParse('$v') ?? 0;
   }
 
-  // helpers for color and name normalization used in validation
-  String _normalizeDbHex(String s) {
-    var t = (s).trim();
-    if (t.startsWith('#')) t = t.substring(1);
-    t = t.toUpperCase();
-    if (t.length == 8) {
-      t = t.substring(2);
-    }
-    if (t.length > 6) {
-      t = t.substring(t.length - 6);
-    }
-    return t.padLeft(6, '0');
+Color _hexToColor(String value) {
+  value = value.replaceAll('#', '');
+
+  final isDecimal =
+      RegExp(r'^[0-9]+$').hasMatch(value) && value.length > 8;
+
+  if (isDecimal) {
+    final dec = int.parse(value);
+    return Color(dec);
   }
 
-  String _hexFromColorRGB(Color c) {
-    final rgb = c.value & 0x00FFFFFF;
-    return rgb.toRadixString(16).toUpperCase().padLeft(6, '0');
+  if (value.length == 6) {
+    value = 'FF$value';
   }
+
+  return Color(int.parse(value, radix: 16));
+}
+
+
 
   String _normalizeName(String s) {
     return s.trim().toLowerCase();
@@ -632,10 +633,9 @@ class _LogTransactionManuallyPageState
 
                       final takenColors = <String>{
                         for (final r in rows)
-                          _normalizeDbHex(
-                            ((r as Map<String, dynamic>)['icon_color'] ?? '')
-                                .toString(),
-                          ),
+                          _hexToColor(
+                            ((r as Map<String, dynamic>)['icon_color'] ?? '').toString(),
+                          ).value.toRadixString(16).toUpperCase(),
                       };
 
                       final takenNames = <String>{
@@ -646,7 +646,7 @@ class _LogTransactionManuallyPageState
                           ),
                       };
 
-                      final chosenHex = _hexFromColorRGB(chosenColor);
+                      final chosenHex = chosenColor.value.toRadixString(16).toUpperCase();
                       final rawName = nameCtrl.text;
                       final normalized = _normalizeName(rawName);
 

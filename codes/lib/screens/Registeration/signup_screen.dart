@@ -1,14 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-class SignUpScreen extends StatefulWidget {
-  const SignUpScreen({super.key});
+class SignUpScreen
+    extends
+        StatefulWidget {
+  const SignUpScreen({
+    super.key,
+  });
 
   @override
-  State<SignUpScreen> createState() => _SignUpScreenState();
+  State<
+    SignUpScreen
+  >
+  createState() => _SignUpScreenState();
 }
 
-class _SignUpScreenState extends State<SignUpScreen> {
+class _SignUpScreenState
+    extends
+        State<
+          SignUpScreen
+        > {
   final emailController = TextEditingController();
   final passwordController = TextEditingController();
   final supabase = Supabase.instance.client;
@@ -28,31 +39,68 @@ class _SignUpScreenState extends State<SignUpScreen> {
   bool hasSpecial = false;
 
   // EMAIL FORMAT VALIDATION
-  bool isValidEmail(String email) {
-    final regex = RegExp(r'^[^@]+@[^@]+\.[^@]+$');
-    return regex.hasMatch(email);
+  bool isValidEmail(
+    String email,
+  ) {
+    final regex = RegExp(
+      r'^[^@]+@[^@]+\.[^@]+$',
+    );
+    return regex.hasMatch(
+      email,
+    );
   }
 
-  void validatePassword(String password) {
-    setState(() {
-      hasMinLength = password.length >= 8;
-      hasUpper = RegExp(r'[A-Z]').hasMatch(password);
-      hasLower = RegExp(r'[a-z]').hasMatch(password);
-      hasNumber = RegExp(r'[0-9]').hasMatch(password);
-      hasSpecial = RegExp(r'[^A-Za-z0-9]').hasMatch(password);
-      passwordError = null; // clear on change
-    });
+  void validatePassword(
+    String password,
+  ) {
+    setState(
+      () {
+        hasMinLength =
+            password.length >=
+            8;
+        hasUpper =
+            RegExp(
+              r'[A-Z]',
+            ).hasMatch(
+              password,
+            );
+        hasLower =
+            RegExp(
+              r'[a-z]',
+            ).hasMatch(
+              password,
+            );
+        hasNumber =
+            RegExp(
+              r'[0-9]',
+            ).hasMatch(
+              password,
+            );
+        hasSpecial =
+            RegExp(
+              r'[^A-Za-z0-9]',
+            ).hasMatch(
+              password,
+            );
+        passwordError = null; // clear on change
+      },
+    );
   }
 
   // ===== SIGN UP USER =====
-  Future<void> signUpUser() async {
+  Future<
+    void
+  >
+  signUpUser() async {
     final email = emailController.text.trim();
     final password = passwordController.text.trim();
 
-    setState(() {
-      emailError = null;
-      passwordError = null;
-    });
+    setState(
+      () {
+        emailError = null;
+        passwordError = null;
+      },
+    );
 
     bool hasError = false;
 
@@ -60,7 +108,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
     if (email.isEmpty) {
       emailError = "Email is required.";
       hasError = true;
-    } else if (!isValidEmail(email)) {
+    } else if (!isValidEmail(
+      email,
+    )) {
       emailError = "Please enter a valid email address.";
       hasError = true;
     }
@@ -69,17 +119,25 @@ class _SignUpScreenState extends State<SignUpScreen> {
     if (password.isEmpty) {
       passwordError = "Password is required.";
       hasError = true;
-    } else if (!(hasMinLength && hasUpper && hasLower && hasNumber && hasSpecial)) {
+    } else if (!(hasMinLength &&
+        hasUpper &&
+        hasLower &&
+        hasNumber &&
+        hasSpecial)) {
       passwordError = "Your password does not meet all requirements.";
       hasError = true;
     }
 
     if (hasError) {
-      setState(() {});
+      setState(
+        () {},
+      );
       return;
     }
 
-    setState(() => loading = true);
+    setState(
+      () => loading = true,
+    );
 
     try {
       final response = await supabase.auth.signUp(
@@ -88,32 +146,68 @@ class _SignUpScreenState extends State<SignUpScreen> {
       );
 
       final user = response.user;
-      if (user == null) throw Exception("User creation failed");
+      if (user ==
+          null)
+        throw Exception(
+          "User creation failed",
+        );
 
-      // Create profile record
-      await supabase.from('User_Profile').insert({
-        'user_id': user.id,
-        'email': email,
-        'full_name': null,
-        'current_balance': 0,
-      });
+      await supabase
+          .from(
+            'User_Profile',
+          )
+          .insert(
+            {
+              'user_id': user.id,
+              'email': email,
+              'full_name': null,
+              'current_balance': 0,
+            },
+          );
 
-      Navigator.pushReplacementNamed(context, '/setupName');
-    } catch (e) {
-      setState(() {
-        passwordError = "Signup failed. Please try again.";
-      });
+      Navigator.pushReplacementNamed(
+        context,
+        '/setupName',
+      );
+    } on AuthException catch (
+      e
+    ) {
+      setState(
+        () {
+          if (e.message.toLowerCase().contains(
+            'already registered',
+          )) {
+            emailError = "This email is already registered.";
+          } else {
+            passwordError = "Signup failed. Please try again.";
+          }
+        },
+      );
+    } catch (
+      e
+    ) {
+      setState(
+        () {
+          passwordError = "Something went wrong. Please try again.";
+        },
+      );
     } finally {
-      setState(() => loading = false);
+      setState(
+        () => loading = false,
+      );
     }
   }
 
   // ========================= UI =========================
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(
+    BuildContext context,
+  ) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0F0F1A),
+      backgroundColor: const Color(
+        0xFF0F0F1A,
+      ),
       body: Stack(
         children: [
           // ================= PURPLE ARC =================
@@ -122,13 +216,21 @@ class _SignUpScreenState extends State<SignUpScreen> {
             width: double.infinity,
             decoration: const BoxDecoration(
               borderRadius: BorderRadius.only(
-                bottomLeft: Radius.circular(40),
-                bottomRight: Radius.circular(40),
+                bottomLeft: Radius.circular(
+                  40,
+                ),
+                bottomRight: Radius.circular(
+                  40,
+                ),
               ),
               gradient: LinearGradient(
                 colors: [
-                  Color(0xFF6A47CE),
-                  Color(0xFF3C2C71),
+                  Color(
+                    0xFF6A47CE,
+                  ),
+                  Color(
+                    0xFF3C2C71,
+                  ),
                 ],
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
@@ -141,10 +243,17 @@ class _SignUpScreenState extends State<SignUpScreen> {
                     decoration: const BoxDecoration(
                       gradient: RadialGradient(
                         radius: 0.7,
-                        center: Alignment(0, -0.3),
+                        center: Alignment(
+                          0,
+                          -0.3,
+                        ),
                         colors: [
-                          Color(0x90B38CFF),
-                          Color(0x003C2C71),
+                          Color(
+                            0x90B38CFF,
+                          ),
+                          Color(
+                            0x003C2C71,
+                          ),
                         ],
                       ),
                     ),
@@ -174,8 +283,13 @@ class _SignUpScreenState extends State<SignUpScreen> {
             child: Align(
               alignment: Alignment.topLeft,
               child: IconButton(
-                icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white),
-                onPressed: () => Navigator.pop(context),
+                icon: const Icon(
+                  Icons.arrow_back_ios_new,
+                  color: Colors.white,
+                ),
+                onPressed: () => Navigator.pop(
+                  context,
+                ),
               ),
             ),
           ),
@@ -187,12 +301,23 @@ class _SignUpScreenState extends State<SignUpScreen> {
             right: 0,
             bottom: 0,
             child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 24,
+              ),
               child: Container(
-                padding: const EdgeInsets.fromLTRB(24, 28, 24, 40),
+                padding: const EdgeInsets.fromLTRB(
+                  24,
+                  28,
+                  24,
+                  40,
+                ),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF181826),
-                  borderRadius: BorderRadius.circular(28),
+                  color: const Color(
+                    0xFF181826,
+                  ),
+                  borderRadius: BorderRadius.circular(
+                    28,
+                  ),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -201,34 +326,49 @@ class _SignUpScreenState extends State<SignUpScreen> {
                     const Text(
                       "Email",
                       style: TextStyle(
-                        color: Color(0xFFBEBED3),
+                        color: Color(
+                          0xFFBEBED3,
+                        ),
                         fontSize: 16,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(
+                      height: 8,
+                    ),
                     _inputField(
                       controller: emailController,
                       hint: "you@example.com",
                       isPassword: false,
                       error: emailError,
-                      onChanged: (_) {
-                        setState(() => emailError = null);
-                      },
+                      onChanged:
+                          (
+                            _,
+                          ) {
+                            setState(
+                              () => emailError = null,
+                            );
+                          },
                     ),
 
-                    const SizedBox(height: 28),
+                    const SizedBox(
+                      height: 28,
+                    ),
 
                     // Password
                     const Text(
                       "Password",
                       style: TextStyle(
-                        color: Color(0xFFBEBED3),
+                        color: Color(
+                          0xFFBEBED3,
+                        ),
                         fontSize: 16,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(
+                      height: 8,
+                    ),
                     _inputField(
                       controller: passwordController,
                       hint: "********",
@@ -239,32 +379,61 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
                     // ==== PASSWORD REQUIREMENTS ====
                     if (passwordController.text.isNotEmpty) ...[
-                      const SizedBox(height: 12),
-                      _req("At least 8 characters", hasMinLength),
-                      _req("Uppercase letter", hasUpper),
-                      _req("Lowercase letter", hasLower),
-                      _req("A number", hasNumber),
-                      _req("Special character", hasSpecial),
+                      const SizedBox(
+                        height: 12,
+                      ),
+                      _req(
+                        "At least 8 characters",
+                        hasMinLength,
+                      ),
+                      _req(
+                        "Uppercase letter",
+                        hasUpper,
+                      ),
+                      _req(
+                        "Lowercase letter",
+                        hasLower,
+                      ),
+                      _req(
+                        "A number",
+                        hasNumber,
+                      ),
+                      _req(
+                        "Special character",
+                        hasSpecial,
+                      ),
                     ],
 
-                    const SizedBox(height: 35),
+                    const SizedBox(
+                      height: 35,
+                    ),
 
                     // SIGN UP BUTTON
                     SizedBox(
                       width: double.infinity,
                       height: 58,
                       child: ElevatedButton(
-                        onPressed: loading ? null : signUpUser,
+                        onPressed: loading
+                            ? null
+                            : signUpUser,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF7C5CFF),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(20),
+                          backgroundColor: const Color(
+                            0xFF7C5CFF,
                           ),
-                          shadowColor: const Color(0xAA7C5CFF),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(
+                              20,
+                            ),
+                          ),
+                          shadowColor: const Color(
+                            0xAA7C5CFF,
+                          ),
                           elevation: 10,
                         ),
                         child: loading
-                            ? const CircularProgressIndicator(color: Colors.white)
+                            ? const CircularProgressIndicator(
+                                color: Colors.white,
+                              )
                             : const Text(
                                 "Sign Up",
                                 style: TextStyle(
@@ -276,7 +445,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       ),
                     ),
 
-                    const SizedBox(height: 24),
+                    const SizedBox(
+                      height: 24,
+                    ),
                   ],
                 ),
               ),
@@ -292,66 +463,102 @@ class _SignUpScreenState extends State<SignUpScreen> {
     required TextEditingController controller,
     required String hint,
     bool isPassword = false,
-    void Function(String)? onChanged,
+    void Function(
+      String,
+    )?
+    onChanged,
     String? error,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Focus(
-          child: Builder(builder: (context) {
-            final bool isFocused = Focus.of(context).hasFocus;
+          child: Builder(
+            builder:
+                (
+                  context,
+                ) {
+                  final bool isFocused = Focus.of(
+                    context,
+                  ).hasFocus;
 
-            return AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              decoration: BoxDecoration(
-                color: const Color(0xFF121225),
-                borderRadius: BorderRadius.circular(18),
-                border: Border.all(
-                  color: isFocused
-                      ? const Color(0xFF7C5CFF)
-                      : const Color(0xFF2C284A),
-                  width: isFocused ? 2 : 1.4,
-                ),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: controller,
-                      obscureText: isPassword && !showPassword,
-                      onChanged: onChanged,
-                      style: const TextStyle(color: Colors.white),
-                      decoration: InputDecoration(
-                        hintText: hint,
-                        hintStyle: const TextStyle(color: Colors.white38),
-                        border: InputBorder.none,
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 20,
-                          vertical: 18,
+                  return AnimatedContainer(
+                    duration: const Duration(
+                      milliseconds: 200,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(
+                        0xFF121225,
+                      ),
+                      borderRadius: BorderRadius.circular(
+                        18,
+                      ),
+                      border: Border.all(
+                        color: isFocused
+                            ? const Color(
+                                0xFF7C5CFF,
+                              )
+                            : const Color(
+                                0xFF2C284A,
+                              ),
+                        width: isFocused
+                            ? 2
+                            : 1.4,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: controller,
+                            obscureText:
+                                isPassword &&
+                                !showPassword,
+                            onChanged: onChanged,
+                            style: const TextStyle(
+                              color: Colors.white,
+                            ),
+                            decoration: InputDecoration(
+                              hintText: hint,
+                              hintStyle: const TextStyle(
+                                color: Colors.white38,
+                              ),
+                              border: InputBorder.none,
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 20,
+                                vertical: 18,
+                              ),
+                            ),
+                          ),
                         ),
-                      ),
+                        if (isPassword)
+                          IconButton(
+                            icon: Icon(
+                              showPassword
+                                  ? Icons.visibility_off
+                                  : Icons.visibility,
+                              color: Colors.white54,
+                            ),
+                            onPressed: () {
+                              setState(
+                                () => showPassword = !showPassword,
+                              );
+                            },
+                          ),
+                      ],
                     ),
-                  ),
-                  if (isPassword)
-                    IconButton(
-                      icon: Icon(
-                        showPassword ? Icons.visibility_off : Icons.visibility,
-                        color: Colors.white54,
-                      ),
-                      onPressed: () {
-                        setState(() => showPassword = !showPassword);
-                      },
-                    ),
-                ],
-              ),
-            );
-          }),
+                  );
+                },
+          ),
         ),
 
-        if (error != null)
+        if (error !=
+            null)
           Padding(
-            padding: const EdgeInsets.only(top: 6, left: 4),
+            padding: const EdgeInsets.only(
+              top: 6,
+              left: 4,
+            ),
             child: Text(
               error,
               style: const TextStyle(
@@ -365,23 +572,38 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }
 
   // ================= REQUIREMENT ROW =================
-  Widget _req(String text, bool ok) {
+  Widget _req(
+    String text,
+    bool ok,
+  ) {
     return Row(
       children: [
         Icon(
-          ok ? Icons.check_circle : Icons.circle,
+          ok
+              ? Icons.check_circle
+              : Icons.circle,
           size: 16,
-          color: ok ? const Color(0xFF7C5CFF) : Colors.white24,
+          color: ok
+              ? const Color(
+                  0xFF7C5CFF,
+                )
+              : Colors.white24,
         ),
-        const SizedBox(width: 8),
+        const SizedBox(
+          width: 8,
+        ),
         Text(
           text,
           style: TextStyle(
-            color: ok ? Colors.white : Colors.white38,
+            color: ok
+                ? Colors.white
+                : Colors.white38,
             fontSize: 13.5,
-            fontWeight: ok ? FontWeight.w600 : FontWeight.w400,
+            fontWeight: ok
+                ? FontWeight.w600
+                : FontWeight.w400,
           ),
-        )
+        ),
       ],
     );
   }

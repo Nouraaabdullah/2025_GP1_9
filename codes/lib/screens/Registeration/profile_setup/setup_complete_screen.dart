@@ -2,60 +2,115 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'shared_profile_data.dart';
 
-class SetupCompleteScreen extends StatefulWidget {
-  const SetupCompleteScreen({super.key});
+class SetupCompleteScreen
+    extends
+        StatefulWidget {
+  const SetupCompleteScreen({
+    super.key,
+  });
 
   @override
-  State<SetupCompleteScreen> createState() => _SetupCompleteScreenState();
+  State<
+    SetupCompleteScreen
+  >
+  createState() => _SetupCompleteScreenState();
 }
 
-class _SetupCompleteScreenState extends State<SetupCompleteScreen> {
+class _SetupCompleteScreenState
+    extends
+        State<
+          SetupCompleteScreen
+        > {
   final supabase = Supabase.instance.client;
   bool saving = false;
 
-  Future<void> _submitFinalData(BuildContext context) async {
+  Future<
+    void
+  >
+  _submitFinalData(
+    BuildContext context,
+  ) async {
     if (saving) return;
-    setState(() => saving = true);
+    setState(
+      () => saving = true,
+    );
 
     try {
       final user = supabase.auth.currentUser;
-      if (user == null) throw Exception("No logged-in user");
+      if (user ==
+          null)
+        throw Exception(
+          "No logged-in user",
+        );
 
       // ---------------------------------------
       // 1) Get profile_id
       // ---------------------------------------
       final profileResponse = await supabase
-          .from('User_Profile')
-          .select('profile_id')
-          .eq('user_id', user.id)
+          .from(
+            'User_Profile',
+          )
+          .select(
+            'profile_id',
+          )
+          .eq(
+            'user_id',
+            user.id,
+          )
           .maybeSingle();
 
-      if (profileResponse == null) throw Exception("Profile not found");
+      if (profileResponse ==
+          null)
+        throw Exception(
+          "Profile not found",
+        );
       final profileId = profileResponse['profile_id'];
 
       // ---------------------------------------
       // 2) Update profile (name + balance)
       // ---------------------------------------
-      await supabase.from('User_Profile').update({
-        'full_name': ProfileData.userName,
-        'current_balance': ProfileData.currentBalance,
-      }).eq('profile_id', profileId);
+      await supabase
+          .from(
+            'User_Profile',
+          )
+          .update(
+            {
+              'full_name': ProfileData.userName,
+              'current_balance': ProfileData.currentBalance,
+            },
+          )
+          .eq(
+            'profile_id',
+            profileId,
+          );
 
       // ---------------------------------------
       // 3) Insert incomes
       // ---------------------------------------
       if (ProfileData.incomes.isNotEmpty) {
-        final incomeRecords = ProfileData.incomes.map((i) {
-          return {
-            'profile_id': profileId,
-            'name': i['source'],
-            'monthly_income': i['amount'],
-            'payday': i['payday'],
-            'is_primary': false,
-          };
-        }).toList();
+        final incomeRecords = ProfileData.incomes.map(
+          (
+            i,
+          ) {
+            return {
+              'profile_id': profileId,
+              'name': i['source'],
+              'monthly_income': i['amount'],
+              'payday': i['payday'],
+              'is_primary':
+                  i['is_primary'] ??
+                  false,
+            };
+          },
+        ).toList();
 
-        await supabase.from('Fixed_Income').insert(incomeRecords);
+        await supabase
+            .from(
+              'Fixed_Income',
+            )
+            .insert(
+              incomeRecords,
+            );
       }
 
       // ---------------------------------------
@@ -69,47 +124,80 @@ class _SetupCompleteScreenState extends State<SetupCompleteScreen> {
 
           // find category_id (limit 1 so no error)
           final categoryRows = await supabase
-              .from('Category')
-              .select('category_id')
-              .eq('name', categoryName)
-              .limit(1);
+              .from(
+                'Category',
+              )
+              .select(
+                'category_id',
+              )
+              .eq(
+                'name',
+                categoryName,
+              )
+              .limit(
+                1,
+              );
 
           if (categoryRows.isEmpty) {
-            throw Exception("Category not found: $categoryName");
+            throw Exception(
+              "Category not found: $categoryName",
+            );
           }
 
           final categoryId = categoryRows.first['category_id'];
 
-          expenseRecords.add({
-            'profile_id': profileId,
-            'name': e['name'],
-            'amount': e['amount'],
-            'due_date': e['dueDate'],
-            'category_id': categoryId,
-            'is_transacted': false,
-          });
+          expenseRecords.add(
+            {
+              'profile_id': profileId,
+              'name': e['name'],
+              'amount': e['amount'],
+              'due_date': e['dueDate'],
+              'category_id': categoryId,
+              'is_transacted': false,
+            },
+          );
         }
 
-        await supabase.from('Fixed_Expense').insert(expenseRecords);
+        await supabase
+            .from(
+              'Fixed_Expense',
+            )
+            .insert(
+              expenseRecords,
+            );
       }
 
       // ---------------------------------------
       // 5) Insert categories
       // ---------------------------------------
       if (ProfileData.categories.isNotEmpty) {
-        final categoryRecords = ProfileData.categories.map((c) {
-          return {
-            'profile_id': profileId,
-            'name': c['name'],
-            'monthly_limit': c['limit'] ?? 0.0,
-            'icon': c['icon'],
-            'icon_color': c['color'].toString(),
-            'type': 'Custom',
-            'is_archived': false,
-          };
-        }).toList();
+        final categoryRecords = ProfileData.categories.map(
+          (
+            c,
+          ) {
+            return {
+              'profile_id': profileId,
+              'name': c['name'],
+              'monthly_limit':
+                  c['limit'] ??
+                  0.0,
+              'icon': c['icon'],
+              'icon_color': c['color'].toString(),
+              'type':
+                  c['type'] ??
+                  'Custom',
+              'is_archived': false,
+            };
+          },
+        ).toList();
 
-        await supabase.from('Category').insert(categoryRecords);
+        await supabase
+            .from(
+              'Category',
+            )
+            .insert(
+              categoryRecords,
+            );
       }
 
       // ---------------------------------------
@@ -119,36 +207,65 @@ class _SetupCompleteScreenState extends State<SetupCompleteScreen> {
 
       // Go to profile
       if (mounted) {
-        Navigator.pushNamedAndRemoveUntil(context, '/profile', (_) => false);
+        Navigator.pushNamedAndRemoveUntil(
+          context,
+          '/profile',
+          (
+            _,
+          ) => false,
+        );
       }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error: $e")),
+    } catch (
+      e
+    ) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(
+        SnackBar(
+          content: Text(
+            "Error: $e",
+          ),
+        ),
       );
     } finally {
-      setState(() => saving = false);
+      setState(
+        () => saving = false,
+      );
     }
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(
+    BuildContext context,
+  ) {
     return Scaffold(
-      backgroundColor: const Color(0xFF1D1B32),
+      backgroundColor: const Color(
+        0xFF1D1B32,
+      ),
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+          padding: const EdgeInsets.symmetric(
+            horizontal: 24,
+            vertical: 40,
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              const Spacer(flex: 1),
+              const Spacer(
+                flex: 1,
+              ),
 
               const Icon(
                 Icons.check_circle,
-                color: Color(0xFF7959F5),
+                color: Color(
+                  0xFF7959F5,
+                ),
                 size: 140,
               ),
 
-              const SizedBox(height: 24),
+              const SizedBox(
+                height: 24,
+              ),
 
               const Text(
                 "Setup Complete!",
@@ -160,19 +277,25 @@ class _SetupCompleteScreenState extends State<SetupCompleteScreen> {
                 textAlign: TextAlign.center,
               ),
 
-              const SizedBox(height: 12),
+              const SizedBox(
+                height: 12,
+              ),
 
               const Text(
                 "Your financial profile has been successfully created.",
                 style: TextStyle(
-                  color: Color(0xFFB3B3C7),
+                  color: Color(
+                    0xFFB3B3C7,
+                  ),
                   fontSize: 16,
                   height: 1.5,
                 ),
                 textAlign: TextAlign.center,
               ),
 
-              const SizedBox(height: 40),
+              const SizedBox(
+                height: 40,
+              ),
 
               Container(
                 height: 3,
@@ -180,27 +303,43 @@ class _SetupCompleteScreenState extends State<SetupCompleteScreen> {
                   gradient: LinearGradient(
                     colors: [
                       Colors.transparent,
-                      Color(0xFFB8A8FF),
+                      Color(
+                        0xFFB8A8FF,
+                      ),
                       Colors.transparent,
                     ],
                   ),
                 ),
               ),
 
-              const Spacer(flex: 2),
+              const Spacer(
+                flex: 2,
+              ),
 
               ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF7959F5),
+                  backgroundColor: const Color(
+                    0xFF7959F5,
+                  ),
                   padding: const EdgeInsets.symmetric(
-                      vertical: 16, horizontal: 32),
+                    vertical: 16,
+                    horizontal: 32,
+                  ),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(
+                      12,
+                    ),
                   ),
                 ),
-                onPressed: saving ? null : () => _submitFinalData(context),
+                onPressed: saving
+                    ? null
+                    : () => _submitFinalData(
+                        context,
+                      ),
                 child: saving
-                    ? const CircularProgressIndicator(color: Colors.white)
+                    ? const CircularProgressIndicator(
+                        color: Colors.white,
+                      )
                     : const Text(
                         "Go to Profile",
                         style: TextStyle(
@@ -211,7 +350,9 @@ class _SetupCompleteScreenState extends State<SetupCompleteScreen> {
                       ),
               ),
 
-              const Spacer(flex: 1),
+              const Spacer(
+                flex: 1,
+              ),
             ],
           ),
         ),

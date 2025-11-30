@@ -34,6 +34,12 @@ class _SetupCompleteScreenState
     setState(
       () => saving = true,
     );
+    String _todayDate() {
+      final now = DateTime.now();
+      return '${now.year.toString().padLeft(4, '0')}-'
+          '${now.month.toString().padLeft(2, '0')}-'
+          '${now.day.toString().padLeft(2, '0')}';
+    }
 
     try {
       final user = supabase.auth.currentUser;
@@ -100,6 +106,7 @@ class _SetupCompleteScreenState
               'is_primary':
                   i['is_primary'] ??
                   false,
+              'start_time': _todayDate(),
             };
           },
         ).toList();
@@ -154,6 +161,7 @@ class _SetupCompleteScreenState
               'due_date': e['dueDate'],
               'category_id': categoryId,
               'is_transacted': false,
+              'start_time': _todayDate(),
             },
           );
         }

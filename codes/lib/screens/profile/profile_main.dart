@@ -583,7 +583,7 @@ class _ProfileMainPageState
             'Monthly_Financial_Record',
           )
           .select(
-            'total_income, total_expense, total_earning',
+            'record_id, total_income, total_expense, total_earning',
           )
           .eq(
             'profile_id',
@@ -853,51 +853,92 @@ class _ProfileMainPageState
             'name',
           );
 
-      final trxThisMonth = await _sb
-          .from(
-            'Transaction',
-          )
-          .select(
-            'category_id, amount, type, date',
-          )
-          .eq(
-            'profile_id',
-            profileId,
-          )
-          .eq(
-            'type',
-            'Expense',
-          )
-          .gte(
-            'date',
-            firstIso,
-          )
-          .lte(
-            'date',
-            todayIso,
-          );
-
+      // ----- NEW: build totalByCat from Category_Summary when a monthly record exists -----
       final Map<
         String,
         double
       >
       totalByCat = {};
-      if (trxThisMonth
-          is List) {
-        for (final t in trxThisMonth) {
-          final cid =
-              t['category_id']
-                  as String?;
-          if (cid ==
-              null)
-            continue;
-          final amount = _toDouble(
-            t['amount'],
-          );
-          totalByCat[cid] =
-              (totalByCat[cid] ??
-                  0) +
-              amount;
+
+      if (monthlyRecord !=
+              null &&
+          monthlyRecord['record_id'] !=
+              null) {
+        final recordId =
+            monthlyRecord['record_id']
+                as String;
+
+        final summaries = await _sb
+            .from(
+              'Category_Summary',
+            )
+            .select(
+              'category_id, total_expense',
+            )
+            .eq(
+              'record_id',
+              recordId,
+            );
+
+        if (summaries
+            is List) {
+          for (final row in summaries) {
+            final cid =
+                row['category_id']
+                    as String?;
+            if (cid ==
+                null)
+              continue;
+            final amount = _toDouble(
+              row['total_expense'],
+            );
+            totalByCat[cid] = amount;
+          }
+        }
+      } else {
+        // Fallback: if no Monthly_Financial_Record yet for this month,
+        // compute from Transaction like before so UI doesn't break
+        final trxThisMonth = await _sb
+            .from(
+              'Transaction',
+            )
+            .select(
+              'category_id, amount, type, date',
+            )
+            .eq(
+              'profile_id',
+              profileId,
+            )
+            .eq(
+              'type',
+              'Expense',
+            )
+            .gte(
+              'date',
+              firstIso,
+            )
+            .lte(
+              'date',
+              todayIso,
+            );
+
+        if (trxThisMonth
+            is List) {
+          for (final t in trxThisMonth) {
+            final cid =
+                t['category_id']
+                    as String?;
+            if (cid ==
+                null)
+              continue;
+            final amount = _toDouble(
+              t['amount'],
+            );
+            totalByCat[cid] =
+                (totalByCat[cid] ??
+                    0) +
+                amount;
+          }
         }
       }
 

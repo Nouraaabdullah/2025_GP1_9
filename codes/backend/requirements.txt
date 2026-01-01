@@ -21,6 +21,11 @@ tqdm==4.67.1
 typing-inspection==0.4.2
 typing_extensions==4.15.0
 uvicorn==0.30.6
-uvloop==0.22.1
 watchfiles==1.1.1
 websockets==15.0.1
+requests==2.32.3
+numpy==1.26.4
+pandas==2.2.3
+scikit-learn==1.5.2
+joblib==1.4.2
+tensorflow==2.16.1

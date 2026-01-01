@@ -7,6 +7,8 @@ import 'package:surra_application/screens/profile/spending_insight.dart';
 import 'package:surra_application/screens/profile/edit_profile/edit_profile.dart';
 import 'package:surra_application/utils/auth_helpers.dart';
 import 'dart:ui';
+import 'package:surra_application/services/gold_api.dart';
+
 
 class ProfileMainPage
     extends
@@ -36,11 +38,31 @@ class _ProfileMainPageState
 
   bool _isIncomeExpanded = false;
   bool _isExpenseExpanded = false;
+  Map<String, dynamic>? _gold;
+  bool _goldLoading = false;
+  String? _goldError;
+
+Future<void> _loadGold() async {
+  setState(() {
+    _goldLoading = true;
+    _goldError = null;
+  });
+
+  try {
+    final data = await GoldApi.fetchGoldTrends();
+    setState(() => _gold = data);
+  } catch (e) {
+    setState(() => _goldError = e.toString());
+  } finally {
+    setState(() => _goldLoading = false);
+  }
+}
 
   @override
   void initState() {
     super.initState();
     _future = _fetchDashboard();
+    _loadGold();
   }
 
   @override
@@ -90,6 +112,8 @@ class _ProfileMainPageState
           newData,
         ),
       );
+      await _loadGold();
+
     } catch (
       e
     ) {
@@ -103,6 +127,8 @@ class _ProfileMainPageState
         );
     }
   }
+
+  
 
   Future<
     void
@@ -1445,20 +1471,79 @@ class _ProfileMainPageState
                                                   '21K',
                                                   '24K',
                                                 ];
+final k = karats[i];
 
-                                                return _GoldTrendCard(
-                                                  karat: karats[i],
-                                                  headline: 'Gold prices are going up!',
-                                                  currentPrice: '\$13450',
-                                                  lastPrice: '\$12900',
-                                                  yesterdayPrice: '\$12900',
-                                                  lastPct: '5.7%',
-                                                  badgePct: '+15%',
-                                                  confidenceLabel: 'Low',
-                                                  confidenceColor: const Color(
-                                                    0xFFFF6B3D,
-                                                  ),
-                                                );
+if (_goldLoading) {
+  return _GoldTrendCard(
+    karat: k,
+    headline: 'Loading gold prices...',
+    currentPrice: '—',
+    lastPrice: '—',
+    yesterdayPrice: '—',
+    lastPct: '—',
+    badgePct: '—',
+    confidenceLabel: '—',
+    confidenceColor: const Color(0xFFFF6B3D),
+  );
+}
+
+if (_goldError != null || _gold == null) {
+  return _GoldTrendCard(
+    karat: k,
+    headline: 'Gold data not available',
+    currentPrice: '—',
+    lastPrice: '—',
+    yesterdayPrice: '—',
+    lastPct: '—',
+    badgePct: '—',
+    confidenceLabel: '—',
+    confidenceColor: const Color(0xFFFF6B3D),
+  );
+}
+
+// expected backend format:
+// { "prices": { "24K": { "past":..., "current":..., "predicted_tomorrow":..., "confidence":{ "level": ... } } ... } }
+
+final prices = (_gold!['prices'] as Map<String, dynamic>);
+final obj = (prices[k] as Map<String, dynamic>);
+
+final past = (obj['past'] as num).toDouble();
+final current = (obj['current'] as num).toDouble();
+final predicted = (obj['predicted_tomorrow'] as num).toDouble();
+
+final conf = (obj['confidence'] as Map<String, dynamic>);
+final level = (conf['level'] as String).toLowerCase();
+
+final diffPct = past == 0 ? 0 : ((current - past) / past) * 100.0;
+final badge = '${diffPct >= 0 ? '+' : ''}${diffPct.toStringAsFixed(1)}%';
+
+Color confColor;
+String confLabel;
+if (level == 'high') {
+  confColor = const Color(0xFF4ECDC4);
+  confLabel = 'High';
+} else if (level == 'medium') {
+  confColor = const Color(0xFFFFD93D);
+  confLabel = 'Medium';
+} else {
+  confColor = const Color(0xFFFF6B3D);
+  confLabel = 'Low';
+}
+
+return _GoldTrendCard(
+  karat: k,
+  headline: 'Tomorrow prediction: ${predicted.toStringAsFixed(2)} SAR/g',
+  currentPrice: '${current.toStringAsFixed(2)} SAR/g',
+  lastPrice: '${past.toStringAsFixed(2)} SAR/g',
+  yesterdayPrice: '${past.toStringAsFixed(2)} SAR/g',
+  lastPct: diffPct.toStringAsFixed(1),
+  badgePct: badge,
+  confidenceLabel: confLabel,
+  confidenceColor: confColor,
+);
+
+                                             
+
                                               },
                                         ),
                                       ),

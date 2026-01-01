@@ -11,8 +11,10 @@ import traceback
 from fastapi.responses import JSONResponse
 import math
 from pathlib import Path
-from dotenv import load_dotenv
 import uuid
+from goldmodel.gold_lstm_service import load_gold_lstm, predict_tomorrow_all_karats
+from contextlib import asynccontextmanager
+
 
 
 # Force-load backend/.env (next to main.py), not any other .env
@@ -1228,8 +1230,23 @@ def build_messages(body: ChatIn) -> List[Dict[str, str]]:
     msgs.append({"role": "user", "content": body.text})
     return msgs
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    try:
+        load_gold_lstm()
+        print(" Gold LSTM loaded at startup")
+    except Exception as e:
+        print(" Gold LSTM not loaded:", e)
+
+    yield  # <-- app runs here
+
+    # Shutdown (optional cleanup)
+    print("Server shutting down")
+
 # ---------- API ----------
-app = FastAPI(title="Surra Chat API")
+app = FastAPI(title="Surra Chat API",lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"], allow_methods=["*"], allow_headers=["*"], allow_credentials=True,
@@ -1239,9 +1256,11 @@ EXPECTED_KEY = os.getenv("BACKEND_API_KEY", "").strip()
 
 @app.middleware("http")
 async def check_key(request: Request, call_next):
+    path = request.url.path 
     # Allow docs & health without key
     if request.url.path in ("/docs", "/openapi.json", "/health", "/"):
         return await call_next(request)
+
 
     if not EXPECTED_KEY:
         # Misconfig on server side
@@ -1260,6 +1279,16 @@ def root():
 @app.get("/health")
 def health():
     return {"status": "healthy"}
+
+@app.get("/gold/predict")
+def gold_predict(samples: int = 60):
+    try:
+        samples = max(10, min(int(samples), 200))
+        return predict_tomorrow_all_karats(n_samples=samples)
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=400, detail=str(e))
+
 
 @app.post("/chat")
 def chat(body: ChatIn):

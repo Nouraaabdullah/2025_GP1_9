@@ -1448,9 +1448,10 @@ class _ProfileMainPageState
 
                                                 return _GoldTrendCard(
                                                   karat: karats[i],
-                                                  headline: 'Gold prices are going up! ',
+                                                  headline: 'Gold prices are going up!',
                                                   currentPrice: '\$13450',
                                                   lastPrice: '\$12900',
+                                                  yesterdayPrice: '\$12900',
                                                   lastPct: '5.7%',
                                                   badgePct: '+15%',
                                                 );
@@ -2281,6 +2282,7 @@ class _GoldTrendCard
   final String lastPrice;
   final String lastPct;
   final String badgePct;
+  final String yesterdayPrice;
 
   const _GoldTrendCard({
     required this.karat,
@@ -2289,6 +2291,7 @@ class _GoldTrendCard
     required this.lastPrice,
     required this.lastPct,
     required this.badgePct,
+    required this.yesterdayPrice,
   });
 
   @override
@@ -2526,17 +2529,20 @@ class _GoldTrendCard
             ),
 
             // ✅ Bottom row (Last price + dot + %)
+            // ✅ Bottom row content (Current + Yesterday)
             Positioned(
               left: 18,
               right: 18,
               bottom: 10,
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
+                  // Left column: Current Price
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        'Last Price',
+                        'Current Price',
                         style: TextStyle(
                           color: Color(
                             0xFFA6A6A6,
@@ -2551,7 +2557,7 @@ class _GoldTrendCard
                         height: 2,
                       ),
                       Text(
-                        lastPrice,
+                        lastPrice, // keep using lastPrice here if you want current shown in bottom like your screenshot
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 12.82,
@@ -2562,7 +2568,46 @@ class _GoldTrendCard
                       ),
                     ],
                   ),
+
+                  const SizedBox(
+                    width: 44,
+                  ),
+
+                  // Right column: Yesterday Price
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Yesterday Price',
+                        style: TextStyle(
+                          color: Color(
+                            0xFFA6A6A6,
+                          ),
+                          fontSize: 12.02,
+                          fontFamily: 'Poppins',
+                          fontWeight: FontWeight.w400,
+                          height: 1.1,
+                        ),
+                      ),
+                      const SizedBox(
+                        height: 2,
+                      ),
+                      Text(
+                        yesterdayPrice,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12.82,
+                          fontFamily: 'Poppins',
+                          fontWeight: FontWeight.w600,
+                          height: 1.1,
+                        ),
+                      ),
+                    ],
+                  ),
+
                   const Spacer(),
+
+                  // Percent indicator (right)
                   Container(
                     width: 12.02,
                     height: 12.02,

@@ -6,6 +6,7 @@ import 'package:surra_application/widgets/bottom_nav_bar.dart';
 import 'package:surra_application/screens/profile/spending_insight.dart';
 import 'package:surra_application/screens/profile/edit_profile/edit_profile.dart';
 import 'package:surra_application/utils/auth_helpers.dart';
+import 'dart:ui';
 
 class ProfileMainPage
     extends
@@ -995,6 +996,15 @@ class _ProfileMainPageState
           );
         }
       }
+      // Sort by most spending -> least
+      items.sort(
+        (
+          a,
+          b,
+        ) => b.amount.compareTo(
+          a.amount,
+        ),
+      );
 
       return _DashboardData(
         fullName: fullName,
@@ -1103,6 +1113,9 @@ class _ProfileMainPageState
                         ),
                         SafeArea(
                           child: SingleChildScrollView(
+                            padding: const EdgeInsets.only(
+                              bottom: 110,
+                            ),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
@@ -1311,55 +1324,145 @@ class _ProfileMainPageState
                                       const SizedBox(
                                         height: 16,
                                       ),
-                                      (data.categories.isEmpty)
-                                          ? GridView.count(
-                                              crossAxisCount: 3,
-                                              mainAxisSpacing: 12,
-                                              crossAxisSpacing: 12,
-                                              childAspectRatio: 0.82,
-                                              shrinkWrap: true,
-                                              physics: const NeverScrollableScrollPhysics(),
-                                              children: const [
-                                                _EmptyCategoryCard(),
-                                                _EmptyCategoryCard(),
-                                                _EmptyCategoryCard(),
-                                              ],
-                                            )
-                                          : GridView.builder(
-                                              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                                                crossAxisCount: 3,
-                                                mainAxisSpacing: 12,
-                                                crossAxisSpacing: 12,
-                                                childAspectRatio: 0.82,
-                                              ),
-                                              itemCount: data.categories.length,
-                                              shrinkWrap: true,
-                                              physics: const NeverScrollableScrollPhysics(),
-                                              itemBuilder:
-                                                  (
-                                                    context,
-                                                    i,
-                                                  ) {
-                                                    final c = data.categories[i];
-                                                    final pct =
-                                                        c.percent ==
-                                                            null
-                                                        ? '—'
-                                                        : '${c.percent!.clamp(0, 100).toStringAsFixed(0)}%';
-                                                    return _CategoryCard(
-                                                      title: c.name,
-                                                      amount: '${_fmt2(c.amount)} SAR',
-                                                      percent: pct,
-                                                      icon: c.icon,
-                                                      color: c.color,
-                                                    );
-                                                  },
-                                            ),
+                                      Builder(
+                                        builder:
+                                            (
+                                              context,
+                                            ) {
+                                              final cats = data.categories;
+
+                                              return SizedBox(
+                                                height: 126,
+                                                child: cats.isEmpty
+                                                    ? ListView.separated(
+                                                        scrollDirection: Axis.horizontal,
+                                                        itemCount: 3,
+                                                        separatorBuilder:
+                                                            (
+                                                              _,
+                                                              __,
+                                                            ) => const SizedBox(
+                                                              width: 12,
+                                                            ),
+                                                        itemBuilder:
+                                                            (
+                                                              _,
+                                                              __,
+                                                            ) => const SizedBox(
+                                                              width: 101.48,
+                                                              child: _EmptyCategoryCard(),
+                                                            ),
+                                                      )
+                                                    : ListView.separated(
+                                                        scrollDirection: Axis.horizontal,
+                                                        itemCount: cats.length,
+                                                        separatorBuilder:
+                                                            (
+                                                              _,
+                                                              __,
+                                                            ) => const SizedBox(
+                                                              width: 12,
+                                                            ),
+                                                        itemBuilder:
+                                                            (
+                                                              context,
+                                                              i,
+                                                            ) {
+                                                              final c = cats[i];
+                                                              final pct =
+                                                                  c.percent ==
+                                                                      null
+                                                                  ? '—'
+                                                                  : '${c.percent!.clamp(0, 100).toStringAsFixed(0)}%';
+
+                                                              return SizedBox(
+                                                                width: 101.48,
+                                                                child: _CategoryCard(
+                                                                  title: c.name,
+                                                                  amount: '${_fmt2(c.amount)} SAR',
+                                                                  percent: pct,
+                                                                  icon: c.icon,
+                                                                  color: c.color,
+                                                                ),
+                                                              );
+                                                            },
+                                                      ),
+                                              );
+                                            },
+                                      ),
                                     ],
                                   ),
                                 ),
                                 const SizedBox(
                                   height: 24,
+                                ),
+                                const SizedBox(
+                                  height: 22,
+                                ),
+
+                                // Replace the entire "Gold Trends" section in your ProfileMainPage build method with this:
+                                Padding(
+                                  padding: const EdgeInsets.fromLTRB(
+                                    20,
+                                    0,
+                                    20,
+                                    0,
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const Text(
+                                        'Gold Trends',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.w500,
+                                          height: 1.1,
+                                        ),
+                                      ),
+                                      const SizedBox(
+                                        height: 14,
+                                      ),
+                                      SizedBox(
+                                        height: 140,
+                                        child: ListView.separated(
+                                          scrollDirection: Axis.horizontal,
+                                          itemCount: 3,
+                                          separatorBuilder:
+                                              (
+                                                _,
+                                                __,
+                                              ) => const SizedBox(
+                                                width: 12,
+                                              ),
+                                          itemBuilder:
+                                              (
+                                                _,
+                                                i,
+                                              ) {
+                                                final karats = [
+                                                  '18K',
+                                                  '21K',
+                                                  '24K',
+                                                ];
+
+                                                return _GoldTrendCard(
+                                                  karat: karats[i],
+                                                  headline: 'Gold prices are going up! ',
+                                                  currentPrice: '\$13450',
+                                                  lastPrice: '\$12900',
+                                                  lastPct: '5.7%',
+                                                  badgePct: '+15%',
+                                                );
+                                              },
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+
+                                const SizedBox(
+                                  height: 14,
                                 ),
                               ],
                             ),
@@ -2163,6 +2266,330 @@ class _EmptyCategoryCard
         ),
         borderRadius: BorderRadius.circular(
           18,
+        ),
+      ),
+    );
+  }
+}
+
+class _GoldTrendCard
+    extends
+        StatelessWidget {
+  final String karat;
+  final String headline;
+  final String currentPrice;
+  final String lastPrice;
+  final String lastPct;
+  final String badgePct;
+
+  const _GoldTrendCard({
+    required this.karat,
+    required this.headline,
+    required this.currentPrice,
+    required this.lastPrice,
+    required this.lastPct,
+    required this.badgePct,
+  });
+
+  @override
+  Widget build(
+    BuildContext context,
+  ) {
+    return SizedBox(
+      width: 327,
+      height: 140,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(
+          12.02,
+        ),
+        child: Stack(
+          children: [
+            // ✅ Background gradient (Figma-like)
+            Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                  stops: [
+                    0.0,
+                    0.55,
+                    1.0,
+                  ],
+                  colors: [
+                    Color(
+                      0xFF5B3B73,
+                    ), // purple
+                    Color(
+                      0xFF45406A,
+                    ), // mid
+                    Color(
+                      0xFF8B7D6D,
+                    ), // warm gray
+                  ],
+                ),
+              ),
+            ),
+
+            // ✅ Blended circles (blurred to match Figma)
+            Positioned(
+              left: 160,
+              top: -4,
+              child: ImageFiltered(
+                imageFilter: ImageFilter.blur(
+                  sigmaX: 18,
+                  sigmaY: 18,
+                ),
+                child: Container(
+                  width: 150,
+                  height: 110,
+                  decoration: BoxDecoration(
+                    color:
+                        const Color(
+                          0xFF4A37E1,
+                        ).withOpacity(
+                          0.65,
+                        ),
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              left: -20,
+              top: 6,
+              child: ImageFiltered(
+                imageFilter: ImageFilter.blur(
+                  sigmaX: 18,
+                  sigmaY: 18,
+                ),
+                child: Container(
+                  width: 210,
+                  height: 130,
+                  decoration: BoxDecoration(
+                    color:
+                        const Color(
+                          0xFFBA55D6,
+                        ).withOpacity(
+                          0.65,
+                        ),
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              right: -10,
+              top: 10,
+              child: ImageFiltered(
+                imageFilter: ImageFilter.blur(
+                  sigmaX: 18,
+                  sigmaY: 18,
+                ),
+                child: Container(
+                  width: 140,
+                  height: 100,
+                  decoration: BoxDecoration(
+                    color:
+                        const Color(
+                          0xFFFFE8BA,
+                        ).withOpacity(
+                          0.60,
+                        ),
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ),
+            ),
+
+            // ✅ Dark bottom strip
+            Align(
+              alignment: Alignment.bottomCenter,
+              child: Container(
+                height: 54,
+                decoration: const BoxDecoration(
+                  color: Color(
+                    0xFF211E41,
+                  ),
+                ),
+              ),
+            ),
+
+            // ✅ Karat pill (more readable)
+            Positioned(
+              right: 18,
+              top: 16,
+              child: Container(
+                width: 44,
+                height: 20,
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(
+                    0.55,
+                  ),
+                  borderRadius: BorderRadius.circular(
+                    18.42,
+                  ),
+                  border: Border.all(
+                    color: Colors.white.withOpacity(
+                      0.22,
+                    ),
+                    width: 1,
+                  ),
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  karat,
+                  style: const TextStyle(
+                    color: Color(
+                      0xFF2B2E4A,
+                    ),
+                    fontSize: 11.5, // ⬅ bigger
+                    fontFamily: 'Poppins',
+                    fontWeight: FontWeight.w600, // ⬅ bolder
+                    height: 1.0,
+                  ),
+                ),
+              ),
+            ),
+
+            // ✅ Percentage pill
+            Positioned(
+              right: 18,
+              top: 44,
+              child: Container(
+                width: 64,
+                height: 24,
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(
+                    0.55,
+                  ),
+                  borderRadius: BorderRadius.circular(
+                    18.42,
+                  ),
+                  border: Border.all(
+                    color: Colors.white.withOpacity(
+                      0.22,
+                    ),
+                    width: 1,
+                  ),
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  badgePct,
+                  style: const TextStyle(
+                    color: Color(
+                      0xFF2B2E4A,
+                    ),
+                    fontSize: 11.5, // ⬅ bigger
+                    fontFamily: 'Poppins',
+                    fontWeight: FontWeight.w600, // ⬅ bolder
+                    height: 1.0,
+                  ),
+                ),
+              ),
+            ),
+
+            // ✅ Headline + Current price (top-left)
+            Positioned(
+              left: 18,
+              top: 18,
+              right: 100,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    headline,
+                    style: const TextStyle(
+                      color: Color(
+                        0xFFA6A6A6,
+                      ),
+                      fontSize: 12.02,
+                      fontFamily: 'Poppins',
+                      fontWeight: FontWeight.w500,
+                      height: 1.1,
+                    ),
+                  ),
+                  const SizedBox(
+                    height: 6,
+                  ),
+                  Text(
+                    currentPrice,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16.02,
+                      fontFamily: 'Poppins',
+                      fontWeight: FontWeight.w600,
+                      height: 1.1,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // ✅ Bottom row (Last price + dot + %)
+            Positioned(
+              left: 18,
+              right: 18,
+              bottom: 10,
+              child: Row(
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Last Price',
+                        style: TextStyle(
+                          color: Color(
+                            0xFFA6A6A6,
+                          ),
+                          fontSize: 12.02,
+                          fontFamily: 'Poppins',
+                          fontWeight: FontWeight.w400,
+                          height: 1.1,
+                        ),
+                      ),
+                      const SizedBox(
+                        height: 2,
+                      ),
+                      Text(
+                        lastPrice,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12.82,
+                          fontFamily: 'Poppins',
+                          fontWeight: FontWeight.w600,
+                          height: 1.1,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const Spacer(),
+                  Container(
+                    width: 12.02,
+                    height: 12.02,
+                    decoration: const ShapeDecoration(
+                      color: Color(
+                        0xFFB19DFF,
+                      ),
+                      shape: OvalBorder(),
+                    ),
+                  ),
+                  const SizedBox(
+                    width: 8,
+                  ),
+                  Text(
+                    lastPct,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 9.61,
+                      fontFamily: 'Poppins',
+                      fontWeight: FontWeight.w400,
+                      height: 1.0,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );

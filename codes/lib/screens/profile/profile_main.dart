@@ -1454,6 +1454,10 @@ class _ProfileMainPageState
                                                   yesterdayPrice: '\$12900',
                                                   lastPct: '5.7%',
                                                   badgePct: '+15%',
+                                                  confidenceLabel: 'Low',
+                                                  confidenceColor: const Color(
+                                                    0xFFFF6B3D,
+                                                  ),
                                                 );
                                               },
                                         ),
@@ -2283,6 +2287,8 @@ class _GoldTrendCard
   final String lastPct;
   final String badgePct;
   final String yesterdayPrice;
+  final String confidenceLabel;
+  final Color confidenceColor;
 
   const _GoldTrendCard({
     required this.karat,
@@ -2292,6 +2298,8 @@ class _GoldTrendCard
     required this.lastPct,
     required this.badgePct,
     required this.yesterdayPrice,
+    required this.confidenceLabel,
+    required this.confidenceColor,
   });
 
   @override
@@ -2419,45 +2427,24 @@ class _GoldTrendCard
 
             // ✅ Karat pill (more readable)
             Positioned(
-              right: 18,
-              top: 16,
-              child: Container(
-                width: 44,
-                height: 20,
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(
-                    0.55,
-                  ),
-                  borderRadius: BorderRadius.circular(
-                    18.42,
-                  ),
-                  border: Border.all(
-                    color: Colors.white.withOpacity(
-                      0.22,
-                    ),
-                    width: 1,
-                  ),
-                ),
-                alignment: Alignment.center,
-                child: Text(
-                  karat,
-                  style: const TextStyle(
-                    color: Color(
-                      0xFF2B2E4A,
-                    ),
-                    fontSize: 11.5, // ⬅ bigger
-                    fontFamily: 'Poppins',
-                    fontWeight: FontWeight.w600, // ⬅ bolder
-                    height: 1.0,
-                  ),
+              right: 22,
+              top: 20,
+              child: Text(
+                karat,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 15,
+                  fontFamily: 'Poppins',
+                  fontWeight: FontWeight.w700,
+                  height: 1.0,
                 ),
               ),
             ),
 
             // ✅ Percentage pill
             Positioned(
-              right: 18,
-              top: 44,
+              right: 15,
+              top: 45,
               child: Container(
                 width: 64,
                 height: 24,
@@ -2512,13 +2499,13 @@ class _GoldTrendCard
                     ),
                   ),
                   const SizedBox(
-                    height: 6,
+                    height: 10,
                   ),
                   Text(
                     currentPrice,
                     style: const TextStyle(
                       color: Colors.white,
-                      fontSize: 16.02,
+                      fontSize: 23,
                       fontFamily: 'Poppins',
                       fontWeight: FontWeight.w600,
                       height: 1.1,
@@ -2528,108 +2515,103 @@ class _GoldTrendCard
               ),
             ),
 
-            // ✅ Bottom row (Last price + dot + %)
-            // ✅ Bottom row content (Current + Yesterday)
+            // =========================
+            // 6) BOTTOM LEFT (Today's + Yesterday's, stacked exactly)
+            // LOCATION: bottom-left stacked prices
+            // =========================
             Positioned(
-              left: 18,
-              right: 18,
-              bottom: 10,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
+              left: 22,
+              bottom: 8,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Left column: Current Price
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Current Price',
-                        style: TextStyle(
-                          color: Color(
-                            0xFFA6A6A6,
-                          ),
-                          fontSize: 12.02,
-                          fontFamily: 'Poppins',
-                          fontWeight: FontWeight.w400,
-                          height: 1.1,
-                        ),
-                      ),
-                      const SizedBox(
-                        height: 2,
-                      ),
-                      Text(
-                        lastPrice, // keep using lastPrice here if you want current shown in bottom like your screenshot
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 12.82,
-                          fontFamily: 'Poppins',
-                          fontWeight: FontWeight.w600,
-                          height: 1.1,
-                        ),
-                      ),
-                    ],
-                  ),
-
-                  const SizedBox(
-                    width: 44,
-                  ),
-
-                  // Right column: Yesterday Price
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Yesterday Price',
-                        style: TextStyle(
-                          color: Color(
-                            0xFFA6A6A6,
-                          ),
-                          fontSize: 12.02,
-                          fontFamily: 'Poppins',
-                          fontWeight: FontWeight.w400,
-                          height: 1.1,
-                        ),
-                      ),
-                      const SizedBox(
-                        height: 2,
-                      ),
-                      Text(
-                        yesterdayPrice,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 12.82,
-                          fontFamily: 'Poppins',
-                          fontWeight: FontWeight.w600,
-                          height: 1.1,
-                        ),
-                      ),
-                    ],
-                  ),
-
-                  const Spacer(),
-
-                  // Percent indicator (right)
-                  Container(
-                    width: 12.02,
-                    height: 12.02,
-                    decoration: const ShapeDecoration(
-                      color: Color(
-                        0xFFB19DFF,
-                      ),
-                      shape: OvalBorder(),
-                    ),
-                  ),
-                  const SizedBox(
-                    width: 8,
-                  ),
                   Text(
-                    lastPct,
+                    "Today’s Price is $currentPrice",
                     style: const TextStyle(
                       color: Colors.white,
-                      fontSize: 9.61,
+                      fontSize: 12,
                       fontFamily: 'Poppins',
-                      fontWeight: FontWeight.w400,
+                      fontWeight: FontWeight.w500,
+                      height: 1.1,
+                    ),
+                  ),
+                  const SizedBox(
+                    height: 10,
+                  ),
+                  Text(
+                    "Yesterday’s Price is $yesterdayPrice",
+                    style: const TextStyle(
+                      color: Color(
+                        0xFFA6A6A6,
+                      ),
+                      fontSize: 12,
+                      fontFamily: 'Poppins',
+                      fontWeight: FontWeight.w500,
+                      height: 1.1,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // =========================
+            // 7) BOTTOM RIGHT (Confidence + dot + level)
+            // LOCATION: bottom-right confidence block
+            // =========================
+            Positioned(
+              right: 22,
+              bottom: 13,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  const Text(
+                    "Confidence",
+                    style: TextStyle(
+                      color: Color(
+                        0xFFA6A6A6,
+                      ),
+                      fontSize: 10,
+                      fontFamily: 'Poppins',
+                      fontWeight: FontWeight.w500,
                       height: 1.0,
                     ),
+                  ),
+                  const SizedBox(
+                    height: 8,
+                  ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 18,
+                        height: 15,
+                        decoration: BoxDecoration(
+                          color: confidenceColor,
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: confidenceColor.withOpacity(
+                                0.55,
+                              ),
+                              blurRadius: 10,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(
+                        width: 9,
+                      ),
+                      Text(
+                        confidenceLabel,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontFamily: 'Poppins',
+                          fontWeight: FontWeight.w500,
+                          height: 1.0,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),

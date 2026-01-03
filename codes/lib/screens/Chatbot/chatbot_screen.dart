@@ -19,7 +19,8 @@ class _ChatBotScreenState extends State<ChatBotScreen> {
   final ScrollController _scrollController = ScrollController();
 
   // Backend URL (FastAPI default from your code)
-  static const String _backendBaseUrl = 'http://127.0.0.1:8000';
+static const String _backendBaseUrl = 'http://10.0.2.2:8080';
+
 
   // Your backend API key
   static const String _backendApiKey = 'localdev-123';

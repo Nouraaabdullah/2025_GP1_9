@@ -1047,6 +1047,11 @@ def get_goal_details(
             "transfers": transfers
         }
     }
+def get_gold_prediction():
+    """
+    Wrapper for the gold LSTM model so the chatbot can use it as a tool.
+    """
+    return predict_tomorrow_all_karats()
 
 
 # Map tool names to functions
@@ -1066,6 +1071,7 @@ NAME_TO_FUNC = {
     "suggest_savings_plan": suggest_savings_plan,
     "get_record_history": get_record_history,
     "compare_category_last_month": compare_category_last_month,
+    "get_gold_prediction": get_gold_prediction,
 
 }
 
@@ -1112,6 +1118,17 @@ def build_messages(body: ChatIn) -> List[Dict[str, str]]:
 "- Weekly breakdown → use `get_weekly_summary`.\n"
 "- User goals → use `get_goals`.\n"
 "- Saving advice → use `suggest_savings_plan`.\n"
+"\n"
+"When the user asks about gold prices, gold value, or gold predictions:\n"
+"- ALWAYS use the `get_gold_prediction` tool.\n"
+"- This includes questions like:\n"
+"  • 'What is the gold price today?'\n"
+"  • 'Gold price in Saudi Arabia'\n"
+"  • 'What will gold be tomorrow?'\n"
+"  • 'Gold price for 24K / 21K / 18K'\n"
+"- NEVER guess or estimate gold prices.\n"
+"- NEVER use general knowledge for gold prices.\n"
+"- ALWAYS answer using SAR per gram.\n"
 "\n"
 "2. Be consistent and concise\n"
 "- Answers must be clear, direct, and practical.\n"
@@ -1215,6 +1232,8 @@ def build_messages(body: ChatIn) -> List[Dict[str, str]]:
 "- Do not explain the function-calling system.\n"
 "- Do not mention implementation details or backend.\n"
 "- Do not guess values you did not receive from tools.\n"
+
+
     ),
 }
 
@@ -1289,10 +1308,42 @@ def gold_predict(samples: int = 60):
         traceback.print_exc()
         raise HTTPException(status_code=400, detail=str(e))
 
-
+def is_gold_question(text: str) -> bool:
+    t = text.lower()
+    return any(k in t for k in [
+        "gold",
+        "18k",
+        "21k",
+        "24k",
+        "karat",
+        "k gold",
+        "gold price",
+        "price of gold",
+    ])
 @app.post("/chat")
 def chat(body: ChatIn):
     try:
+
+          # 🔒 HARD RULE: Gold questions NEVER go to the LLM
+        if is_gold_question(body.text):
+            gold = get_gold_prediction()
+
+            return {
+                "answer": (
+                    "Here are the current gold prices per gram in SAR:\n\n"
+                    f"• 24K: {gold.get('24k')} SAR\n"
+                    f"• 21K: {gold.get('21k')} SAR\n"
+                    f"• 18K: {gold.get('18k')} SAR"
+                ),
+                "model_used": "gold_lstm",
+                "tool_traces": [
+                    {
+                        "tool": "get_gold_prediction",
+                        "result": gold
+                    }
+                ],
+            }
+
         # Always use the fine-tuned model
         model = FT_MODEL_ID
         base_messages = build_messages(body)

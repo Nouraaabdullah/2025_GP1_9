@@ -7,7 +7,7 @@ import 'package:surra_application/screens/profile/spending_insight.dart';
 import 'package:surra_application/screens/profile/edit_profile/edit_profile.dart';
 import 'package:surra_application/utils/auth_helpers.dart';
 import 'dart:ui';
-import 'package:surra_application/services/gold_api.dart';
+import 'package:surra_application/services/gold_service.dart';
 
 
 class ProfileMainPage
@@ -38,31 +38,42 @@ class _ProfileMainPageState
 
   bool _isIncomeExpanded = false;
   bool _isExpenseExpanded = false;
-  Map<String, dynamic>? _gold;
-  bool _goldLoading = false;
-  String? _goldError;
+Map<String, dynamic>? _goldDb; 
+bool _goldDbLoading = false;
+String? _goldDbError;
+
 
 Future<void> _loadGold() async {
   setState(() {
-    _goldLoading = true;
-    _goldError = null;
+    _goldDbLoading = true;
+    _goldDbError = null;
+    
   });
 
   try {
-    final data = await GoldApi.fetchGoldTrends();
-    setState(() => _gold = data);
+    // optional: refresh backend so DB gets new values
+    await GoldService.refreshGoldOnBackend();
+
+    final data = await GoldService.getLatestGoldFromDb();
+    setState(() => _goldDb = data);
   } catch (e) {
-    setState(() => _goldError = e.toString());
+    setState(() => _goldDbError = e.toString());
   } finally {
-    setState(() => _goldLoading = false);
+    setState(() => _goldDbLoading = false);
   }
 }
+
+
+
+
 
   @override
   void initState() {
     super.initState();
     _future = _fetchDashboard();
-    _loadGold();
+   _loadGold();
+
+
   }
 
   @override
@@ -113,6 +124,7 @@ Future<void> _loadGold() async {
         ),
       );
       await _loadGold();
+
 
     } catch (
       e
@@ -1473,7 +1485,7 @@ Future<void> _loadGold() async {
                                                 ];
 final k = karats[i];
 
-if (_goldLoading) {
+if (_goldDbLoading) {
   return _GoldTrendCard(
     karat: k,
     headline: 'Loading gold prices...',
@@ -1487,7 +1499,7 @@ if (_goldLoading) {
   );
 }
 
-if (_goldError != null || _gold == null) {
+if (_goldDbError  != null || _goldDb  == null) {
   return _GoldTrendCard(
     karat: k,
     headline: 'Gold data not available',
@@ -1501,18 +1513,33 @@ if (_goldError != null || _gold == null) {
   );
 }
 
-// expected backend format:
-// { "prices": { "24K": { "past":..., "current":..., "predicted_tomorrow":..., "confidence":{ "level": ... } } ... } }
 
-final prices = (_gold!['prices'] as Map<String, dynamic>);
-final obj = (prices[k] as Map<String, dynamic>);
+final prices = (_goldDb?['prices'] as Map<String, dynamic>?) ?? {};
+final rawObj = prices[k];
+
+if (rawObj == null) {
+  return _GoldTrendCard(
+    karat: k,
+    headline: 'Gold data not available',
+    currentPrice: '—',
+    lastPrice: '—',
+    yesterdayPrice: '—',
+    lastPct: '—',
+    badgePct: '—',
+    confidenceLabel: '—',
+    confidenceColor: const Color(0xFFFF6B3D),
+  );
+}
+
+final obj = rawObj as Map<String, dynamic>;
+
 
 final past = (obj['past'] as num).toDouble();
 final current = (obj['current'] as num).toDouble();
 final predicted = (obj['predicted_tomorrow'] as num).toDouble();
 
-final conf = (obj['confidence'] as Map<String, dynamic>);
-final level = (conf['level'] as String).toLowerCase();
+final level = (obj['confidence'] as String).toLowerCase();
+
 
 final diffPct = past == 0 ? 0 : ((current - past) / past) * 100.0;
 final badge = '${diffPct >= 0 ? '+' : ''}${diffPct.toStringAsFixed(1)}%';

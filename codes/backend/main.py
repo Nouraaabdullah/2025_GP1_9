@@ -75,6 +75,39 @@ def sbr(path: str, params: Dict[str,str] | None = None) -> List[Dict[str,Any]]:
             raise HTTPException(r.status_code, r.text)
         return r.json()
 
+def sb_post(path: str, rows: list[dict]):
+    with httpx.Client(timeout=20) as c:
+        r = c.post(
+            f"{REST}/{path}",
+            headers={
+                "apikey": SERVICE_KEY,
+                "Authorization": f"Bearer {SERVICE_KEY}",
+                "Content-Type": "application/json",
+                "Prefer": "return=representation",
+            },
+            json=rows,
+        )
+        if r.status_code >= 400:
+            raise HTTPException(r.status_code, r.text)
+        return r.json()
+
+def sb_patch(path: str, filters: Dict[str, str], data: Dict[str, Any]):
+    with httpx.Client(timeout=20) as c:
+        r = c.patch(
+            f"{REST}/{path}",
+            params=filters,
+            headers={
+                "apikey": SERVICE_KEY,
+                "Authorization": f"Bearer {SERVICE_KEY}",
+                "Content-Type": "application/json",
+                "Prefer": "return=representation",
+            },
+            json=data,
+        )
+        if r.status_code >= 400:
+            raise HTTPException(r.status_code, r.text)
+        return r.json()
+
 def sb_single(table: str, select: str, **filters) -> Optional[Dict[str,Any]]:
     params = {"select": select}
     for k, v in filters.items():
@@ -1277,9 +1310,11 @@ EXPECTED_KEY = os.getenv("BACKEND_API_KEY", "").strip()
 async def check_key(request: Request, call_next):
     path = request.url.path 
     # Allow docs & health without key
-    if request.url.path in ("/docs", "/openapi.json", "/health", "/"):
+    if request.url.path in ("/docs", "/openapi.json", "/health", "/",'/gold/refresh'):
         return await call_next(request)
 
+    if path in ("/gold/latest", "/gold/history"):
+        return await call_next(request)
 
     if not EXPECTED_KEY:
         # Misconfig on server side
@@ -1307,6 +1342,114 @@ def gold_predict(samples: int = 60):
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(status_code=400, detail=str(e))
+from datetime import date, timedelta
+
+@app.post("/gold/refresh")
+def gold_refresh(samples: int = 60):
+    samples = max(10, min(int(samples), 200))
+    result = predict_tomorrow_all_karats(n_samples=samples)
+    rows = save_gold_to_db(result)
+    return {"ok": True, "affected_rows": len(rows)}
+
+
+
+@app.get("/gold/latest")
+def gold_latest():
+    rows = sbr("Gold", {
+        "select": "created_at,karat,past_price,current_price,predicted_price,confidence_level",
+        "order": "created_at.desc",
+        "limit": "50",  # enough to cover 3 karats even if duplicates
+    })
+
+    latest_by_karat = {}
+    for r in rows:
+        k = r["karat"]
+        if k not in latest_by_karat:
+            latest_by_karat[k] = r
+        if len(latest_by_karat) >= 3:
+            break
+
+    if not latest_by_karat:
+        raise HTTPException(404, "No gold data found")
+
+    # Build same shape your UI expects (prices->24K->current \.)
+    def build_block(r):
+        return {
+            "past": float(r["past_price"]),
+            "current": float(r["current_price"]),
+            "predicted_tomorrow": float(r["predicted_price"]),
+            "confidence": {
+            "level": r["confidence_level"],  # or r["confidence_label"]
+}
+
+        }
+
+    prices = {}
+    for karat in [24, 21, 18]:
+        if karat in latest_by_karat:
+            prices[f"{karat}K"] = build_block(latest_by_karat[karat])
+
+    return {
+        "unit": "SAR_per_gram",
+        "source": "supabase",
+        "created_at": max(v["created_at"] for v in latest_by_karat.values()),
+        "prices": prices
+    }
+
+from datetime import datetime, timezone, timedelta
+
+def _today_window_utc():
+    now = datetime.now(timezone.utc)
+    start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    end = start + timedelta(days=1)
+    return start.isoformat(), end.isoformat()
+
+
+def save_gold_to_db(result: dict):
+   
+    print("=== GOLD MODEL OUTPUT ===")
+    print(json.dumps(result, indent=2, ensure_ascii=False))
+
+    start_iso, end_iso = _today_window_utc()
+    affected = []
+
+    for karat_str, obj in result["prices"].items():
+        karat = int(karat_str.replace("K", ""))
+
+        payload = {
+            "past_price": obj["past"],
+            "current_price": obj["current"],
+            "predicted_price": obj["predicted_tomorrow"],
+            "confidence_level": (obj.get("confidence") or {}).get("level"),
+        }
+
+       
+        rows = sbr("Gold", {
+            "select": "gold_data_id,created_at",
+            "karat": f"eq.{karat}",
+            "created_at": f"gte.{start_iso}",
+            "and": f"(created_at.lt.{end_iso})",
+            "limit": "1",
+        })
+
+        if rows:
+           
+            gid = rows[0]["gold_data_id"]
+            updated = sb_patch(
+                "Gold",
+                {"gold_data_id": f"eq.{gid}"},
+                payload
+            )
+            affected.extend(updated)
+        else:
+           
+            inserted = sb_post("Gold", [{
+                "karat": karat,
+                **payload
+            }])
+            affected.extend(inserted)
+
+    return affected
 
 def is_gold_question(text: str) -> bool:
     t = text.lower()

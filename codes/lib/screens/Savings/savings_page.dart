@@ -8,6 +8,7 @@ import 'edit_goal_page.dart';
 import 'dart:math'; 
 import '../../utils/auth_helpers.dart'; 
 import '/../../services/category_summary_service.dart';
+import 'package:surra_application/screens/Log/log_transaction_options_sheet.dart';
 
 
 /// ---------------- Domain ----------------
@@ -1703,6 +1704,19 @@ Widget build(BuildContext context) {
         onTapSavings: () {},
         onTapProfile: () => Navigator.pushReplacementNamed(context, '/profile'),
        
+ // ✅ ADD THIS
+  onTapAdd: () {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) =>  LogTransactionOptionsSheet(),
+    );
+  },
+
+
+
+
       ),
     
   );

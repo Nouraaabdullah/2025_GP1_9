@@ -5,7 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../theme/app_colors.dart';
 import '../../widgets/bottom_nav_bar.dart';
-
+import 'package:surra_application/screens/Log/log_transaction_options_sheet.dart';
 // Charts split into separate files
 import 'income_chart.dart';
 import 'trends_chart.dart';
@@ -2414,6 +2414,18 @@ class _DashboardPageState
           context,
           '/profile',
         ),
+
+// ✅ THIS IS THE ONLY NEW PART
+  onTapAdd: () {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) =>  LogTransactionOptionsSheet(),
+    );
+  },
+
+
       ),
     );
   }

@@ -293,4 +293,31 @@
       }
     }
   }
+  ,
+{
+  "type": "function",
+  "function": {
+    "name": "get_gold_prediction",
+    "description": "Get today's gold price and tomorrow's predicted gold price in SAR per gram for different karats (24K, 21K, 18K), including confidence and uncertainty. Use this whenever the user asks about gold prices, gold trends, or whether gold is going up or down.",
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "required": []
+    }
+  }
+}
+,
+{
+  "type": "function",
+  "function": {
+    "name": "get_gold_today_from_db",
+    "description": "Get today's gold prices per gram in SAR from the database. This is the ONLY source for current gold prices.",
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "required": []
+    }
+  }
+}
+
 ]

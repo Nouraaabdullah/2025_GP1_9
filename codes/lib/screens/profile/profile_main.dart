@@ -8,6 +8,7 @@ import 'package:surra_application/screens/profile/edit_profile/edit_profile.dart
 import 'package:surra_application/utils/auth_helpers.dart';
 import 'dart:ui';
 import 'package:surra_application/services/gold_service.dart';
+import 'package:surra_application/screens/Log/log_transaction_options_sheet.dart';
 
 
 class ProfileMainPage
@@ -1600,6 +1601,18 @@ return _GoldTrendCard(
           '/savings',
         ),
         onTapProfile: () {},
+
+// ✅ ADD THIS
+  onTapAdd: () {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) =>  LogTransactionOptionsSheet(),
+    );
+  },
+
+
       ),
     );
   }

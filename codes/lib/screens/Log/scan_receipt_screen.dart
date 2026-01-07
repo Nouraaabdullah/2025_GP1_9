@@ -1,8 +1,104 @@
-import 'package:flutter/material.dart';
-import '../../theme/app_colors.dart';
+import 'dart:io';
+import 'dart:typed_data';
 
-class ScanReceiptScreen extends StatelessWidget {
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+
+import '../../theme/app_colors.dart';
+import '../../services/ocr_service.dart';
+
+class ScanReceiptScreen extends StatefulWidget {
   const ScanReceiptScreen({super.key});
+
+  @override
+  State<ScanReceiptScreen> createState() => _ScanReceiptScreenState();
+}
+
+class _ScanReceiptScreenState extends State<ScanReceiptScreen> {
+  final _picker = ImagePicker();
+  bool _loading = false;
+
+  static const String mistralApiKey = "aCjrHSUoLleLLnHgR9d7Ig7KEBzVW7KE";
+
+  Future<void> _runOcrOnBytes(Uint8List bytes, String fileName) async {
+    if (_loading) return;
+
+    if (mistralApiKey.trim().isEmpty || mistralApiKey.contains("PASTE_YOUR")) {
+      _showSnack("Add your Mistral API key first.");
+      return;
+    }
+
+    setState(() => _loading = true);
+
+    try {
+      final service = MistralOcrService(apiKey: mistralApiKey);
+
+      final text = await service.extractTextFromBytes(
+        bytes: bytes,
+        fileName: fileName,
+      );
+
+      debugPrint("========== OCR RESULT ($fileName) ==========");
+      debugPrint(text);
+      debugPrint("======== END OCR RESULT ($fileName) ========");
+
+      // Optional: small message to user that OCR is done
+      _showSnack("OCR completed. Check terminal output.");
+    } catch (e) {
+      _showSnack("Error: $e");
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  // CAMERA -> image bytes
+  Future<void> _useCamera() async {
+    final XFile? picked = await _picker.pickImage(
+      source: ImageSource.camera,
+      imageQuality: 90,
+    );
+    if (picked == null) return;
+
+    final bytes = await File(picked.path).readAsBytes();
+    await _runOcrOnBytes(bytes, "receipt.jpg");
+  }
+
+  // UPLOAD -> file (pdf or image)
+  Future<void> _uploadReceiptFile() async {
+    final res = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowMultiple: false,
+      withData: true, // important to get bytes
+      allowedExtensions: ['pdf', 'png', 'jpg', 'jpeg', 'webp'],
+    );
+
+    if (res == null || res.files.isEmpty) return;
+
+    final file = res.files.first;
+
+    // Prefer bytes directly
+    Uint8List? bytes = file.bytes;
+
+    // Fallback: read from path
+    if (bytes == null && file.path != null) {
+      bytes = await File(file.path!).readAsBytes();
+    }
+
+    if (bytes == null) {
+      _showSnack("Could not read file bytes.");
+      return;
+    }
+
+    await _runOcrOnBytes(bytes, file.name);
+  }
+
+  void _showSnack(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg)),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -31,7 +127,8 @@ class ScanReceiptScreen extends StatelessWidget {
               children: [
                 // ===== BACK + TITLE =====
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                   child: Row(
                     children: [
                       GestureDetector(
@@ -51,6 +148,13 @@ class ScanReceiptScreen extends StatelessWidget {
                           fontWeight: FontWeight.w600,
                         ),
                       ),
+                      const Spacer(),
+                      if (_loading)
+                        const SizedBox(
+                          height: 18,
+                          width: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
                     ],
                   ),
                 ),
@@ -82,8 +186,7 @@ class ScanReceiptScreen extends StatelessWidget {
                         ),
                         const SizedBox(height: 8),
                         Text(
-'Scan your receipt to automatically log and categorize your expense.',
-
+                          'Scan your receipt to automatically log and categorize your expense.',
                           style: TextStyle(
                             color: Colors.white.withOpacity(0.6),
                             fontSize: 14,
@@ -97,9 +200,7 @@ class ScanReceiptScreen extends StatelessWidget {
                           icon: Icons.camera_alt_rounded,
                           title: 'Use Camera',
                           subtitle: 'Take a photo of your receipt',
-                          onTap: () {
-                            // TODO: open camera
-                          },
+                          onTap: _loading ? () {} : _useCamera,
                         ),
 
                         const SizedBox(height: 20),
@@ -108,10 +209,8 @@ class ScanReceiptScreen extends StatelessWidget {
                         _BigScanOption(
                           icon: Icons.upload_file_rounded,
                           title: 'Upload Receipt',
-                          subtitle: 'Choose an image from gallery',
-                          onTap: () {
-                            // TODO: open gallery
-                          },
+                          subtitle: 'Upload a PDF or image file',
+                          onTap: _loading ? () {} : _uploadReceiptFile,
                         ),
                       ],
                     ),

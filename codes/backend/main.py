@@ -14,6 +14,8 @@ from pathlib import Path
 import uuid
 from goldmodel.gold_lstm_service import load_gold_lstm, predict_tomorrow_all_karats
 from contextlib import asynccontextmanager
+from receipt_llm import parse_receipt_with_llm
+
 
 
 
@@ -591,6 +593,7 @@ def suggest_savings_plan(profile_id: str, user_id: str | None = None) -> Dict[st
 
     import datetime, calendar
     today = datetime.date.today()
+
 
     # ----------------------------------------------------
     # 1) CURRENT BALANCE
@@ -1264,6 +1267,15 @@ def build_messages(body: ChatIn) -> List[Dict[str, str]]:
     return msgs
 
 
+
+
+
+class ReceiptOCRIn(BaseModel):
+    ocr_text: str
+
+
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
@@ -1290,18 +1302,21 @@ EXPECTED_KEY = os.getenv("BACKEND_API_KEY", "").strip()
 @app.middleware("http")
 async def check_key(request: Request, call_next):
     path = request.url.path 
-    # Allow docs & health without key
-    if request.url.path in ("/docs", "/openapi.json", "/health", "/"):
+     # Allow public endpoints without API key
+    if path in (
+        "/",
+        "/health",
+        "/docs",
+        "/openapi.json",
+        "/receipt/preprocess",
+        "/gold/refresh",
+        "/gold/latest",
+        "/gold/history",
+    ):
         return await call_next(request)
 
-    if request.url.path in ("/docs", "/openapi.json", "/health", "/",'/gold/refresh'):
-        return await call_next(request)
-
-    if path in ("/gold/latest", "/gold/history"):
-        return await call_next(request)
-
+    # Everything else requires API key
     if not EXPECTED_KEY:
-        # Misconfig on server side
         raise HTTPException(500, "Server misconfig: BACKEND_API_KEY missing")
 
     got = request.headers.get("x-api-key")  # header names are case-insensitive
@@ -1309,14 +1324,30 @@ async def check_key(request: Request, call_next):
         raise HTTPException(401, "Unauthorized: invalid API key")
 
     return await call_next(request)
-
 @app.get("/")
 def root():
     return {"ok": True, "service": "Surra backend", "model": FT_MODEL_ID}
 
+class ReceiptIn(BaseModel):
+    ocr_text: str
+
+@app.post("/receipt/preprocess")
+def receipt_preprocess(body: ReceiptIn):
+    try:
+        data = parse_receipt_with_llm(body.ocr_text)
+        return {
+            "ok": True,
+            "data": data
+        }
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @app.get("/health")
 def health():
     return {"status": "healthy"}
+
 
 @app.get("/gold/predict")
 def gold_predict(samples: int = 60):

@@ -8,6 +8,11 @@ import 'package:image_picker/image_picker.dart';
 import '../../theme/app_colors.dart';
 import '../../services/ocr_service.dart';
 
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+
+
+
 class ScanReceiptScreen extends StatefulWidget {
   const ScanReceiptScreen({super.key});
 
@@ -16,41 +21,68 @@ class ScanReceiptScreen extends StatefulWidget {
 }
 
 class _ScanReceiptScreenState extends State<ScanReceiptScreen> {
+  
+  
+  
   final _picker = ImagePicker();
   bool _loading = false;
 
   static const String mistralApiKey = "aCjrHSUoLleLLnHgR9d7Ig7KEBzVW7KE";
 
-  Future<void> _runOcrOnBytes(Uint8List bytes, String fileName) async {
-    if (_loading) return;
+  static const String backendUrl =
+    "http://10.0.2.2:8080/receipt/preprocess";
 
-    if (mistralApiKey.trim().isEmpty || mistralApiKey.contains("PASTE_YOUR")) {
-      _showSnack("Add your Mistral API key first.");
-      return;
+Future<void> _runOcrOnBytes(Uint8List bytes, String fileName) async {
+  if (_loading) return;
+
+  if (mistralApiKey.trim().isEmpty ||
+      mistralApiKey.contains("PASTE_YOUR")) {
+    _showSnack("Add your Mistral API key first.");
+    return;
+  }
+
+  setState(() => _loading = true);
+
+  try {
+    final service = MistralOcrService(apiKey: mistralApiKey);
+
+    final text = await service.extractTextFromBytes(
+      bytes: bytes,
+      fileName: fileName,
+    );
+
+    debugPrint("OCR DONE, sending to backend...");
+
+    final response = await http.post(
+      Uri.parse(backendUrl),
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: jsonEncode({
+        "ocr_text": text,
+      }),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception("Backend error: ${response.body}");
     }
 
-    setState(() => _loading = true);
+    final decoded = jsonDecode(response.body);
 
-    try {
-      final service = MistralOcrService(apiKey: mistralApiKey);
+    debugPrint("========== BACKEND RESULT ==========");
+  const encoder = JsonEncoder.withIndent('  ');
+debugPrint(encoder.convert(decoded));
+    debugPrint("======== END BACKEND RESULT ========");
 
-      final text = await service.extractTextFromBytes(
-        bytes: bytes,
-        fileName: fileName,
-      );
-
-      debugPrint("========== OCR RESULT ($fileName) ==========");
-      debugPrint(text);
-      debugPrint("======== END OCR RESULT ($fileName) ========");
-
-      // Optional: small message to user that OCR is done
-      _showSnack("OCR completed. Check terminal output.");
-    } catch (e) {
-      _showSnack("Error: $e");
-    } finally {
-      if (mounted) setState(() => _loading = false);
+    _showSnack("Receipt processed successfully");
+  } catch (e) {
+    _showSnack("Error: $e");
+  } finally {
+    if (mounted) {
+      setState(() => _loading = false);
     }
   }
+}
 
   // CAMERA -> image bytes
   Future<void> _useCamera() async {

@@ -462,14 +462,32 @@ class _ReceiptReviewScreenState extends State<ReceiptReviewScreen> {
   bool _loadingCategory = true;
   bool _logging = false;
 
-  // Replace this with your real categories from Supabase
+
+  // What the user sees and what we store in Supabase
   final List<String> _categories = <String>[
-    "Electronics",
     "Groceries",
-    "Restaurants",
-    "Transport",
+    "Transportation",
+    "Utilities",
+    "Health",
+    "Entertainment",
     "Other",
   ];
+
+  // Model labels from backend CATEGORIES
+  // CATEGORIES = ["groceries", "transportation", "utilities", "health", "entertainment", "others"]
+  static const Map<String, String> _modelToUi = {
+    "groceries": "Groceries",
+    "transportation": "Transportation",
+    "utilities": "Utilities",
+    "health": "Health",
+    "entertainment": "Entertainment",
+    "others": "Other",
+  };
+
+  // Inverse map: pretty label -> model label
+  late final Map<String, String> _uiToModel =
+      {for (final e in _modelToUi.entries) e.value: e.key};
+
 
   final SupabaseClient _sb = Supabase.instance.client;
   String? _profileIdCache;
@@ -494,31 +512,29 @@ class _ReceiptReviewScreenState extends State<ReceiptReviewScreen> {
 
       if (resp.statusCode == 200) {
         final json = jsonDecode(resp.body) as Map<String, dynamic>;
-        final cat = json['category'] as String;
-        _modelSuggestedCategory = cat;
+        final modelCat = json['category'] as String;
 
-        // If model category exists in our list, use it, else use "Other"
-        if (_categories
-            .map((c) => c.toLowerCase())
-            .contains(cat.toLowerCase())) {
-          _selectedCategory = _categories.firstWhere(
-            (c) => c.toLowerCase() == cat.toLowerCase(),
-          );
+        // Save both model label and pretty label
+        final uiCat = _modelToUi[modelCat] ?? "Other";
+        _modelSuggestedCategory = uiCat;
+
+        if (_categories.contains(uiCat)) {
+          _selectedCategory = uiCat;
         } else {
-          _selectedCategory = _categories.last;
+          _selectedCategory = "Other";
         }
       } else {
-        // If model call fails, just default to "Other"
-        _selectedCategory = _categories.last;
+        _selectedCategory = "Other";
       }
     } catch (_) {
-      _selectedCategory = _categories.last;
+      _selectedCategory = "Other";
     } finally {
       if (mounted) {
         setState(() => _loadingCategory = false);
       }
     }
   }
+
 
     Future<String> _getProfileId() async {
     if (_profileIdCache != null) return _profileIdCache!;
@@ -672,12 +688,17 @@ class _ReceiptReviewScreenState extends State<ReceiptReviewScreen> {
     try {
       // 1. Send feedback to backend so model can learn
       final text = buildTextForCategoryModel(widget.receipt);
+
+      final uiCategory = _selectedCategory!;
+      // Map pretty label (Other) to model label (others, groceries, ...)
+      final backendCategory = _uiToModel[uiCategory] ?? "others";
+
       await http.post(
         Uri.parse(widget.feedbackUrl),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({
           "text": text,
-          "correct_category": _selectedCategory,
+          "correct_category": backendCategory,
         }),
       );
 

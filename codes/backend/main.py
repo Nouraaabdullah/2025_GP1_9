@@ -10,6 +10,8 @@ from pathlib import Path
 import uuid
 import math
 import traceback
+import asyncio
+
 
 import httpx
 from dotenv import load_dotenv
@@ -31,7 +33,7 @@ FT_MODEL_ID = os.getenv("FT_MODEL_ID")  # fine tuned model id
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SERVICE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 FASTAPI_SECRET = os.getenv("FASTAPI_SECRET_KEY")  # optional
-PORT = int(os.getenv("PORT", "8080"))
+PORT = int(os.getenv("PORT", "8000"))
 
 if not FT_MODEL_ID:
     raise RuntimeError("FT_MODEL_ID is missing. Set it in backend/.env to your fine tuned model id.")
@@ -1074,15 +1076,27 @@ class ReceiptFeedbackIn(BaseModel):
     correct_category: str
 
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Load model
     try:
         load_gold_lstm()
         print("Gold LSTM loaded at startup")
     except Exception as e:
         print("Gold LSTM not loaded:", e)
 
+    # Start background scheduler
+    task = asyncio.create_task(gold_refresh_loop(interval_seconds=600, samples=60))
+
     yield
+
+    # Shutdown: cancel task cleanly
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
 
     print("Server shutting down")
 
@@ -1226,6 +1240,22 @@ def save_gold_to_db(result: dict):
             affected.extend(inserted)
 
     return affected
+
+async def gold_refresh_loop(interval_seconds: int = 600, samples: int = 60):
+    """
+    Periodically refresh gold data and upsert into DB.
+    Runs forever until cancelled.
+    """
+    while True:
+        try:
+            result = predict_tomorrow_all_karats(n_samples=samples)
+            save_gold_to_db(result)
+            print(f"[gold_refresh_loop] refreshed successfully at {dt.now(timezone.utc).isoformat()}")
+        except Exception as e:
+            print("[gold_refresh_loop] refresh failed:", repr(e))
+            traceback.print_exc()
+
+        await asyncio.sleep(interval_seconds)
 
 
 @app.get("/gold/predict")

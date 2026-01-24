@@ -43,18 +43,13 @@ Map<String, dynamic>? _goldDb;
 bool _goldDbLoading = false;
 String? _goldDbError;
 
-
 Future<void> _loadGold() async {
   setState(() {
     _goldDbLoading = true;
     _goldDbError = null;
-    
   });
 
   try {
-    // optional: refresh backend so DB gets new values
-    await GoldService.refreshGoldOnBackend();
-
     final data = await GoldService.getLatestGoldFromDb();
     setState(() => _goldDb = data);
   } catch (e) {
@@ -63,8 +58,6 @@ Future<void> _loadGold() async {
     setState(() => _goldDbLoading = false);
   }
 }
-
-
 
 
 

@@ -1560,7 +1560,7 @@ if (level == 'high') {
 
 return _GoldTrendCard(
   karat: k,
-  headline: 'Tomorrow prediction: ${predicted.toStringAsFixed(2)} SAR/g',
+  headline: 'Tomorrow\'s Price: ${predicted.toStringAsFixed(2)} SAR/g',
   currentPrice: '${current.toStringAsFixed(2)} SAR/g',
   lastPrice: '${past.toStringAsFixed(2)} SAR/g',
   yesterdayPrice: '${past.toStringAsFixed(2)} SAR/g',

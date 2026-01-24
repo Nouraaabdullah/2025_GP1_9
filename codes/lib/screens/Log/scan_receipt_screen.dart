@@ -63,8 +63,7 @@ class ParsedReceipt {
 
 // This is the text we send to the category model
 String buildTextForCategoryModel(ParsedReceipt r) {
-  final itemsText =
-      r.items.map((i) => "${i.name} ${i.price} SAR").join(", ");
+  final itemsText = r.items.map((i) => "${i.name} ${i.price} SAR").join(", ");
   return "Merchant: ${r.merchant}. "
       "Total: ${r.total} SAR. "
       "Date: ${r.date?.toIso8601String() ?? "unknown"}. "
@@ -85,8 +84,7 @@ class _ScanReceiptScreenState extends State<ScanReceiptScreen> {
   static const String mistralApiKey = "aCjrHSUoLleLLnHgR9d7Ig7KEBzVW7KE";
 
   // Backend endpoints
-  static const String preprocessUrl =
-      "http://127.0.0.1:8000/receipt/preprocess";
+  static const String preprocessUrl = "http://127.0.0.1:8000/receipt/preprocess";
   static const String categoryPredictUrl =
       "http://127.0.0.1:8000/receipt/category/predict";
   static const String feedbackUrl =
@@ -95,98 +93,92 @@ class _ScanReceiptScreenState extends State<ScanReceiptScreen> {
   /// =========================================================
   /// OCR + PREPROCESS
   /// =========================================================
-Future<void> _runOcrOnBytes(Uint8List bytes, String fileName) async {
-  if (_loading) return;
+  Future<void> _runOcrOnBytes(Uint8List bytes, String fileName) async {
+    if (_loading) return;
 
-  if (mistralApiKey.trim().isEmpty ||
-      mistralApiKey.contains("PASTE_YOUR")) {
-    _showSnack("Add your Mistral API key first.");
-    return;
-  }
-
-  setState(() => _loading = true);
-
-  try {
-    final service = MistralOcrService(apiKey: mistralApiKey);
-
-    final text = await service.extractTextFromBytes(
-      bytes: bytes,
-      fileName: fileName,
-    );
-
-    debugPrint("OCR DONE, sending to backend...");
-
-    final response = await http.post(
-      Uri.parse(preprocessUrl),
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: jsonEncode({
-        "ocr_text": text,
-      }),
-    );
-
-    if (response.statusCode != 200) {
-      throw Exception("Backend error: ${response.body}");
-    }
-
-    final decoded = jsonDecode(response.body) as Map<String, dynamic>;
-
-    debugPrint("========== BACKEND RESULT ==========");
-    const encoder = JsonEncoder.withIndent('  ');
-    debugPrint(encoder.convert(decoded));
-    debugPrint("======== END BACKEND RESULT ========");
-
-    // -------------------------------
-    // PARSE RECEIPT SAFELY
-    // -------------------------------
-    if (decoded["data"] == null || decoded["data"] is! Map) {
-      throw Exception("Unexpected backend shape, 'data' is missing or not an object");
-    }
-
-    final receiptJson = decoded["data"] as Map<String, dynamic>;
-    ParsedReceipt parsedReceipt;
-
-    try {
-      parsedReceipt = ParsedReceipt.fromJson(receiptJson);
-    } catch (e, st) {
-      debugPrint("Error while building ParsedReceipt: $e");
-      debugPrint(st.toString());
-      throw Exception("Could not parse receipt JSON");
-    }
-
-    // -------------------------------
-    // OPEN REVIEW SCREEN
-    // -------------------------------
-    if (!mounted) {
-      debugPrint("ScanReceiptScreen is not mounted anymore, skipping navigation.");
+    if (mistralApiKey.trim().isEmpty ||
+        mistralApiKey.contains("PASTE_YOUR")) {
+      _showSnack("Add your Mistral API key first.");
       return;
     }
 
-    debugPrint("Pushing ReceiptReviewScreen...");
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => ReceiptReviewScreen(
-          receipt: parsedReceipt,
-          categoryPredictUrl: categoryPredictUrl,
-          feedbackUrl: feedbackUrl,
-        ),
-      ),
-    );
-    debugPrint("Returned from ReceiptReviewScreen.");
+    setState(() => _loading = true);
 
-    _showSnack("Receipt processed successfully");
-  } catch (e, st) {
-    debugPrint("ERROR in _runOcrOnBytes: $e");
-    debugPrint(st.toString());
-    _showSnack("Error: $e");
-  } finally {
-    if (mounted) {
-      setState(() => _loading = false);
+    try {
+      final service = MistralOcrService(apiKey: mistralApiKey);
+
+      final text = await service.extractTextFromBytes(
+        bytes: bytes,
+        fileName: fileName,
+      );
+
+      debugPrint("OCR DONE, sending to backend...");
+
+      final response = await http.post(
+        Uri.parse(preprocessUrl),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: jsonEncode({
+          "ocr_text": text,
+        }),
+      );
+
+      if (response.statusCode != 200) {
+        throw Exception("Backend error: ${response.body}");
+      }
+
+      final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+
+      debugPrint("========== BACKEND RESULT ==========");
+      const encoder = JsonEncoder.withIndent('  ');
+      debugPrint(encoder.convert(decoded));
+      debugPrint("======== END BACKEND RESULT ========");
+
+      // parse receipt safely
+      if (decoded["data"] == null || decoded["data"] is! Map) {
+        throw Exception("Unexpected backend shape, 'data' is missing or not an object");
+      }
+
+      final receiptJson = decoded["data"] as Map<String, dynamic>;
+      ParsedReceipt parsedReceipt;
+
+      try {
+        parsedReceipt = ParsedReceipt.fromJson(receiptJson);
+      } catch (e, st) {
+        debugPrint("Error while building ParsedReceipt: $e");
+        debugPrint(st.toString());
+        throw Exception("Could not parse receipt JSON");
+      }
+
+      if (!mounted) {
+        debugPrint("ScanReceiptScreen is not mounted anymore, skipping navigation.");
+        return;
+      }
+
+      debugPrint("Pushing ReceiptReviewScreen...");
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => ReceiptReviewScreen(
+            receipt: parsedReceipt,
+            categoryPredictUrl: categoryPredictUrl,
+            feedbackUrl: feedbackUrl,
+          ),
+        ),
+      );
+      debugPrint("Returned from ReceiptReviewScreen.");
+
+      _showSnack("Receipt processed successfully");
+    } catch (e, st) {
+      debugPrint("ERROR in _runOcrOnBytes: $e");
+      debugPrint(st.toString());
+      _showSnack("Error: $e");
+    } finally {
+      if (mounted) {
+        setState(() => _loading = false);
+      }
     }
   }
-}
-
 
   // CAMERA -> image bytes
   Future<void> _useCamera() async {
@@ -240,62 +232,40 @@ Future<void> _runOcrOnBytes(Uint8List bytes, String fileName) async {
       backgroundColor: AppColors.bg,
       body: Stack(
         children: [
-          // TOP GRADIENT
           Container(
-            height: 220,
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Color(0xFF6B4CE6),
-                  Color(0xFF4A35B8),
-                ],
+            height: 230,
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: AppColors.accent,
+              borderRadius: const BorderRadius.only(
+                bottomLeft: Radius.circular(40),
+                bottomRight: Radius.circular(40),
               ),
             ),
           ),
-
           SafeArea(
+            bottom: false,
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // BACK + TITLE
-                Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                  child: Row(
-                    children: [
-                      GestureDetector(
-                        onTap: () => Navigator.pop(context),
-                        child: const Icon(
-                          Icons.arrow_back_ios_new,
-                          color: Colors.white,
-                          size: 22,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      const Text(
-                        'Scan Receipt',
+                const SizedBox(height: 8),
+                GestureDetector(
+                  onTap: () => Navigator.pop(context),
+                  child: Column(
+                    children: const [
+                      Text(
+                        'Back',
                         style: TextStyle(
                           color: Colors.white,
                           fontSize: 22,
-                          fontWeight: FontWeight.w600,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
-                      const Spacer(),
-                      if (_loading)
-                        const SizedBox(
-                          height: 18,
-                          width: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
+                      SizedBox(height: 6),
+                      Icon(Icons.expand_more, color: Colors.white),
                     ],
                   ),
                 ),
-
                 const SizedBox(height: 24),
-
-                // CONTENT CARD
                 Expanded(
                   child: Container(
                     width: double.infinity,
@@ -311,7 +281,7 @@ Future<void> _runOcrOnBytes(Uint8List bytes, String fileName) async {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text(
-                          'Choose how to scan',
+                          'Scan Receipt',
                           style: TextStyle(
                             color: Colors.white,
                             fontSize: 18,
@@ -327,22 +297,29 @@ Future<void> _runOcrOnBytes(Uint8List bytes, String fileName) async {
                           ),
                         ),
                         const SizedBox(height: 32),
-
                         _BigScanOption(
                           icon: Icons.camera_alt_rounded,
                           title: 'Use Camera',
                           subtitle: 'Take a photo of your receipt',
                           onTap: _loading ? () {} : _useCamera,
                         ),
-
                         const SizedBox(height: 20),
-
                         _BigScanOption(
                           icon: Icons.upload_file_rounded,
                           title: 'Upload Receipt',
                           subtitle: 'Upload a PDF or image file',
                           onTap: _loading ? () {} : _uploadReceiptFile,
                         ),
+                        if (_loading) ...[
+                          const SizedBox(height: 24),
+                          const Center(
+                            child: SizedBox(
+                              height: 22,
+                              width: 22,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -439,7 +416,7 @@ class _BigScanOption extends StatelessWidget {
 }
 
 /// ===========================================================
-/// REVIEW AND LOG SCREEN
+/// REVIEW AND LOG SCREEN (Figma-style ticket)
 /// ===========================================================
 
 class ReceiptReviewScreen extends StatefulWidget {
@@ -458,24 +435,36 @@ class ReceiptReviewScreen extends StatefulWidget {
   State<ReceiptReviewScreen> createState() => _ReceiptReviewScreenState();
 }
 
+/// Category option used in dropdown
+class _CategoryOption {
+  final String name;          // Category.name in DB and shown to user
+  final Color color;          // Category.icon_color
+  final bool isFixed;         // Whether this is one of the fixed model labels
+  final String? backendLabel; // "groceries", "transportation", etc. for fixed
+
+  _CategoryOption({
+    required this.name,
+    required this.color,
+    required this.isFixed,
+    required this.backendLabel,
+  });
+}
+
 class _ReceiptReviewScreenState extends State<ReceiptReviewScreen> {
   bool _loadingCategory = true;
   bool _logging = false;
 
+  final SupabaseClient _sb = Supabase.instance.client;
+  String? _profileIdCache;
 
-  // What the user sees and what we store in Supabase
-  final List<String> _categories = <String>[
-    "Groceries",
-    "Transportation",
-    "Utilities",
-    "Health",
-    "Entertainment",
-    "Other",
-  ];
+  final List<_CategoryOption> _categoryOptions = [];
+  _CategoryOption? _selectedCategory;
+  _CategoryOption? _predictedCategory;
 
-  // Model labels from backend CATEGORIES
-  // CATEGORIES = ["groceries", "transportation", "utilities", "health", "entertainment", "others"]
-  static const Map<String, String> _modelToUi = {
+  String? _modelSuggestedCategoryName;
+
+  // Backend → UI label mapping
+  static const Map<String, String> _backendToUi = {
     "groceries": "Groceries",
     "transportation": "Transportation",
     "utilities": "Utilities",
@@ -484,59 +473,18 @@ class _ReceiptReviewScreenState extends State<ReceiptReviewScreen> {
     "others": "Other",
   };
 
-  // Inverse map: pretty label -> model label
-  late final Map<String, String> _uiToModel =
-      {for (final e in _modelToUi.entries) e.value: e.key};
-
-
-  final SupabaseClient _sb = Supabase.instance.client;
-  String? _profileIdCache;
-  String? _selectedCategory;
-  String? _modelSuggestedCategory;
+  // UI → backend label
+  static final Map<String, String> _uiToBackend = {
+    for (final e in _backendToUi.entries) e.value: e.key,
+  };
 
   @override
   void initState() {
     super.initState();
-    _initCategory();
+    _loadCategoriesAndPrediction();
   }
 
-  Future<void> _initCategory() async {
-    try {
-      final text = buildTextForCategoryModel(widget.receipt);
-
-      final resp = await http.post(
-        Uri.parse(widget.categoryPredictUrl),
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({"text": text}),
-      );
-
-      if (resp.statusCode == 200) {
-        final json = jsonDecode(resp.body) as Map<String, dynamic>;
-        final modelCat = json['category'] as String;
-
-        // Save both model label and pretty label
-        final uiCat = _modelToUi[modelCat] ?? "Other";
-        _modelSuggestedCategory = uiCat;
-
-        if (_categories.contains(uiCat)) {
-          _selectedCategory = uiCat;
-        } else {
-          _selectedCategory = "Other";
-        }
-      } else {
-        _selectedCategory = "Other";
-      }
-    } catch (_) {
-      _selectedCategory = "Other";
-    } finally {
-      if (mounted) {
-        setState(() => _loadingCategory = false);
-      }
-    }
-  }
-
-
-    Future<String> _getProfileId() async {
+  Future<String> _getProfileId() async {
     if (_profileIdCache != null) return _profileIdCache!;
     final pid = await getProfileId(context);
     if (pid == null) {
@@ -544,6 +492,20 @@ class _ReceiptReviewScreenState extends State<ReceiptReviewScreen> {
     }
     _profileIdCache = pid;
     return pid;
+  }
+
+  Color _hexToColor(String value) {
+    var v = value.replaceAll('#', '');
+    if (v.length == 6) {
+      v = 'FF$v';
+    }
+    return Color(int.parse(v, radix: 16));
+  }
+
+  String _fmt(DateTime d) {
+    return '${d.year.toString().padLeft(4, '0')}-'
+        '${d.month.toString().padLeft(2, '0')}-'
+        '${d.day.toString().padLeft(2, '0')}';
   }
 
   Future<String> _getCategoryIdByName(String name) async {
@@ -556,12 +518,6 @@ class _ReceiptReviewScreenState extends State<ReceiptReviewScreen> {
         .single();
     final map = res as Map<String, dynamic>;
     return map['category_id'] as String;
-  }
-
-  String _fmt(DateTime d) {
-    return '${d.year.toString().padLeft(4, '0')}-'
-        '${d.month.toString().padLeft(2, '0')}-'
-        '${d.day.toString().padLeft(2, '0')}';
   }
 
   Future<Map<String, dynamic>> _getOrCreateCurrentMonthRecord(
@@ -644,19 +600,6 @@ class _ReceiptReviewScreenState extends State<ReceiptReviewScreen> {
     }
   }
 
-  Future<num> _getCurrentBalance() async {
-    final profileId = await _getProfileId();
-    final dynamic res = await _sb
-        .from('User_Profile')
-        .select('current_balance')
-        .eq('profile_id', profileId)
-        .single();
-    final map = res as Map<String, dynamic>;
-    final v = map['current_balance'];
-    if (v is num) return v;
-    return num.tryParse('$v') ?? 0;
-  }
-
   Future<void> _updateBalanceForExpense({
     required num totalAmount,
   }) async {
@@ -680,32 +623,133 @@ class _ReceiptReviewScreenState extends State<ReceiptReviewScreen> {
         .eq('profile_id', profileId);
   }
 
+  Future<void> _loadCategoriesAndPrediction() async {
+    setState(() {
+      _loadingCategory = true;
+    });
+
+    try {
+      final profileId = await _getProfileId();
+
+      // 1) all categories (fixed + custom)
+      final List rows = await _sb
+          .from('Category')
+          .select('name, icon_color')
+          .eq('profile_id', profileId)
+          .eq('is_archived', false)
+          .order('name');
+
+      _categoryOptions.clear();
+
+      for (final raw in rows) {
+        final map = raw as Map<String, dynamic>;
+        final name = (map['name'] ?? '').toString();
+        final rawColor = (map['icon_color'] ?? '').toString();
+
+        Color color;
+        try {
+          color = _hexToColor(rawColor);
+        } catch (_) {
+          color = const Color(0xFFFDBA3F);
+        }
+
+        final isFixed = _uiToBackend.containsKey(name);
+        final backendLabel = isFixed ? _uiToBackend[name] : null;
+
+        _categoryOptions.add(
+          _CategoryOption(
+            name: name,
+            color: color,
+            isFixed: isFixed,
+            backendLabel: backendLabel,
+          ),
+        );
+      }
+
+      // 2) predicted category from backend
+      final text = buildTextForCategoryModel(widget.receipt);
+      final resp = await http.post(
+        Uri.parse(widget.categoryPredictUrl),
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({"text": text}),
+      );
+
+      String? backendPredicted;
+      if (resp.statusCode == 200) {
+        final json = jsonDecode(resp.body) as Map<String, dynamic>;
+        backendPredicted = json['category'] as String?;
+      }
+
+      if (backendPredicted != null) {
+        final uiName = _backendToUi[backendPredicted];
+        if (uiName != null) {
+          _predictedCategory = _categoryOptions.firstWhere(
+            (c) => c.name == uiName,
+            orElse: () => _categoryOptions.isNotEmpty
+                ? _categoryOptions.first
+                : _CategoryOption(
+                    name: uiName,
+                    color: const Color(0xFFFDBA3F),
+                    isFixed: true,
+                    backendLabel: backendPredicted,
+                  ),
+          );
+        }
+      }
+
+      _selectedCategory = _predictedCategory ??
+          (_categoryOptions.isNotEmpty ? _categoryOptions.first : null);
+
+      _modelSuggestedCategoryName = _predictedCategory?.name;
+    } catch (e) {
+      debugPrint("Error in _loadCategoriesAndPrediction: $e");
+      if (_categoryOptions.isNotEmpty && _selectedCategory == null) {
+        _selectedCategory = _categoryOptions.first;
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _loadingCategory = false);
+      }
+    }
+  }
 
   Future<void> _onLogPressed() async {
     if (_selectedCategory == null) return;
 
     setState(() => _logging = true);
+
     try {
-      // 1. Send feedback to backend so model can learn
-      final text = buildTextForCategoryModel(widget.receipt);
+      final selected = _selectedCategory!;
+      final predicted = _predictedCategory;
 
-      final uiCategory = _selectedCategory!;
-      // Map pretty label (Other) to model label (others, groceries, ...)
-      final backendCategory = _uiToModel[uiCategory] ?? "others";
+      // Only send feedback when user changed between fixed labels
+      bool sendFeedback = false;
+      String? backendCorrectLabel;
 
-      await http.post(
-        Uri.parse(widget.feedbackUrl),
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({
-          "text": text,
-          "correct_category": backendCategory,
-        }),
-      );
+      if (predicted != null &&
+          predicted.isFixed &&
+          selected.isFixed &&
+          selected.name != predicted.name) {
+        sendFeedback = true;
+        backendCorrectLabel = selected.backendLabel;
+      }
 
-      // 2. Log expense in your database
+      if (sendFeedback && backendCorrectLabel != null) {
+        final text = buildTextForCategoryModel(widget.receipt);
+        await http.post(
+          Uri.parse(widget.feedbackUrl),
+          headers: {"Content-Type": "application/json"},
+          body: jsonEncode({
+            "text": text,
+            "correct_category": backendCorrectLabel,
+          }),
+        );
+      }
+
+      // Log expense in DB (one transaction per line item)
       await _logExpenseTransaction(
         widget.receipt,
-        _selectedCategory!,
+        selected.name,
       );
 
       if (!mounted) return;
@@ -725,52 +769,44 @@ class _ReceiptReviewScreenState extends State<ReceiptReviewScreen> {
     }
   }
 
-  Future<void> _logExpenseTransaction(
-      ParsedReceipt receipt, String categoryName) async {
-    // 1. Resolve profile and category
-    final profileId = await _getProfileId();
-    final categoryId = await _getCategoryIdByName(categoryName);
+Future<void> _logExpenseTransaction(
+    ParsedReceipt receipt, String categoryName) async {
+  // 1) Resolve profile and category
+  final profileId = await _getProfileId();
+  final categoryId = await _getCategoryIdByName(categoryName);
 
-    final DateTime date = receipt.date ?? DateTime.now();
-    final String dateStr = _fmt(date);
+  // Use the receipt date if present, otherwise fallback to today
+  final DateTime date = receipt.date ?? DateTime.now();
+  final String dateStr = _fmt(date);
 
-    // 2. Insert one Transaction row per item
-    num totalAmount = 0;
+  // Total amount from the parsed receipt
+  final double amount = receipt.total;
 
-    for (final item in receipt.items) {
-      final double amount = item.price;
-      totalAmount += amount;
+  // 2) Single Transaction row for the whole receipt
+  final Map<String, dynamic> payload = {
+    'type': 'Expense',
+    'amount': amount,
+    'date': dateStr,
+    'profile_id': profileId,
+    'category_id': categoryId,
+    // You can uncomment these if you later add columns:
+    // 'merchant': receipt.merchant,
+    // 'description': 'Receipt OCR',
+    // 'source': 'receipt_ocr',
+  };
 
-      final Map<String, dynamic> payload = {
-        'type': 'Expense',
-        'amount': amount,
-        'date': dateStr,
-        'profile_id': profileId,
-        'category_id': categoryId,
-        // you can add extra fields here if your table has them:
-        // 'merchant': receipt.merchant,
-        // 'description': item.name,
-        // 'source': 'receipt_ocr',
-      };
+  await _sb.from('Transaction').insert(payload);
 
-      await _sb.from('Transaction').insert(payload);
-    }
+  // 3) Update balance and summaries with the same total amount
+  await _updateBalanceForExpense(totalAmount: amount);
 
-    // 3. Update current balance once using totalAmount
-    await _updateBalanceForExpense(totalAmount: totalAmount);
-
-    // 4. Update monthly totals and category summary once
-    await _bumpMonthTotalsAndCategorySummary(
-      profileId: profileId,
-      categoryId: categoryId,
-      date: date,
-      amount: totalAmount,
-    );
-
-    // If you want, you can also add overspend warnings here later
-    // by reusing the same logic from LogTransactionManuallyPage.
-  }
-
+  await _bumpMonthTotalsAndCategorySummary(
+    profileId: profileId,
+    categoryId: categoryId,
+    date: date,
+    amount: amount,
+  );
+}
 
   @override
   Widget build(BuildContext context) {
@@ -778,234 +814,482 @@ class _ReceiptReviewScreenState extends State<ReceiptReviewScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.bg,
-      body: SafeArea(
-        child: Column(
-          children: [
-            // Header like your design
-            Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-              child: Row(
-                children: [
-                  GestureDetector(
-                    onTap: () => Navigator.pop(context),
-                    child: const Icon(
-                      Icons.arrow_back_ios_new,
-                      color: Colors.white,
-                      size: 22,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
+      body: Stack(
+        children: [
+          // purple background with rounded bottom – same as ScanReceiptScreen
+          Container(
+            height: 320,
+            width: double.infinity,
+            decoration: const BoxDecoration(
+              color: AppColors.accent,
+              borderRadius: BorderRadius.only(
+                bottomLeft: Radius.circular(40),
+                bottomRight: Radius.circular(40),
+              ),
+            ),
+          ),
+
+          // foreground content
+          SafeArea(
+            bottom: false,
+            child: Column(
+              children: [
+                const SizedBox(height: 8),
+
+                // Back button (text + arrow)
+                GestureDetector(
+                  onTap: () => Navigator.pop(context),
+                  child: Column(
+                    children: const [
                       Text(
-                        r.merchant,
-                        style: const TextStyle(
+                        'Back',
+                        style: TextStyle(
                           color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
+                          fontSize: 22,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        r.date != null
-                            ? "${r.date!.day}-${r.date!.month}-${r.date!.year}"
-                            : "",
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 12,
-                        ),
-                      ),
+                      SizedBox(height: 6),
+                      Icon(Icons.expand_more, color: Colors.white),
                     ],
                   ),
-                ],
-              ),
-            ),
+                ),
 
-            const SizedBox(height: 8),
+                const SizedBox(height: 24),
 
-            // Items list
-            Expanded(
-              child: ListView.builder(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                itemCount: r.items.length,
-                itemBuilder: (context, index) {
-                  final item = r.items[index];
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 16),
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 18, vertical: 12),
-                    decoration: BoxDecoration(
-                      color: AppColors.card,
-                      borderRadius: BorderRadius.circular(30),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            item.name,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 13,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Text(
-                          "${item.price} SAR",
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              ),
-            ),
-
-            const SizedBox(height: 8),
-
-            // Total pill
-            Container(
-              margin: const EdgeInsets.symmetric(horizontal: 80),
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              decoration: BoxDecoration(
-                color: const Color(0xFF7C5CE6),
-                borderRadius: BorderRadius.circular(30),
-              ),
-              child: Column(
-                children: [
-                  const Text(
-                    'Total Amount',
-                    style: TextStyle(
-                      color: Colors.white70,
-                      fontSize: 13,
-                    ),
-                  ),
-                  Text(
-                    "${r.total}  SAR",
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 16),
-
-            // Category dropdown
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    "Category",
-                    style: TextStyle(
-                      color: Colors.white70,
-                      fontSize: 14,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  IgnorePointer(
-                    ignoring: _loadingCategory,
-                    child: DropdownButtonFormField<String>(
-                      value: _selectedCategory,
-                      dropdownColor: AppColors.card,
-                      decoration: InputDecoration(
-                        filled: true,
-                        fillColor: AppColors.card,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(24),
-                          borderSide: BorderSide.none,
-                        ),
-                      ),
-                      items: _categories
-                          .map(
-                            (c) => DropdownMenuItem(
-                              value: c,
-                              child: Text(
-                                c,
-                                style: const TextStyle(color: Colors.white),
-                              ),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (value) {
-                        setState(() {
-                          _selectedCategory = value;
-                        });
+                // the receipt ticket in the middle
+                Expanded(
+                  child: Center(
+                    child: ReceiptTicketCard(
+                      receipt: r,
+                      categories: _categoryOptions,
+                      selectedCategory: _selectedCategory,
+                      modelSuggestedCategoryName:
+                          _modelSuggestedCategoryName,
+                      loadingCategory: _loadingCategory,
+                      onCategoryChanged: (_CategoryOption opt) {
+                        setState(() => _selectedCategory = opt);
                       },
                     ),
                   ),
-                  if (_loadingCategory)
-                    const Padding(
-                      padding: EdgeInsets.only(top: 4),
-                      child: Text(
-                        "Predicting category...",
-                        style: TextStyle(
-                          color: Colors.white38,
-                          fontSize: 12,
-                        ),
+                ),
+
+                const SizedBox(height: 24),
+
+                // Log button
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 24),
+                  child: ElevatedButton(
+                    onPressed: _logging ? null : _onLogPressed,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF6A43DD),
+                      elevation: 12,
+                      shadowColor: const Color(0xFF6A43DD),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(50),
                       ),
-                    )
-                  else if (_modelSuggestedCategory != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 4),
-                      child: Text(
-                        "Suggested: $_modelSuggestedCategory",
-                        style: const TextStyle(
-                          color: Colors.white38,
-                          fontSize: 12,
-                        ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 80,
+                        vertical: 14,
                       ),
                     ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 24),
-
-            // Log button
-            Padding(
-              padding: const EdgeInsets.only(bottom: 24),
-              child: ElevatedButton(
-                onPressed: _logging ? null : _onLogPressed,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF7C5CE6),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(30),
+                    child: _logging
+                        ? const SizedBox(
+                            height: 18,
+                            width: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Text(
+                            'Log',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 17,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
                   ),
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 80, vertical: 14),
                 ),
-                child: _logging
-                    ? const SizedBox(
-                        height: 18,
-                        width: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : const Text(
-                        "Log",
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+} // <-- this closes _ReceiptReviewScreenState
+
+
+
+/// ===========================================================
+/// Ticket widget – matches Figma layout, only items list scrolls
+/// ===========================================================
+class ReceiptTicketCard extends StatelessWidget {
+  final ParsedReceipt receipt;
+  final List<_CategoryOption> categories;
+  final _CategoryOption? selectedCategory;
+  final String? modelSuggestedCategoryName;
+  final bool loadingCategory;
+  final ValueChanged<_CategoryOption> onCategoryChanged;
+
+  const ReceiptTicketCard({
+    super.key,
+    required this.receipt,
+    required this.categories,
+    required this.selectedCategory,
+    required this.modelSuggestedCategoryName,
+    required this.loadingCategory,
+    required this.onCategoryChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final r = receipt;
+    final dropdownColor =
+        selectedCategory?.color ?? const Color(0xFFFDBA3F);
+
+    return SizedBox(
+      width: 294,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          // White card
+          Container(
+            padding: const EdgeInsets.fromLTRB(24, 24, 24, 24),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16.41),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // CENTERED success header (icon + text)
+                Center(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: const [
+                      Icon(
+                        Icons.check_circle,
+                        color: Color(0xFF22C55E),
+                        size: 20,
+                      ),
+                      SizedBox(width: 8),
+                      Text(
+                        'Transaction Success',
                         style: TextStyle(
-                          color: Colors.white,
+                          color: Colors.black,
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Merchant name
+                Center(
+                  child: Text(
+                    r.merchant,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: Colors.black,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 6),
+
+                // Receipt date
+                Center(
+                  child: Text(
+                    r.date != null
+                        ? '${r.date!.day}-${r.date!.month}-${r.date!.year}'
+                        : '',
+                    style: const TextStyle(
+                      color: Colors.black,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w400,
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 18),
+                const _DashedDivider(),
+                const SizedBox(height: 16),
+
+                // Scrollable items
+                SizedBox(
+                  height: 320,
+                  child: ListView.builder(
+                    itemCount: r.items.length,
+                    itemBuilder: (context, index) {
+                      final item = r.items[index];
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 10),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF5F5F5),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: Text(
+                                item.name,
+                                style: const TextStyle(
+                                  color: Colors.black,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w400,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              '${item.price.toStringAsFixed(0)} SAR',
+                              textAlign: TextAlign.right,
+                              style: const TextStyle(
+                                color: Colors.black,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w400,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
+
+                const SizedBox(height: 18),
+                const _DashedDivider(),
+
+                // Category row
+                const SizedBox(height: 18),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Category',
+                      style: TextStyle(
+                        color: Color(0xFF989898),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    _CategoryChipDropdown(
+                      categories: categories,
+                      selected: selectedCategory,
+                      color: dropdownColor,
+                      loading: loadingCategory,
+                      onChanged: onCategoryChanged,
+                    ),
+                  ],
+                ),
+
+                // Total amount row
+                const SizedBox(height: 18),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Total Amount',
+                      style: TextStyle(
+                        color: Color(0xFF989898),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    Text(
+                      '${r.total.toStringAsFixed(1)} SAR',
+                      textAlign: TextAlign.right,
+                      style: const TextStyle(
+                        color: Color(0xFF6A43DD),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          // TOP scallops
+          Positioned(
+            top: -7.5,
+            left: 18,
+            right: 18,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: List.generate(
+                11,
+                (_) => Container(
+                  width: 14.77,
+                  height: 14.77,
+                  decoration: const BoxDecoration(
+                    color: AppColors.accent,
+                    shape: BoxShape.circle,
+                  ),
+                ),
               ),
             ),
-          ],
+          ),
+
+          // Side notches
+          const Positioned(
+            left: -7.5,
+            top: 220,
+            child: CircleAvatar(
+              radius: 7.5,
+              backgroundColor: Color(0xFF1D1B32),
+            ),
+          ),
+          const Positioned(
+            right: -7.5,
+            top: 220,
+            child: CircleAvatar(
+              radius: 7.5,
+              backgroundColor: Color(0xFF1D1B32),
+            ),
+          ),
+
+          // Bottom scallops
+          Positioned(
+            bottom: -7.5,
+            left: 18,
+            right: 18,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: List.generate(
+                11,
+                (_) => Container(
+                  width: 14.77,
+                  height: 14.77,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF1D1B32),
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Dashed divider (grey, like Figma)
+class _DashedDivider extends StatelessWidget {
+  const _DashedDivider({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const dashWidth = 6.0;
+        const dashSpace = 4.0;
+        final count = (constraints.maxWidth / (dashWidth + dashSpace)).floor();
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: List.generate(
+            count,
+            (_) => Container(
+              width: dashWidth,
+              height: 2,
+              color: const Color(0xFFD3D2D3),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Category dropdown styled as coloured pill
+class _CategoryChipDropdown extends StatelessWidget {
+  final List<_CategoryOption> categories;
+  final _CategoryOption? selected;
+  final Color color;
+  final bool loading;
+  final ValueChanged<_CategoryOption> onChanged;
+
+  const _CategoryChipDropdown({
+    super.key,
+    required this.categories,
+    required this.selected,
+    required this.color,
+    required this.loading,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      ignoring: loading,
+      child: Container(
+        height: 30,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.circular(50),
+          border: Border.all(color: Colors.white, width: 1),
+        ),
+        child: DropdownButtonHideUnderline(
+          child: DropdownButton<_CategoryOption>(
+            value: selected,
+            icon: const Icon(Icons.keyboard_arrow_down, color: Colors.white),
+            dropdownColor: const Color(0xFF2B2B48),
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 13,
+            ),
+            onChanged: (opt) {
+              if (opt != null) {
+                onChanged(opt);
+              }
+            },
+            items: categories.map((c) {
+              return DropdownMenuItem<_CategoryOption>(
+                value: c,
+                child: Row(
+                  children: [
+                    Container(
+                      width: 22,
+                      height: 22,
+                      decoration: BoxDecoration(
+                        color: c.color,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(
+                        Icons.receipt_long,
+                        color: Colors.white,
+                        size: 14,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      c.name,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+          ),
         ),
       ),
     );

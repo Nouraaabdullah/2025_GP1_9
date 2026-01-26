@@ -25,6 +25,8 @@ from goldmodel.gold_lstm_service import load_gold_lstm, predict_tomorrow_all_kar
 from receipt_llm import parse_receipt_with_llm
 from categories_model.receipt_model import predict_category, update_with_feedback
 
+from supabase import create_client
+
 # Force load backend/.env (next to main.py)
 load_dotenv(dotenv_path=Path(__file__).with_name(".env"))
 
@@ -1320,12 +1322,78 @@ def gold_latest():
         "prices": prices,
     }
 
+def is_gold_question(text: str) -> bool:
+    keywords = [
+        "gold", "ذهب", "عيار",
+        "24", "21", "18",
+        "price", "سعر"
+    ]
+    text = text.lower()
+    return any(word in text for word in keywords)
+def get_latest_gold_from_db():
+    sb = create_client(
+        os.getenv("SUPABASE_URL"),
+        os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+    )
+
+    rows = (
+        sb.table("Gold")
+        .select("karat, current_price, predicted_price, created_at")
+        .order("created_at", desc=True)
+        .limit(200)
+        .execute()
+        .data
+    )
+
+    latest = {}
+    for r in rows:
+        key = f"{int(r['karat'])}K"
+        if key not in latest:
+            latest[key] = r
+        if len(latest) == 3:  # 24K, 21K, 18K
+            break
+
+    if not latest:
+        return None
+
+    return {
+        "unit": "SAR per gram",
+        "prices": {
+            k: {
+                "current": float(v["current_price"]),
+                "predicted_tomorrow": float(v["predicted_price"])
+            }
+            for k, v in latest.items()
+        }
+    }
+
+
+
+
 
 @app.post("/chat")
 def chat(body: ChatIn):
     try:
         model = FT_MODEL_ID
         base_messages = build_messages(body)
+
+        # --- GOLD CONTEXT INJECTION ---
+        if is_gold_question(body.text):
+            gold_data = get_latest_gold_from_db()
+            if gold_data:
+                gold_system_msg = {
+                    "role": "system",
+                    "content": (
+                        "IMPORTANT GOLD DATA (SAR per gram).\n"
+                        "Use ONLY these values. Do NOT guess.\n\n"
+                        f"{json.dumps(gold_data, ensure_ascii=False)}"
+                    ),
+                }
+                # Insert gold info right after the main system prompt
+                base_messages.insert(1, gold_system_msg)
+
+
+
 
         print(f"📦 /chat using model: {model}")
         print(f"📜 history turns: {len(body.history)}")

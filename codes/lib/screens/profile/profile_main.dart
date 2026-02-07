@@ -1483,6 +1483,7 @@ if (_goldDbLoading) {
   return _GoldTrendCard(
     karat: k,
     headline: 'Loading gold prices...',
+    predictedPrice:'-',
     currentPrice: '—',
     lastPrice: '—',
     yesterdayPrice: '—',
@@ -1497,6 +1498,7 @@ if (_goldDbError  != null || _goldDb  == null) {
   return _GoldTrendCard(
     karat: k,
     headline: 'Gold data not available',
+    predictedPrice:'-',
     currentPrice: '—',
     lastPrice: '—',
     yesterdayPrice: '—',
@@ -1515,6 +1517,7 @@ if (rawObj == null) {
   return _GoldTrendCard(
     karat: k,
     headline: 'Gold data not available',
+    predictedPrice:'-',
     currentPrice: '—',
     lastPrice: '—',
     yesterdayPrice: '—',
@@ -1553,7 +1556,8 @@ if (level == 'high') {
 
 return _GoldTrendCard(
   karat: k,
-  headline: 'Tomorrow\'s Price: ${predicted.toStringAsFixed(2)} SAR/g',
+  headline: 'Tomorrow\'s Price Predection:',
+  predictedPrice:'${predicted.toStringAsFixed(2)} SAR/g',
   currentPrice: '${current.toStringAsFixed(2)} SAR/g',
   lastPrice: '${past.toStringAsFixed(2)} SAR/g',
   yesterdayPrice: '${past.toStringAsFixed(2)} SAR/g',
@@ -2400,6 +2404,7 @@ class _GoldTrendCard
         StatelessWidget {
   final String karat;
   final String headline;
+  final String predictedPrice;
   final String currentPrice;
   final String lastPrice;
   final String lastPct;
@@ -2411,6 +2416,7 @@ class _GoldTrendCard
   const _GoldTrendCard({
     required this.karat,
     required this.headline,
+    required this.predictedPrice,
     required this.currentPrice,
     required this.lastPrice,
     required this.lastPct,
@@ -2620,7 +2626,7 @@ class _GoldTrendCard
                     height: 10,
                   ),
                   Text(
-                    currentPrice,
+                    predictedPrice,
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 23,

@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:surra_application/screens/profile/profile_main.dart';
 
 import '../../theme/app_colors.dart';
 import '../../services/ocr_service.dart';
@@ -37,6 +38,7 @@ class ParsedReceipt {
   final List<ReceiptItem> items;
   final double total;
   final String currency;
+  final String type; // "expense" or "earning" 
 
   ParsedReceipt({
     required this.merchant,
@@ -44,9 +46,14 @@ class ParsedReceipt {
     required this.items,
     required this.total,
     required this.currency,
+    required this.type,
   });
 
   factory ParsedReceipt.fromJson(Map<String, dynamic> json) {
+    final rawType = (json['type'] ?? 'expense').toString().toLowerCase();
+    final normalizedType =
+        (rawType == 'earning') ? 'earning' : 'expense'; // default to expense
+
     return ParsedReceipt(
       merchant: json['merchant'] ?? 'Unknown',
       date: json['date'] != null && json['date'] != ''
@@ -57,6 +64,7 @@ class ParsedReceipt {
           .toList(),
       total: (json['total'] as num).toDouble(),
       currency: json['currency'] ?? 'SAR',
+      type: normalizedType,
     );
   }
 }
@@ -168,7 +176,6 @@ class _ScanReceiptScreenState extends State<ScanReceiptScreen> {
       );
       debugPrint("Returned from ReceiptReviewScreen.");
 
-      _showSnack("Receipt processed successfully");
     } catch (e, st) {
       debugPrint("ERROR in _runOcrOnBytes: $e");
       debugPrint(st.toString());
@@ -463,6 +470,8 @@ class _ReceiptReviewScreenState extends State<ReceiptReviewScreen> {
 
   String? _modelSuggestedCategoryName;
 
+  bool _transactionFailed = false; 
+
   // Backend → UI label mapping
   static const Map<String, String> _backendToUi = {
     "groceries": "Groceries",
@@ -481,6 +490,10 @@ class _ReceiptReviewScreenState extends State<ReceiptReviewScreen> {
   @override
   void initState() {
     super.initState();
+    // If total is 0, mark as failed immediately
+    if (widget.receipt.total == 0) {
+      _transactionFailed = true;
+    }
     _loadCategoriesAndPrediction();
   }
 
@@ -493,6 +506,101 @@ class _ReceiptReviewScreenState extends State<ReceiptReviewScreen> {
     _profileIdCache = pid;
     return pid;
   }
+
+  Future<void> _showSuccessDialog({required String message}) async {
+  await showDialog<void>(
+    context: context,
+    barrierDismissible: true,
+    builder: (ctx) {
+      return Dialog(
+        backgroundColor: const Color(0xFF141427),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(40),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: const Color(0xFF1F1F33),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.green.withOpacity(0.6),
+                      blurRadius: 18,
+                      spreadRadius: 2,
+                    ),
+                  ],
+                  border: Border.all(
+                    color: Colors.greenAccent,
+                    width: 3,
+                  ),
+                ),
+                child: const Center(
+                  child: Icon(
+                    Icons.check_circle_outline,
+                    color: Colors.greenAccent,
+                    size: 42,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+              const Text(
+                'Transaction Logged',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 14,
+                  height: 1.5,
+                ),
+              ),
+              const SizedBox(height: 28),
+              SizedBox(
+                width: 120,
+                height: 44,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.accent,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    elevation: 16,
+                    shadowColor: AppColors.accent.withOpacity(0.7),
+                  ),
+                  child: const Text(
+                    'OK',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    },
+  );
+}
+
 
   Color _hexToColor(String value) {
     var v = value.replaceAll('#', '');
@@ -716,7 +824,10 @@ class _ReceiptReviewScreenState extends State<ReceiptReviewScreen> {
   Future<void> _onLogPressed() async {
     if (_selectedCategory == null) return;
 
-    setState(() => _logging = true);
+    setState(() {
+      _logging = true;
+      _transactionFailed = false; 
+    });
 
     try {
       final selected = _selectedCategory!;
@@ -753,15 +864,19 @@ class _ReceiptReviewScreenState extends State<ReceiptReviewScreen> {
       );
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Expense logged")),
-      );
+
+    await _showSuccessDialog(
+      message: 'Your transaction has been added successfully.',
+    );
+
+      // no SnackBar, just close on success
       Navigator.of(context).pop();
     } catch (e) {
+      debugPrint("Error while logging transaction: $e");
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error: $e")),
-      );
+      setState(() {
+        _transactionFailed = true; // this triggers the red header
+      });
     } finally {
       if (mounted) {
         setState(() => _logging = false);
@@ -770,7 +885,9 @@ class _ReceiptReviewScreenState extends State<ReceiptReviewScreen> {
   }
 
 Future<void> _logExpenseTransaction(
-    ParsedReceipt receipt, String categoryName) async {
+  ParsedReceipt receipt,
+  String categoryName,
+) async {
   // 1) Resolve profile and category
   final profileId = await _getProfileId();
   final categoryId = await _getCategoryIdByName(categoryName);
@@ -782,22 +899,25 @@ Future<void> _logExpenseTransaction(
   // Total amount from the parsed receipt
   final double amount = receipt.total;
 
+  // Map parsed type ("expense"/"earning") to DB value ("Expense"/"Earning")
+  final String dbType =
+      receipt.type.toLowerCase() == 'earning' ? 'Earning' : 'Expense';
+
   // 2) Single Transaction row for the whole receipt
   final Map<String, dynamic> payload = {
-    'type': 'Expense',
+    'type': dbType,
     'amount': amount,
     'date': dateStr,
     'profile_id': profileId,
     'category_id': categoryId,
-    // You can uncomment these if you later add columns:
-    // 'merchant': receipt.merchant,
-    // 'description': 'Receipt OCR',
-    // 'source': 'receipt_ocr',
   };
 
   await _sb.from('Transaction').insert(payload);
 
-  // 3) Update balance and summaries with the same total amount
+  // 3) Update balance and summaries
+  // NOTE: currently this always treats it as an expense.
+  // If you want earnings to add to balance and go to total_income,
+  // we can branch here later.
   await _updateBalanceForExpense(totalAmount: amount);
 
   await _bumpMonthTotalsAndCategorySummary(
@@ -838,7 +958,28 @@ Future<void> _logExpenseTransaction(
 
                 // Back button (text + arrow)
                 GestureDetector(
-                  onTap: () => Navigator.pop(context),
+                  onTap: () {
+                    Navigator.of(context).pushAndRemoveUntil(
+                      PageRouteBuilder(
+                        transitionDuration: const Duration(milliseconds: 350),
+                        pageBuilder: (context, animation, secondaryAnimation) {
+                          return const ProfileMainPage(); 
+                        },
+                        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                          final tween = Tween<Offset>(
+                            begin: const Offset(0, 1), // comes from bottom
+                            end: Offset.zero,
+                          ).chain(CurveTween(curve: Curves.easeOutCubic));
+
+                          return SlideTransition(
+                            position: animation.drive(tween),
+                            child: child,
+                          );
+                        },
+                      ),
+                      (route) => false,
+                    );
+                  },
                   child: Column(
                     children: const [
                       Text(
@@ -870,46 +1011,53 @@ Future<void> _logExpenseTransaction(
                       onCategoryChanged: (_CategoryOption opt) {
                         setState(() => _selectedCategory = opt);
                       },
+                      transactionFailed: _transactionFailed, 
                     ),
                   ),
                 ),
 
                 const SizedBox(height: 24),
 
-                // Log button
+                // Log button area (keeps same height even when hidden)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 24),
-                  child: ElevatedButton(
-                    onPressed: _logging ? null : _onLogPressed,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF6A43DD),
-                      elevation: 12,
-                      shadowColor: const Color(0xFF6A43DD),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(50),
-                      ),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 80,
-                        vertical: 14,
+                  child: IgnorePointer(
+                    ignoring: _transactionFailed, // no taps when failed
+                    child: Opacity(
+                      opacity: _transactionFailed ? 0 : 1, // visually hide when failed
+                      child: ElevatedButton(
+                        onPressed: _logging ? null : _onLogPressed,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF6A43DD),
+                          elevation: 12,
+                          shadowColor: const Color(0xFF6A43DD),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(50),
+                          ),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 80,
+                            vertical: 14,
+                          ),
+                        ),
+                        child: _logging
+                            ? const SizedBox(
+                                height: 18,
+                                width: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Text(
+                                'Log',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
                       ),
                     ),
-                    child: _logging
-                        ? const SizedBox(
-                            height: 18,
-                            width: 18,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : const Text(
-                            'Log',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 17,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
                   ),
                 ),
               ],
@@ -933,6 +1081,7 @@ class ReceiptTicketCard extends StatelessWidget {
   final String? modelSuggestedCategoryName;
   final bool loadingCategory;
   final ValueChanged<_CategoryOption> onCategoryChanged;
+  final bool transactionFailed;
 
   const ReceiptTicketCard({
     super.key,
@@ -942,6 +1091,7 @@ class ReceiptTicketCard extends StatelessWidget {
     required this.modelSuggestedCategoryName,
     required this.loadingCategory,
     required this.onCategoryChanged,
+    required this.transactionFailed,
   });
 
   @override
@@ -952,11 +1102,13 @@ class ReceiptTicketCard extends StatelessWidget {
 
     return SizedBox(
       width: 294,
+      height: 520,
       child: Stack(
         clipBehavior: Clip.none,
         children: [
-          // White card
+          // White ticket
           Container(
+            height: double.infinity, 
             padding: const EdgeInsets.fromLTRB(24, 24, 24, 24),
             decoration: BoxDecoration(
               color: Colors.white,
@@ -964,161 +1116,196 @@ class ReceiptTicketCard extends StatelessWidget {
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
               children: [
-                // CENTERED success header (icon + text)
-                Center(
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: const [
-                      Icon(
-                        Icons.check_circle,
-                        color: Color(0xFF22C55E),
-                        size: 20,
+                // ======= HEADER AREA =======
+                if (!transactionFailed) ...[
+                  Center(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: const [
+                        Icon(
+                          Icons.check_circle,
+                          color: Color(0xFF22C55E),
+                          size: 20,
+                        ),
+                        SizedBox(width: 8),
+                        Text(
+                          'Transaction Success',
+                          style: TextStyle(
+                            color: Colors.black,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Center(
+                    child: Text(
+                      r.merchant,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: Colors.black,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
                       ),
-                      SizedBox(width: 8),
-                      Text(
-                        'Transaction Success',
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Center(
+                    child: Text(
+                      r.date != null
+                          ? '${r.date!.day}-${r.date!.month}-${r.date!.year}'
+                          : '',
+                      style: const TextStyle(
+                        color: Colors.black,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w400,
+                      ),
+                    ),
+                  ),
+                ] else ...[
+                  Center(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: const [
+                        Icon(
+                          Icons.error_rounded,
+                          color: Color(0xFFEF4444),
+                          size: 24,
+                        ),
+                        SizedBox(width: 8),
+                        Text(
+                          'Transaction Failed',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Colors.black,
+                            fontSize: 20,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+
+                const SizedBox(height: 18),
+                const _DashedDivider(),
+                const SizedBox(height: 16),
+
+                // ======= MIDDLE AREA (FIXED BY USING Expanded) =======
+                Expanded(
+                  child: transactionFailed
+                      ? Center(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            child: const Text(
+                              'Please scan a clearer receipt\nand try again.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: Color(0xFF6B7280),
+                                fontSize: 14,
+                                fontWeight: FontWeight.w400,
+                                height: 1.4,
+                              ),
+                            ),
+                          ),
+                        )
+                      : ListView.builder(
+                          itemCount: r.items.length,
+                          itemBuilder: (context, index) {
+                            final item = r.items[index];
+                            return Container(
+                              margin: const EdgeInsets.only(bottom: 10),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 10,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF5F5F5),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      item.name,
+                                      style: const TextStyle(
+                                        color: Colors.black,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w400,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    '${item.price.toStringAsFixed(0)} SAR',
+                                    textAlign: TextAlign.right,
+                                    style: const TextStyle(
+                                      color: Colors.black,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w400,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                ),
+
+                const SizedBox(height: 18),
+                const _DashedDivider(),
+
+                // ======= BOTTOM AREA (CATEGORY + TOTAL) – HIDDEN ON FAIL =======
+                if (!transactionFailed) ...[
+                  const SizedBox(height: 18),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Category',
                         style: TextStyle(
-                          color: Colors.black,
-                          fontSize: 16,
+                          color: Color(0xFF989898),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      _CategoryChipDropdown(
+                        categories: categories,
+                        selected: selectedCategory,
+                        color: dropdownColor,
+                        loading: loadingCategory,
+                        onChanged: onCategoryChanged,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 18),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Total Amount',
+                        style: TextStyle(
+                          color: Color(0xFF989898),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      Text(
+                        '${r.total.toStringAsFixed(1)} SAR',
+                        textAlign: TextAlign.right,
+                        style: const TextStyle(
+                          color: Color(0xFF6A43DD),
+                          fontSize: 13,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
                     ],
                   ),
-                ),
-                const SizedBox(height: 16),
-
-                // Merchant name
-                Center(
-                  child: Text(
-                    r.merchant,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: Colors.black,
-                      fontSize: 20,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 6),
-
-                // Receipt date
-                Center(
-                  child: Text(
-                    r.date != null
-                        ? '${r.date!.day}-${r.date!.month}-${r.date!.year}'
-                        : '',
-                    style: const TextStyle(
-                      color: Colors.black,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w400,
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 18),
-                const _DashedDivider(),
-                const SizedBox(height: 16),
-
-                // Scrollable items
-                SizedBox(
-                  height: 320,
-                  child: ListView.builder(
-                    itemCount: r.items.length,
-                    itemBuilder: (context, index) {
-                      final item = r.items[index];
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 10),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 10,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF5F5F5),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Expanded(
-                              child: Text(
-                                item.name,
-                                style: const TextStyle(
-                                  color: Colors.black,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w400,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              '${item.price.toStringAsFixed(0)} SAR',
-                              textAlign: TextAlign.right,
-                              style: const TextStyle(
-                                color: Colors.black,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w400,
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
-                ),
-
-                const SizedBox(height: 18),
-                const _DashedDivider(),
-
-                // Category row
-                const SizedBox(height: 18),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text(
-                      'Category',
-                      style: TextStyle(
-                        color: Color(0xFF989898),
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    _CategoryChipDropdown(
-                      categories: categories,
-                      selected: selectedCategory,
-                      color: dropdownColor,
-                      loading: loadingCategory,
-                      onChanged: onCategoryChanged,
-                    ),
-                  ],
-                ),
-
-                // Total amount row
-                const SizedBox(height: 18),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text(
-                      'Total Amount',
-                      style: TextStyle(
-                        color: Color(0xFF989898),
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    Text(
-                      '${r.total.toStringAsFixed(1)} SAR',
-                      textAlign: TextAlign.right,
-                      style: const TextStyle(
-                        color: Color(0xFF6A43DD),
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
+                ],
               ],
             ),
           ),

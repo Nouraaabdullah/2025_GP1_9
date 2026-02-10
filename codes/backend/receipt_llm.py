@@ -1,6 +1,5 @@
 import os
 import json
-import re
 from openai import OpenAI
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -21,6 +20,9 @@ Rules:
 5. Prices must be numbers (no text, no currency symbols)
 6. Ignore phone numbers, tax numbers, staff IDs, URLs
 7. Merchant name should be the shop/store name (not address)
+8. If the receipt represents money paid by the user, type = "expense"
+9. If the receipt represents money received by the user (salary, refund, payout), type = "earning"
+10. type MUST be either "expense" or "earning" ONLY
 
 Return JSON in this EXACT shape:
 
@@ -31,7 +33,8 @@ Return JSON in this EXACT shape:
     { "name": string, "price": number }
   ],
   "total": number,
-  "currency": "SAR"
+  "currency": "SAR",
+  "type": "expense" | "earning"
 }
 """
 
@@ -64,6 +67,15 @@ def parse_receipt_with_llm(ocr_text: str) -> dict:
 
     # Currency
     data["currency"] = "SAR"
+
+    # Type: expense or earning ONLY
+    receipt_type = data.get("type")
+
+    if receipt_type not in ("expense", "earning"):
+        # Default assumption: receipts are expenses
+        data["type"] = "expense"
+    else:
+        data["type"] = receipt_type
 
     # Items
     if not isinstance(data.get("items"), list):

@@ -9,7 +9,7 @@ class GoldService {
   static const String _backendBaseUrl = 'http://127.0.0.1:8000';
   // Android emulator: http://10.0.2.2:8000
   // static const String _backendBaseUrl = 'http://10.0.2.2:8080';
-   
+
 static Future<void> refreshGoldOnBackend({int samples = 60}) async {
   final uri = Uri.parse('$_backendBaseUrl/gold/refresh?samples=$samples');
 

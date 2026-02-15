@@ -9,6 +9,7 @@ import 'package:surra_application/utils/auth_helpers.dart';
 import 'dart:ui';
 import 'package:surra_application/services/gold_service.dart';
 import 'package:surra_application/screens/Log/log_transaction_options_sheet.dart';
+import 'dart:convert';
 
 class ProfileMainPage
     extends
@@ -1441,6 +1442,7 @@ class _ProfileMainPageState
                                 ),
 
                                 // Replace the entire "Gold Trends" section in your ProfileMainPage build method with this:
+                                // ===================== GOLD TRENDS (PASTE THIS WHOLE SECTION) =====================
                                 Padding(
                                   padding: const EdgeInsets.fromLTRB(
                                     20,
@@ -1487,11 +1489,11 @@ class _ProfileMainPageState
                                                 ];
                                                 final k = karats[i];
 
-                                                // Loading state
+                                                // ---------- Loading ----------
                                                 if (_goldDbLoading) {
                                                   return _GoldTrendCard(
                                                     karat: k,
-                                                    headline: 'Gold prices are going up this week!',
+                                                    headline: 'Gold prices are going up next week!',
                                                     nextWeekRange: '—',
                                                     todayPrice: '—',
                                                     lastWeekPrice: '—',
@@ -1504,14 +1506,14 @@ class _ProfileMainPageState
                                                   );
                                                 }
 
-                                                // Error / empty state
+                                                // ---------- Error / Empty ----------
                                                 if (_goldDbError !=
                                                         null ||
                                                     _goldDb ==
                                                         null) {
                                                   return _GoldTrendCard(
                                                     karat: k,
-                                                    headline: 'Gold prices are going up this week!',
+                                                    headline: 'Gold prices are going up next week!',
                                                     nextWeekRange: '—',
                                                     todayPrice: '—',
                                                     lastWeekPrice: '—',
@@ -1524,6 +1526,84 @@ class _ProfileMainPageState
                                                   );
                                                 }
 
+                                                // helpers
+                                                double
+                                                _num(
+                                                  dynamic v,
+                                                ) =>
+                                                    (v
+                                                        is num)
+                                                    ? v.toDouble()
+                                                    : double.tryParse(
+                                                            '$v',
+                                                          ) ??
+                                                          0.0;
+
+                                                Map<
+                                                  String,
+                                                  dynamic
+                                                >?
+                                                _asMap(
+                                                  dynamic v,
+                                                ) {
+                                                  if (v ==
+                                                      null)
+                                                    return null;
+                                                  if (v
+                                                      is Map<
+                                                        String,
+                                                        dynamic
+                                                      >)
+                                                    return v;
+                                                  if (v
+                                                      is Map)
+                                                    return Map<
+                                                      String,
+                                                      dynamic
+                                                    >.from(
+                                                      v,
+                                                    );
+                                                  if (v
+                                                      is String) {
+                                                    try {
+                                                      final decoded = jsonDecode(
+                                                        v,
+                                                      );
+                                                      if (decoded
+                                                          is Map)
+                                                        return Map<
+                                                          String,
+                                                          dynamic
+                                                        >.from(
+                                                          decoded,
+                                                        );
+                                                    } catch (
+                                                      _
+                                                    ) {}
+                                                  }
+                                                  return null;
+                                                }
+
+                                                String _asLevel(
+                                                  dynamic v,
+                                                ) {
+                                                  if (v ==
+                                                      null)
+                                                    return 'low';
+                                                  if (v
+                                                      is String)
+                                                    return v.toLowerCase();
+                                                  final m = _asMap(
+                                                    v,
+                                                  );
+                                                  final lvl = m?['level'];
+                                                  if (lvl
+                                                      is String)
+                                                    return lvl.toLowerCase();
+                                                  return 'low';
+                                                }
+
+                                                // ---------- Read from DB object ----------
                                                 final prices =
                                                     (_goldDb?['prices']
                                                         as Map<
@@ -1531,13 +1611,19 @@ class _ProfileMainPageState
                                                           dynamic
                                                         >?) ??
                                                     {};
-                                                final rawObj = prices[k];
+                                                final dbKey = k.replaceAll(
+                                                  'K',
+                                                  '',
+                                                ); // "18K" -> "18"
+                                                final rawObj =
+                                                    prices[dbKey] ??
+                                                    prices[k]; // fallback لو كان فيه K
 
                                                 if (rawObj ==
                                                     null) {
                                                   return _GoldTrendCard(
                                                     karat: k,
-                                                    headline: 'Gold prices are going up this week!',
+                                                    headline: 'Gold prices are going up next week!',
                                                     nextWeekRange: '—',
                                                     todayPrice: '—',
                                                     lastWeekPrice: '—',
@@ -1550,52 +1636,104 @@ class _ProfileMainPageState
                                                   );
                                                 }
 
-                                                final obj =
-                                                    rawObj
-                                                        as Map<
-                                                          String,
-                                                          dynamic
-                                                        >;
+                                                // rawObj ممكن يكون Map أو String(json) — نخليه Map مضمون
+                                                final goldRow =
+                                                    _asMap(
+                                                      rawObj,
+                                                    ) ??
+                                                    <
+                                                      String,
+                                                      dynamic
+                                                    >{};
 
-                                                // last week (single) + today (single) + prediction base
-                                                final past =
-                                                    (obj['past']
-                                                            as num)
-                                                        .toDouble(); // last week single
-                                                final current =
-                                                    (obj['current']
-                                                            as num)
-                                                        .toDouble(); // today single
-                                                final predicted =
-                                                    (obj['predicted_tomorrow']
-                                                            as num)
-                                                        .toDouble(); // base for range
-                                                final level =
-                                                    (obj['confidence']
-                                                            as String)
-                                                        .toLowerCase();
+                                                // ✅ IMPORTANT:
+                                                // هذا السكشن يدعم شكلين:
+                                                // (A) شكل DB المفروض عندك: past_price/current_price/predicted_low/predicted_high/confidence_level
+                                                // (B) شكل model القديم: past/current/predicted_tplus7_interval/confidence
 
-                                                // Badge % (today vs last week)
-                                                final diffPct =
-                                                    past ==
+                                                // --- A: DB fields ---
+                                                final bool hasDbFields =
+                                                    goldRow.containsKey(
+                                                      'past_price',
+                                                    ) ||
+                                                    goldRow.containsKey(
+                                                      'current_price',
+                                                    );
+
+                                                final double pastPrice = hasDbFields
+                                                    ? _num(
+                                                        goldRow['past_price'],
+                                                      )
+                                                    : _num(
+                                                        goldRow['past'],
+                                                      );
+                                                final double currentPrice = hasDbFields
+                                                    ? _num(
+                                                        goldRow['current_price'],
+                                                      )
+                                                    : _num(
+                                                        goldRow['current'],
+                                                      );
+
+                                                final double lowPrice = hasDbFields
+                                                    ? _num(
+                                                        goldRow['predicted_low'],
+                                                      )
+                                                    : _num(
+                                                        _asMap(
+                                                          goldRow['predicted_tplus7_interval'],
+                                                        )?['lo'],
+                                                      );
+
+                                                final double highPrice = hasDbFields
+                                                    ? _num(
+                                                        goldRow['predicted_high'],
+                                                      )
+                                                    : _num(
+                                                        _asMap(
+                                                          goldRow['predicted_tplus7_interval'],
+                                                        )?['hi'],
+                                                      );
+
+                                                final String level = hasDbFields
+                                                    ? (goldRow['confidence_level']
+                                                                  as String? ??
+                                                              'low')
+                                                          .toLowerCase()
+                                                    : _asLevel(
+                                                        goldRow['confidence'],
+                                                      );
+
+                                                // --- Range Text ---
+                                                final String nextWeekRange =
+                                                    (lowPrice ==
+                                                            0 &&
+                                                        highPrice ==
+                                                            0)
+                                                    ? '—'
+                                                    : '${lowPrice.toStringAsFixed(0)}–${highPrice.toStringAsFixed(0)} SAR';
+
+                                                // --- Badge % (today vs last week) ---
+                                                final double diffPct =
+                                                    pastPrice ==
                                                         0
                                                     ? 0
-                                                    : ((current -
-                                                                  past) /
-                                                              past) *
+                                                    : ((currentPrice -
+                                                                  pastPrice) /
+                                                              pastPrice) *
                                                           100.0;
-                                                final badgePct = '${diffPct >= 0 ? '+' : ''}${diffPct.toStringAsFixed(0)}%';
 
-                                                // Change (SAR/g)
-                                                final change =
-                                                    current -
-                                                    past;
-                                                final changeText = '${change >= 0 ? '+' : ''}${change.toStringAsFixed(0)} SAR/g';
+                                                final String badgePct = '${diffPct >= 0 ? '+' : ''}${diffPct.toStringAsFixed(0)}%';
 
-                                                // Confidence + range band
+                                                // --- Change (SAR/g) ---
+                                                final double changeValue =
+                                                    currentPrice -
+                                                    pastPrice;
+                                                final String changeText = '${changeValue >= 0 ? '+' : ''}${changeValue.toStringAsFixed(0)} SAR/g';
+
+                                                // --- Confidence UI ---
                                                 Color confColor;
                                                 String confLabel;
-                                                double band; // +/- percentage band for next week range
 
                                                 if (level ==
                                                     'high') {
@@ -1603,39 +1741,25 @@ class _ProfileMainPageState
                                                     0xFF4ECDC4,
                                                   );
                                                   confLabel = 'High';
-                                                  band = 0.01; // ±1%
                                                 } else if (level ==
                                                     'medium') {
                                                   confColor = const Color(
                                                     0xFFFFD93D,
                                                   );
                                                   confLabel = 'Medium';
-                                                  band = 0.02; // ±2%
                                                 } else {
                                                   confColor = const Color(
                                                     0xFFF46040,
                                                   );
                                                   confLabel = 'Low';
-                                                  band = 0.03; // ±3%
                                                 }
-
-                                                // Next week prediction RANGE (top big text)
-                                                final low =
-                                                    predicted *
-                                                    (1 -
-                                                        band);
-                                                final high =
-                                                    predicted *
-                                                    (1 +
-                                                        band);
-                                                final nextWeekRange = '${low.toStringAsFixed(0)}–${high.toStringAsFixed(0)} SAR';
 
                                                 return _GoldTrendCard(
                                                   karat: k,
-                                                  headline: 'Gold prices are going up this week!',
+                                                  headline: 'Gold prices are going up next week!',
                                                   nextWeekRange: nextWeekRange,
-                                                  todayPrice: '${current.toStringAsFixed(0)} SAR/g',
-                                                  lastWeekPrice: '${past.toStringAsFixed(0)} SAR/g',
+                                                  todayPrice: '${currentPrice.toStringAsFixed(0)} SAR/g',
+                                                  lastWeekPrice: '${pastPrice.toStringAsFixed(0)} SAR/g',
                                                   changeText: changeText,
                                                   badgePct: badgePct,
                                                   confidenceLabel: confLabel,
@@ -1648,6 +1772,7 @@ class _ProfileMainPageState
                                   ),
                                 ),
 
+                                // =================== END GOLD TRENDS ===================
                                 const SizedBox(
                                   height: 14,
                                 ),

@@ -21,7 +21,7 @@ from fastapi.responses import JSONResponse
 from openai import OpenAI
 from pydantic import BaseModel, Field
 
-from goldmodel.gold_lstm_service import load_gold_lstm, predict_tomorrow_all_karats
+from goldmodel.gold_lstm_service import load_gold_lstm, predict_next_week_all_karats
 from receipt_llm import parse_receipt_with_llm
 from categories_model.receipt_model import predict_category, update_with_feedback
 
@@ -1202,28 +1202,72 @@ def _today_window_utc():
     end = start + timedelta(days=1)
     return start.isoformat(), end.isoformat()
 
+def _iso_day_window_utc(day: dt):
+    start = day.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=timezone.utc)
+    end = start + timedelta(days=1)
+    return start.isoformat(), end.isoformat()
+
+def get_price_exactly_7_days_ago_from_db(karat: int) -> Optional[float]:
+    target_day = dt.now(timezone.utc) - timedelta(days=7)
+    start_iso, end_iso = _iso_day_window_utc(target_day)
+
+    rows = sbr(
+        "Gold",
+        {
+            "select": "created_at,karat,current_price",
+            "karat": f"eq.{karat}",
+            "created_at": f"gte.{start_iso}",
+            "and": f"(created_at.lt.{end_iso})",
+            "order": "created_at.desc",
+            "limit": "1",
+        },
+    )
+    if not rows:
+        return None
+    return float(rows[0]["current_price"])
+
+
 
 def save_gold_to_db(result: dict):
+    """
+    Upsert today's Gold rows (per karat).
+
+    Requirements handled:
+    - past_price is NOT NULL in your schema, so:
+      * INSERT requires past_7d to exist in DB
+      * UPDATE keeps existing past_price if past_7d missing
+    - Stores prediction RANGE if your table has predicted_low/predicted_high
+      (otherwise falls back to storing mean in predicted_price only)
+    """
     print("=== GOLD MODEL OUTPUT ===")
     print(json.dumps(result, indent=2, ensure_ascii=False))
 
     start_iso, end_iso = _today_window_utc()
-    affected = []
+    affected: list[dict] = []
 
-    for karat_str, obj in result["prices"].items():
-        karat = int(karat_str.replace("K", ""))
+    for karat_str, obj in result.get("prices", {}).items():
+        karat = int(str(karat_str).replace("K", ""))
 
-        payload = {
-            "past_price": obj["past"],
-            "current_price": obj["current"],
-            "predicted_price": obj["predicted_tomorrow"],
-            "confidence_level": (obj.get("confidence") or {}).get("level"),
-        }
+        interval = obj.get("predicted_tplus7_interval") or {}
+        conf = obj.get("confidence") or {}
 
+        current_price = obj.get("current")
+        mean_price = interval.get("mean")
+        low_price = interval.get("lo")
+        high_price = interval.get("hi")
+        confidence_level = conf.get("level")
+
+        if current_price is None or mean_price is None:
+            raise HTTPException(500, f"Gold model output missing current/mean for {karat_str}")
+
+        # past_price must come from DB exactly 7 days ago
+        past_7d = get_price_exactly_7_days_ago_from_db(karat)
+
+        # Check if today's row exists (IMPORTANT: use params= not payload=)
         rows = sbr(
             "Gold",
-            {
-                "select": "gold_data_id,created_at",
+            params={
+                "select": "gold_data_id,created_at,past_price",
                 "karat": f"eq.{karat}",
                 "created_at": f"gte.{start_iso}",
                 "and": f"(created_at.lt.{end_iso})",
@@ -1231,27 +1275,80 @@ def save_gold_to_db(result: dict):
             },
         )
 
+        def _try_patch(gold_data_id: str, payload: dict):
+            """Patch, and if predicted_low/high columns don't exist, retry without them."""
+            try:
+                return sb_patch("Gold", {"gold_data_id": f"eq.{gold_data_id}"}, payload)
+            except HTTPException as e:
+                msg = str(e.detail) if hasattr(e, "detail") else str(e)
+                # fallback if schema doesn't have predicted_low/high
+                if ("predicted_low" in msg) or ("predicted_high" in msg) or ("column" in msg and "predicted_" in msg):
+                    payload.pop("predicted_low", None)
+                    payload.pop("predicted_high", None)
+                    return sb_patch("Gold", {"gold_data_id": f"eq.{gold_data_id}"}, payload)
+                raise
+
+        def _try_insert(payload: dict):
+            """Insert, and if predicted_low/high columns don't exist, retry without them."""
+            try:
+                return sb_post("Gold", [payload])
+            except HTTPException as e:
+                msg = str(e.detail) if hasattr(e, "detail") else str(e)
+                if ("predicted_low" in msg) or ("predicted_high" in msg) or ("column" in msg and "predicted_" in msg):
+                    payload.pop("predicted_low", None)
+                    payload.pop("predicted_high", None)
+                    return sb_post("Gold", [payload])
+                raise
+
         if rows:
+            # UPDATE existing row for today
             gid = rows[0]["gold_data_id"]
-            updated = sb_patch(
-                "Gold",
-                {"gold_data_id": f"eq.{gid}"},
-                payload,
-            )
+
+            payload = {
+                "current_price": current_price,
+                # keep predicted_price as mean for compatibility
+                "predicted_price": mean_price,
+                "confidence_level": confidence_level,
+            }
+
+            # store range IF table supports it
+            if low_price is not None and high_price is not None:
+                payload["predicted_low"] = low_price
+                payload["predicted_high"] = high_price
+
+            # Only overwrite past_price if we successfully fetched 7-days-ago
+            if past_7d is not None:
+                payload["past_price"] = past_7d
+
+            updated = _try_patch(gid, payload)
             affected.extend(updated)
+
         else:
-            inserted = sb_post(
-                "Gold",
-                [
-                    {
-                        "karat": karat,
-                        **payload,
-                    }
-                ],
-            )
+            # INSERT new row for today requires NOT NULL past_price
+            if past_7d is None:
+                raise HTTPException(
+                    500,
+                    f"Cannot insert today's gold row for {karat}K because past_price (exactly 7 days ago) is missing in DB."
+                )
+
+            payload = {
+                "karat": karat,
+                "past_price": past_7d,
+                "current_price": current_price,
+                "predicted_price": mean_price,  # mean kept
+                "confidence_level": confidence_level,
+            }
+
+            # store range IF table supports it
+            if low_price is not None and high_price is not None:
+                payload["predicted_low"] = low_price
+                payload["predicted_high"] = high_price
+
+            inserted = _try_insert(payload)
             affected.extend(inserted)
 
     return affected
+
 
 async def gold_refresh_loop(interval_seconds: int = 600, samples: int = 60):
     """
@@ -1260,7 +1357,7 @@ async def gold_refresh_loop(interval_seconds: int = 600, samples: int = 60):
     """
     while True:
         try:
-            result = predict_tomorrow_all_karats(n_samples=samples)
+            result = predict_next_week_all_karats(n_samples=samples)
             save_gold_to_db(result)
             print(f"[gold_refresh_loop] refreshed successfully at {dt.now(timezone.utc).isoformat()}")
         except Exception as e:
@@ -1274,7 +1371,7 @@ async def gold_refresh_loop(interval_seconds: int = 600, samples: int = 60):
 def gold_predict(samples: int = 60):
     try:
         samples = max(10, min(int(samples), 200))
-        return predict_tomorrow_all_karats(n_samples=samples)
+        return predict_next_week_all_karats(n_samples=samples)
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(status_code=400, detail=str(e))
@@ -1283,7 +1380,7 @@ def gold_predict(samples: int = 60):
 @app.post("/gold/refresh")
 def gold_refresh(samples: int = 60):
     samples = max(10, min(int(samples), 200))
-    result = predict_tomorrow_all_karats(n_samples=samples)
+    result = predict_next_week_all_karats(n_samples=samples)
     rows = save_gold_to_db(result)
     return {"ok": True, "affected_rows": len(rows)}
 
@@ -1291,13 +1388,16 @@ def gold_refresh(samples: int = 60):
 @app.get("/gold/latest")
 def gold_latest():
     rows = sbr(
-        "Gold",
-        {
-            "select": "created_at,karat,past_price,current_price,predicted_price,confidence_level",
-            "order": "created_at.desc",
-            "limit": "50",
-        },
-    )
+    "Gold",
+    params={
+        "select": "gold_data_id,created_at",
+        "karat": f"eq.{karat}",
+        "created_at": f"gte.{start_iso}",
+        "and": f"(created_at.lt.{end_iso})",
+        "limit": "1",
+    },
+)
+
 
     latest_by_karat = {}
     for r in rows:
@@ -1311,14 +1411,17 @@ def gold_latest():
         raise HTTPException(404, "No gold data found")
 
     def build_block(r):
-        return {
-            "past": float(r["past_price"]),
-            "current": float(r["current_price"]),
-            "predicted_tomorrow": float(r["predicted_price"]),
-            "confidence": {
-                "level": r["confidence_level"],
-            },
-        }
+        kar = int(r["karat"])
+    return {
+        "past_7_days": get_price_exactly_7_days_ago_from_db(kar),
+        "current": float(r["current_price"]),
+        "predicted_tplus7_interval": {
+            "lo": float(r["predicted_low"]),
+            "hi": float(r["predicted_high"]),
+        },
+        "confidence": {"level": r.get("confidence_level")},
+    }
+
 
     prices = {}
     for karat in [24, 21, 18]:

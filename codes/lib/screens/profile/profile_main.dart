@@ -10,7 +10,6 @@ import 'dart:ui';
 import 'package:surra_application/services/gold_service.dart';
 import 'package:surra_application/screens/Log/log_transaction_options_sheet.dart';
 
-
 class ProfileMainPage
     extends
         StatefulWidget {
@@ -39,35 +38,48 @@ class _ProfileMainPageState
 
   bool _isIncomeExpanded = false;
   bool _isExpenseExpanded = false;
-Map<String, dynamic>? _goldDb; 
-bool _goldDbLoading = false;
-String? _goldDbError;
+  Map<
+    String,
+    dynamic
+  >?
+  _goldDb;
+  bool _goldDbLoading = false;
+  String? _goldDbError;
 
-Future<void> _loadGold() async {
-  setState(() {
-    _goldDbLoading = true;
-    _goldDbError = null;
-  });
+  Future<
+    void
+  >
+  _loadGold() async {
+    setState(
+      () {
+        _goldDbLoading = true;
+        _goldDbError = null;
+      },
+    );
 
-  try {
-    final data = await GoldService.getLatestGoldFromDb();
-    setState(() => _goldDb = data);
-  } catch (e) {
-    setState(() => _goldDbError = e.toString());
-  } finally {
-    setState(() => _goldDbLoading = false);
+    try {
+      final data = await GoldService.getLatestGoldFromDb();
+      setState(
+        () => _goldDb = data,
+      );
+    } catch (
+      e
+    ) {
+      setState(
+        () => _goldDbError = e.toString(),
+      );
+    } finally {
+      setState(
+        () => _goldDbLoading = false,
+      );
+    }
   }
-}
-
-
 
   @override
   void initState() {
     super.initState();
     _future = _fetchDashboard();
-   _loadGold();
-
-
+    _loadGold();
   }
 
   @override
@@ -118,8 +130,6 @@ Future<void> _loadGold() async {
         ),
       );
       await _loadGold();
-
-
     } catch (
       e
     ) {
@@ -133,8 +143,6 @@ Future<void> _loadGold() async {
         );
     }
   }
-
-  
 
   Future<
     void
@@ -1456,7 +1464,7 @@ Future<void> _loadGold() async {
                                         height: 14,
                                       ),
                                       SizedBox(
-                                        height: 140,
+                                        height: 195,
                                         child: ListView.separated(
                                           scrollDirection: Axis.horizontal,
                                           itemCount: 3,
@@ -1469,7 +1477,7 @@ Future<void> _loadGold() async {
                                               ),
                                           itemBuilder:
                                               (
-                                                _,
+                                                context,
                                                 i,
                                               ) {
                                                 final karats = [
@@ -1477,98 +1485,162 @@ Future<void> _loadGold() async {
                                                   '21K',
                                                   '24K',
                                                 ];
-final k = karats[i];
+                                                final k = karats[i];
 
-if (_goldDbLoading) {
-  return _GoldTrendCard(
-    karat: k,
-    headline: 'Loading gold prices...',
-    predictedPrice:'-',
-    currentPrice: '—',
-    lastPrice: '—',
-    yesterdayPrice: '—',
-    lastPct: '—',
-    badgePct: '—',
-    confidenceLabel: '—',
-    confidenceColor: const Color(0xFFFF6B3D),
-  );
-}
+                                                // Loading state
+                                                if (_goldDbLoading) {
+                                                  return _GoldTrendCard(
+                                                    karat: k,
+                                                    headline: 'Gold prices are going up this week!',
+                                                    nextWeekRange: '—',
+                                                    todayPrice: '—',
+                                                    lastWeekPrice: '—',
+                                                    changeText: '—',
+                                                    badgePct: '—',
+                                                    confidenceLabel: '—',
+                                                    confidenceColor: const Color(
+                                                      0xFFF46040,
+                                                    ),
+                                                  );
+                                                }
 
-if (_goldDbError  != null || _goldDb  == null) {
-  return _GoldTrendCard(
-    karat: k,
-    headline: 'Gold data not available',
-    predictedPrice:'-',
-    currentPrice: '—',
-    lastPrice: '—',
-    yesterdayPrice: '—',
-    lastPct: '—',
-    badgePct: '—',
-    confidenceLabel: '—',
-    confidenceColor: const Color(0xFFFF6B3D),
-  );
-}
+                                                // Error / empty state
+                                                if (_goldDbError !=
+                                                        null ||
+                                                    _goldDb ==
+                                                        null) {
+                                                  return _GoldTrendCard(
+                                                    karat: k,
+                                                    headline: 'Gold prices are going up this week!',
+                                                    nextWeekRange: '—',
+                                                    todayPrice: '—',
+                                                    lastWeekPrice: '—',
+                                                    changeText: '—',
+                                                    badgePct: '—',
+                                                    confidenceLabel: '—',
+                                                    confidenceColor: const Color(
+                                                      0xFFF46040,
+                                                    ),
+                                                  );
+                                                }
 
+                                                final prices =
+                                                    (_goldDb?['prices']
+                                                        as Map<
+                                                          String,
+                                                          dynamic
+                                                        >?) ??
+                                                    {};
+                                                final rawObj = prices[k];
 
-final prices = (_goldDb?['prices'] as Map<String, dynamic>?) ?? {};
-final rawObj = prices[k];
+                                                if (rawObj ==
+                                                    null) {
+                                                  return _GoldTrendCard(
+                                                    karat: k,
+                                                    headline: 'Gold prices are going up this week!',
+                                                    nextWeekRange: '—',
+                                                    todayPrice: '—',
+                                                    lastWeekPrice: '—',
+                                                    changeText: '—',
+                                                    badgePct: '—',
+                                                    confidenceLabel: '—',
+                                                    confidenceColor: const Color(
+                                                      0xFFF46040,
+                                                    ),
+                                                  );
+                                                }
 
-if (rawObj == null) {
-  return _GoldTrendCard(
-    karat: k,
-    headline: 'Gold data not available',
-    predictedPrice:'-',
-    currentPrice: '—',
-    lastPrice: '—',
-    yesterdayPrice: '—',
-    lastPct: '—',
-    badgePct: '—',
-    confidenceLabel: '—',
-    confidenceColor: const Color(0xFFFF6B3D),
-  );
-}
+                                                final obj =
+                                                    rawObj
+                                                        as Map<
+                                                          String,
+                                                          dynamic
+                                                        >;
 
-final obj = rawObj as Map<String, dynamic>;
+                                                // last week (single) + today (single) + prediction base
+                                                final past =
+                                                    (obj['past']
+                                                            as num)
+                                                        .toDouble(); // last week single
+                                                final current =
+                                                    (obj['current']
+                                                            as num)
+                                                        .toDouble(); // today single
+                                                final predicted =
+                                                    (obj['predicted_tomorrow']
+                                                            as num)
+                                                        .toDouble(); // base for range
+                                                final level =
+                                                    (obj['confidence']
+                                                            as String)
+                                                        .toLowerCase();
 
+                                                // Badge % (today vs last week)
+                                                final diffPct =
+                                                    past ==
+                                                        0
+                                                    ? 0
+                                                    : ((current -
+                                                                  past) /
+                                                              past) *
+                                                          100.0;
+                                                final badgePct = '${diffPct >= 0 ? '+' : ''}${diffPct.toStringAsFixed(0)}%';
 
-final past = (obj['past'] as num).toDouble();
-final current = (obj['current'] as num).toDouble();
-final predicted = (obj['predicted_tomorrow'] as num).toDouble();
+                                                // Change (SAR/g)
+                                                final change =
+                                                    current -
+                                                    past;
+                                                final changeText = '${change >= 0 ? '+' : ''}${change.toStringAsFixed(0)} SAR/g';
 
-final level = (obj['confidence'] as String).toLowerCase();
+                                                // Confidence + range band
+                                                Color confColor;
+                                                String confLabel;
+                                                double band; // +/- percentage band for next week range
 
+                                                if (level ==
+                                                    'high') {
+                                                  confColor = const Color(
+                                                    0xFF4ECDC4,
+                                                  );
+                                                  confLabel = 'High';
+                                                  band = 0.01; // ±1%
+                                                } else if (level ==
+                                                    'medium') {
+                                                  confColor = const Color(
+                                                    0xFFFFD93D,
+                                                  );
+                                                  confLabel = 'Medium';
+                                                  band = 0.02; // ±2%
+                                                } else {
+                                                  confColor = const Color(
+                                                    0xFFF46040,
+                                                  );
+                                                  confLabel = 'Low';
+                                                  band = 0.03; // ±3%
+                                                }
 
-final diffPct = past == 0 ? 0 : ((current - past) / past) * 100.0;
-final badge = '${diffPct >= 0 ? '+' : ''}${diffPct.toStringAsFixed(1)}%';
+                                                // Next week prediction RANGE (top big text)
+                                                final low =
+                                                    predicted *
+                                                    (1 -
+                                                        band);
+                                                final high =
+                                                    predicted *
+                                                    (1 +
+                                                        band);
+                                                final nextWeekRange = '${low.toStringAsFixed(0)}–${high.toStringAsFixed(0)} SAR';
 
-Color confColor;
-String confLabel;
-if (level == 'high') {
-  confColor = const Color(0xFF4ECDC4);
-  confLabel = 'High';
-} else if (level == 'medium') {
-  confColor = const Color(0xFFFFD93D);
-  confLabel = 'Medium';
-} else {
-  confColor = const Color(0xFFFF6B3D);
-  confLabel = 'Low';
-}
-
-return _GoldTrendCard(
-  karat: k,
-  headline: 'Tomorrow\'s Price Predection:',
-  predictedPrice:'${predicted.toStringAsFixed(2)} SAR/g',
-  currentPrice: '${current.toStringAsFixed(2)} SAR/g',
-  lastPrice: '${past.toStringAsFixed(2)} SAR/g',
-  yesterdayPrice: '${past.toStringAsFixed(2)} SAR/g',
-  lastPct: diffPct.toStringAsFixed(1),
-  badgePct: badge,
-  confidenceLabel: confLabel,
-  confidenceColor: confColor,
-);
-
-                                             
-
+                                                return _GoldTrendCard(
+                                                  karat: k,
+                                                  headline: 'Gold prices are going up this week!',
+                                                  nextWeekRange: nextWeekRange,
+                                                  todayPrice: '${current.toStringAsFixed(0)} SAR/g',
+                                                  lastWeekPrice: '${past.toStringAsFixed(0)} SAR/g',
+                                                  changeText: changeText,
+                                                  badgePct: badgePct,
+                                                  confidenceLabel: confLabel,
+                                                  confidenceColor: confColor,
+                                                );
                                               },
                                         ),
                                       ),
@@ -1599,17 +1671,18 @@ return _GoldTrendCard(
         ),
         onTapProfile: () {},
 
-// ✅ ADD THIS
-  onTapAdd: () {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (_) =>  LogTransactionOptionsSheet(),
-    );
-  },
-
-
+        // ✅ ADD THIS
+        onTapAdd: () {
+          showModalBottomSheet(
+            context: context,
+            backgroundColor: Colors.transparent,
+            isScrollControlled: true,
+            builder:
+                (
+                  _,
+                ) => LogTransactionOptionsSheet(),
+          );
+        },
       ),
     );
   }
@@ -2073,7 +2146,7 @@ class _CategoryCard
       '',
     );
 
-    // If it’s only digits and longer than 8 chars, treat as decimal Color.value
+    // If it's only digits and longer than 8 chars, treat as decimal Color.value
     final isDecimal =
         RegExp(
           r'^[0-9]+$',
@@ -2404,24 +2477,22 @@ class _GoldTrendCard
         StatelessWidget {
   final String karat;
   final String headline;
-  final String predictedPrice;
-  final String currentPrice;
-  final String lastPrice;
-  final String lastPct;
+  final String nextWeekRange; // big range
+  final String todayPrice;
+  final String lastWeekPrice;
+  final String changeText;
   final String badgePct;
-  final String yesterdayPrice;
   final String confidenceLabel;
   final Color confidenceColor;
 
   const _GoldTrendCard({
     required this.karat,
     required this.headline,
-    required this.predictedPrice,
-    required this.currentPrice,
-    required this.lastPrice,
-    required this.lastPct,
+    required this.nextWeekRange,
+    required this.todayPrice,
+    required this.lastWeekPrice,
+    required this.changeText,
     required this.badgePct,
-    required this.yesterdayPrice,
     required this.confidenceLabel,
     required this.confidenceColor,
   });
@@ -2430,16 +2501,26 @@ class _GoldTrendCard
   Widget build(
     BuildContext context,
   ) {
+    const double cardW = 327;
+    const double cardH = 390;
+    const double pad = 18;
+    const double coin = 44;
+
+    const double textStartX =
+        pad +
+        coin +
+        12; // 18 + 44 + 12 = 74
+
     return SizedBox(
-      width: 327,
-      height: 140,
+      width: cardW,
+      height: cardH,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(
-          12.02,
+          28,
         ),
         child: Stack(
           children: [
-            // ✅ Background gradient (Figma-like)
+            // ✅ Background gradient
             Container(
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
@@ -2452,37 +2533,37 @@ class _GoldTrendCard
                   ],
                   colors: [
                     Color(
-                      0xFF5B3B73,
+                      0xFFEA875E,
+                    ), // stronger orange (Figma)
+                    Color(
+                      0xFFAB49F9,
                     ), // purple
                     Color(
-                      0xFF45406A,
-                    ), // mid
-                    Color(
-                      0xFF8B7D6D,
-                    ), // warm gray
+                      0xFFE9489D,
+                    ), // pink
                   ],
                 ),
               ),
             ),
 
-            // ✅ Blended circles (blurred to match Figma)
+            // ✅ Soft blobs
             Positioned(
-              left: 160,
-              top: -4,
+              left: 175,
+              top: -55,
               child: ImageFiltered(
                 imageFilter: ImageFilter.blur(
                   sigmaX: 18,
                   sigmaY: 18,
                 ),
                 child: Container(
-                  width: 150,
-                  height: 110,
+                  width: 240,
+                  height: 175,
                   decoration: BoxDecoration(
                     color:
                         const Color(
-                          0xFF4A37E1,
+                          0xFFAB49F9,
                         ).withOpacity(
-                          0.65,
+                          0.70,
                         ),
                     shape: BoxShape.circle,
                   ),
@@ -2490,22 +2571,22 @@ class _GoldTrendCard
               ),
             ),
             Positioned(
-              left: -20,
-              top: 6,
+              right: -85,
+              bottom: -75,
               child: ImageFiltered(
                 imageFilter: ImageFilter.blur(
                   sigmaX: 18,
                   sigmaY: 18,
                 ),
                 child: Container(
-                  width: 210,
-                  height: 130,
+                  width: 240,
+                  height: 240,
                   decoration: BoxDecoration(
                     color:
                         const Color(
-                          0xFFBA55D6,
+                          0xFFE9489D,
                         ).withOpacity(
-                          0.65,
+                          0.70,
                         ),
                     shape: BoxShape.circle,
                   ),
@@ -2513,22 +2594,22 @@ class _GoldTrendCard
               ),
             ),
             Positioned(
-              right: -10,
-              top: 10,
+              left: 85,
+              bottom: -140,
               child: ImageFiltered(
                 imageFilter: ImageFilter.blur(
                   sigmaX: 18,
                   sigmaY: 18,
                 ),
                 child: Container(
-                  width: 140,
-                  height: 100,
+                  width: 260,
+                  height: 260,
                   decoration: BoxDecoration(
                     color:
                         const Color(
-                          0xFFFFE8BA,
+                          0xFFEA875E,
                         ).withOpacity(
-                          0.60,
+                          0.75,
                         ),
                     shape: BoxShape.circle,
                   ),
@@ -2536,208 +2617,326 @@ class _GoldTrendCard
               ),
             ),
 
-            // ✅ Dark bottom strip
-            Align(
-              alignment: Alignment.bottomCenter,
+            // ✅ Coin (left)
+            Positioned(
+              left: pad,
+              top: pad,
               child: Container(
-                height: 54,
-                decoration: const BoxDecoration(
-                  color: Color(
-                    0xFF211E41,
-                  ),
-                ),
-              ),
-            ),
-
-            // ✅ Karat pill (more readable)
-            Positioned(
-              right: 22,
-              top: 20,
-              child: Text(
-                karat,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 15,
-                  fontFamily: 'Poppins',
-                  fontWeight: FontWeight.w700,
-                  height: 1.0,
-                ),
-              ),
-            ),
-
-            // ✅ Percentage pill
-            Positioned(
-              right: 15,
-              top: 45,
-              child: Container(
-                width: 64,
-                height: 24,
+                width: coin,
+                height: coin,
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(
-                    0.55,
+                  shape: BoxShape.circle,
+                  gradient: const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Color(
+                        0xFFFFD93D,
+                      ),
+                      Color(
+                        0xFFFFB800,
+                      ),
+                    ],
                   ),
-                  borderRadius: BorderRadius.circular(
-                    18.42,
-                  ),
-                  border: Border.all(
-                    color: Colors.white.withOpacity(
-                      0.22,
+                  boxShadow: [
+                    BoxShadow(
+                      color:
+                          const Color(
+                            0xFFFFB800,
+                          ).withOpacity(
+                            0.45,
+                          ),
+                      blurRadius: 14,
+                      offset: const Offset(
+                        0,
+                        6,
+                      ),
                     ),
-                    width: 1,
-                  ),
+                  ],
                 ),
                 alignment: Alignment.center,
                 child: Text(
-                  badgePct,
+                  karat,
+                  textAlign: TextAlign.center,
                   style: const TextStyle(
-                    color: Color(
-                      0xFF2B2E4A,
-                    ),
-                    fontSize: 11.5, // ⬅ bigger
-                    fontFamily: 'Poppins',
-                    fontWeight: FontWeight.w600, // ⬅ bolder
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontFamily: 'Inter',
+                    fontWeight: FontWeight.w700,
                     height: 1.0,
                   ),
                 ),
               ),
             ),
 
-            // ✅ Headline + Current price (top-left)
+            // ✅ Headline
             Positioned(
-              left: 18,
-              top: 18,
+              left: textStartX,
+              top: 16,
               right: 100,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    headline,
-                    style: const TextStyle(
-                      color: Color(
-                        0xFFA6A6A6,
-                      ),
-                      fontSize: 12.02,
-                      fontFamily: 'Poppins',
-                      fontWeight: FontWeight.w500,
-                      height: 1.1,
-                    ),
-                  ),
-                  const SizedBox(
-                    height: 10,
-                  ),
-                  Text(
-                    predictedPrice,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 23,
-                      fontFamily: 'Poppins',
-                      fontWeight: FontWeight.w600,
-                      height: 1.1,
-                    ),
-                  ),
-                ],
+              child: Text(
+                headline,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontFamily: 'Poppins',
+                  fontWeight: FontWeight.w500,
+                  height: 1,
+                ),
               ),
             ),
 
-            // =========================
-            // 6) BOTTOM LEFT (Today's + Yesterday's, stacked exactly)
-            // LOCATION: bottom-left stacked prices
-            // =========================
+            // ✅ Badge
             Positioned(
-              left: 22,
-              bottom: 8,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    "Today’s Price is $currentPrice",
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontFamily: 'Poppins',
-                      fontWeight: FontWeight.w500,
-                      height: 1.1,
-                    ),
+              right: pad,
+              top: 18,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(
+                    0x4C36325A,
                   ),
-                  const SizedBox(
-                    height: 10,
+                  borderRadius: BorderRadius.circular(
+                    18.42,
                   ),
-                  Text(
-                    "Yesterday’s Price is $yesterdayPrice",
-                    style: const TextStyle(
-                      color: Color(
-                        0xFFA6A6A6,
-                      ),
-                      fontSize: 12,
-                      fontFamily: 'Poppins',
-                      fontWeight: FontWeight.w500,
-                      height: 1.1,
-                    ),
+                ),
+                child: Text(
+                  badgePct,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontFamily: 'Poppins',
+                    fontWeight: FontWeight.w400,
+                    height: 1.0,
                   ),
-                ],
+                ),
               ),
             ),
 
-            // =========================
-            // 7) BOTTOM RIGHT (Confidence + dot + level)
-            // LOCATION: bottom-right confidence block
-            // =========================
+            // ✅ Big range (تحت العنوان مباشرة + محاذاة صحيحة)
             Positioned(
-              right: 22,
-              bottom: 13,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  const Text(
-                    "Confidence",
-                    style: TextStyle(
-                      color: Color(
-                        0xFFA6A6A6,
-                      ),
-                      fontSize: 10,
-                      fontFamily: 'Poppins',
-                      fontWeight: FontWeight.w500,
-                      height: 1.0,
-                    ),
+              left: textStartX,
+              top: 45,
+              right: pad,
+              child: Text(
+                nextWeekRange,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 24,
+                  fontFamily: 'Poppins',
+                  fontWeight: FontWeight.w600,
+                  height: 1.0,
+                ),
+              ),
+            ),
+
+            // ✅ Bottom info box (no overflow)
+            Positioned(
+              left: pad,
+              right: pad,
+              bottom: 16,
+              child: Container(
+                height: 100,
+                padding: const EdgeInsets.fromLTRB(
+                  16,
+                  12,
+                  16,
+                  12,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(
+                    0x6636325A,
                   ),
-                  const SizedBox(
-                    height: 8,
+                  borderRadius: BorderRadius.circular(
+                    18,
                   ),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: 18,
-                        height: 15,
-                        decoration: BoxDecoration(
-                          color: confidenceColor,
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: confidenceColor.withOpacity(
-                                0.55,
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                "Today's Price",
+                                style: TextStyle(
+                                  color: Color(
+                                    0xFFCCCCCC,
+                                  ),
+                                  fontSize: 10,
+                                  fontFamily: 'Poppins',
+                                  fontWeight: FontWeight.w400,
+                                  height: 1.2,
+                                ),
                               ),
-                              blurRadius: 10,
+                              const SizedBox(
+                                height: 5,
+                              ),
+                              Text(
+                                todayPrice,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontFamily: 'Poppins',
+                                  fontWeight: FontWeight.w600,
+                                  height: 1.0,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            const Text(
+                              "Change",
+                              style: TextStyle(
+                                color: Color(
+                                  0xFFCCCCCC,
+                                ),
+                                fontSize: 10,
+                                fontFamily: 'Poppins',
+                                fontWeight: FontWeight.w400,
+                                height: 1.2,
+                              ),
+                            ),
+                            const SizedBox(
+                              height: 5,
+                            ),
+                            Text(
+                              changeText,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Color(
+                                  0xFF9BFFF2,
+                                ),
+                                fontSize: 12,
+                                fontFamily: 'Poppins',
+                                fontWeight: FontWeight.w600,
+                                height: 1.0,
+                              ),
                             ),
                           ],
                         ),
+                      ],
+                    ),
+                    const SizedBox(
+                      height: 9,
+                    ),
+                    Container(
+                      height: 0.8,
+                      color: Color(
+                        0x66FFFFFF,
                       ),
-                      const SizedBox(
-                        width: 9,
-                      ),
-                      Text(
-                        confidenceLabel,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 11,
-                          fontFamily: 'Poppins',
-                          fontWeight: FontWeight.w500,
-                          height: 1.0,
+                    ),
+                    const SizedBox(
+                      height: 9,
+                    ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                "Last Week's Price",
+                                style: TextStyle(
+                                  color: Color(
+                                    0xFFCCCCCC,
+                                  ),
+                                  fontSize: 10,
+                                  fontFamily: 'Poppins',
+                                  fontWeight: FontWeight.w400,
+                                  height: 1.0,
+                                ),
+                              ),
+                              const SizedBox(
+                                height: 5,
+                              ),
+                              Text(
+                                lastWeekPrice,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontFamily: 'Poppins',
+                                  fontWeight: FontWeight.w600,
+                                  height: 1.0,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                ],
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            const Text(
+                              "Confidence",
+                              style: TextStyle(
+                                color: Color(
+                                  0xFFCCCCCC,
+                                ),
+                                fontSize: 10,
+                                fontFamily: 'Poppins',
+                                fontWeight: FontWeight.w400,
+                                height: 1.0,
+                              ),
+                            ),
+                            const SizedBox(
+                              height: 5,
+                            ),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  width: 9,
+                                  height: 9,
+                                  decoration: BoxDecoration(
+                                    color: confidenceColor,
+                                    shape: BoxShape.circle,
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: confidenceColor,
+                                        blurRadius: 3.9,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(
+                                  width: 6,
+                                ),
+                                Text(
+                                  confidenceLabel,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 11,
+                                    fontFamily: 'Poppins',
+                                    fontWeight: FontWeight.w400,
+                                    height: 1.0,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
           ],

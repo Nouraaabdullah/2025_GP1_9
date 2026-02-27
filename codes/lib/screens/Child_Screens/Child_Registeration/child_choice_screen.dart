@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../theme/app_theme.dart';
-import '../../widgets/kid_widgets.dart';
+import '../../../theme/app_theme.dart';
+import '../../../widgets/kid_widgets.dart';
 import 'child_signup_screen.dart';
 import 'child_login_screen.dart';
 

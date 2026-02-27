@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../theme/app_theme.dart';
-import '../../widgets/kid_widgets.dart';
+import '../../../theme/app_theme.dart';
+import '../../../widgets/kid_widgets.dart';
 import 'onboarding_balance_screen.dart';
 
 class OnboardingCategoriesScreen extends StatefulWidget {

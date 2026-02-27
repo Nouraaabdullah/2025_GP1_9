@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../theme/app_theme.dart';
-import '../Child_Registeration/child_choice_screen.dart';
+import '../Child_Screens/Child_Registeration/child_choice_screen.dart';
 import 'signup_screen.dart';
 
 class StartPage extends StatefulWidget {

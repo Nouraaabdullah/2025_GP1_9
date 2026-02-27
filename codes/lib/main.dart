@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:surra_application/screens/Registeration/start_page.dart';
+import 'package:flutter/services.dart';
 
 // Background updaters
 import 'services/update_monthly_record_service.dart';
@@ -119,6 +120,16 @@ Future<
 main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+ // ✅ Status bar style
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.light,
+    ),
+  );
+
+
+
   await Supabase.initialize(
     url: 'https://xvnkuqqzlstzwgeecijn.supabase.co',
     anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh2bmt1cXF6bHN0endnZWVjaWpuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2ODI2NzYsImV4cCI6MjA3NjI1ODY3Nn0.o9qiOIa4WWNMxvF92uyojCPtDS4NGz5qyMBhwki8MDQ',
@@ -128,6 +139,8 @@ main() async {
     const SurraApp(),
   );
 }
+
+
 
 class SurraApp
     extends
@@ -310,7 +323,9 @@ class _SurraAppState
         null;
     final String initialRoute = isLoggedIn
         ? '/profile'
-        : '/welcome';
+        // : '/welcome';
+        : '/startpage';
+
 
     return MaterialApp(
       debugShowCheckedModeBanner: false,
@@ -329,10 +344,10 @@ class _SurraAppState
       ),
       initialRoute: initialRoute,
       routes: {
-        '/welcome':
-            (
-              context,
-            ) => const WelcomeScreen(),
+        // '/welcome':
+        //     (
+        //       context,
+        //     ) => const WelcomeScreen(),
         '/startpage':
             (
               context,

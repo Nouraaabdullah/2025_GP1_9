@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'login_screen.dart';
 
 class SignUpScreen
     extends
@@ -336,6 +337,7 @@ class _SignUpScreenState
                     const SizedBox(
                       height: 8,
                     ),
+
                     _inputField(
                       controller: emailController,
                       hint: "you@example.com",
@@ -448,6 +450,38 @@ class _SignUpScreenState
                     const SizedBox(
                       height: 24,
                     ),
+                    const SizedBox(height: 10),
+
+Center(
+  child: GestureDetector(
+    onTap: () {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => const LoginScreen(),
+        ),
+      );
+    },
+    child: RichText(
+      text: const TextSpan(
+        text: "Already have an account? ",
+        style: TextStyle(
+          color: Colors.white38,
+          fontSize: 14,
+        ),
+        children: [
+          TextSpan(
+            text: "Log in",
+            style: TextStyle(
+              color: Color(0xFF7C5CFF),
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    ),
+  ),
+),
                   ],
                 ),
               ),

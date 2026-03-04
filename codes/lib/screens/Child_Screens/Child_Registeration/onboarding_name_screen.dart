@@ -4,7 +4,16 @@ import '../../../widgets/kid_widgets.dart';
 import 'onboarding_categories_screen.dart';
 
 class OnboardingNameScreen extends StatefulWidget {
-  const OnboardingNameScreen({super.key});
+  final String guardianEmail;
+  final String username;
+  final String password;
+
+  const OnboardingNameScreen({
+    super.key,
+    required this.guardianEmail,
+    required this.username,
+    required this.password,
+  });
 
   @override
   State<OnboardingNameScreen> createState() => _OnboardingNameScreenState();
@@ -53,7 +62,12 @@ class _OnboardingNameScreenState extends State<OnboardingNameScreen>
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => OnboardingCategoriesScreen(childName: name),
+       builder: (_) => OnboardingCategoriesScreen(
+  childName: name,
+  guardianEmail: widget.guardianEmail,
+  username: widget.username,
+  password: widget.password,
+),
       ),
     );
   }

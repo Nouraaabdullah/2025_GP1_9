@@ -2,18 +2,29 @@ import 'package:flutter/material.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/kid_widgets.dart';
 import 'onboarding_celebration_screen.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:uuid/uuid.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class OnboardingBalanceScreen extends StatefulWidget {
   final String childName;
-  final double foodLimit, gamesLimit, schoolLimit;
+  final String guardianEmail;
+  final String username;
+  final String password;
+  final double foodLimit;
+  final double gamesLimit;
+  final double schoolLimit;
 
-  const OnboardingBalanceScreen({
-    super.key,
-    required this.childName,
-    required this.foodLimit,
-    required this.gamesLimit,
-    required this.schoolLimit,
-  });
+const OnboardingBalanceScreen({
+  super.key,
+  required this.childName,
+  required this.guardianEmail,
+  required this.username,
+  required this.password,
+  required this.foodLimit,
+  required this.gamesLimit,
+  required this.schoolLimit,
+});
 
   @override
   State<OnboardingBalanceScreen> createState() => _OnboardingBalanceScreenState();
@@ -48,20 +59,70 @@ class _OnboardingBalanceScreenState extends State<OnboardingBalanceScreen>
     });
   }
 
-  void _finish() {
-    final val = _balCtrl.text.trim();
-    if (val.isEmpty || double.tryParse(val) == null) {
-      setState(() => _balErr = 'Please enter your balance!');
-      return;
+ void _finish() async {
+  final val = _balCtrl.text.trim();
+
+  if (val.isEmpty || double.tryParse(val) == null) {
+    setState(() => _balErr = 'Please enter your balance!');
+    return;
+  }
+
+  final balance = double.parse(val);
+
+  try {
+    final supabase = Supabase.instance.client;
+
+    // 1️⃣ Find the child created by the parent
+    final child = await supabase
+        .from('User_Profile')
+        .select()
+        .eq('username', widget.username)
+        .single();
+
+    final childId = child['user_id'];
+
+    // 2️⃣ Verify guardian email matches
+    final relation = await supabase
+        .from('Child_Guardian')
+        .select()
+        .eq('child_id', childId)
+        .eq('guardian_email', widget.guardianEmail)
+        .maybeSingle();
+
+    if (relation == null) {
+      throw Exception("Guardian email does not match");
     }
+
+    // 3️⃣ Set the child's password
+    await supabase
+        .from('User_Profile')
+        .update({
+          'password': widget.password,
+        })
+        .eq('user_id', childId);
+
+    // 4️⃣ Save financial limits
+    await supabase.from('Monthly_Financial_Record').insert({
+      'child_id': childId,
+      'food_limit': widget.foodLimit,
+      'games_limit': widget.gamesLimit,
+      'school_limit': widget.schoolLimit,
+      'current_balance': balance,
+    });
+
+    // 5️⃣ Go to celebration screen
     Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(
-        builder: (_) => OnboardingCelebrationScreen(childName: widget.childName),
+        builder: (_) =>
+            OnboardingCelebrationScreen(childName: widget.childName),
       ),
       (route) => false,
     );
+  } catch (e) {
+    print(e);
   }
+}
 
   @override
   Widget build(BuildContext context) {

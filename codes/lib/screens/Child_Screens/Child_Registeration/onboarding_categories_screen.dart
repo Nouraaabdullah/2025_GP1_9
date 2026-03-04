@@ -3,9 +3,20 @@ import '../../../theme/app_theme.dart';
 import '../../../widgets/kid_widgets.dart';
 import 'onboarding_balance_screen.dart';
 
+
 class OnboardingCategoriesScreen extends StatefulWidget {
   final String childName;
-  const OnboardingCategoriesScreen({super.key, required this.childName});
+  final String guardianEmail;
+  final String username;
+  final String password;
+
+  const OnboardingCategoriesScreen({
+    super.key,
+    required this.childName,
+    required this.guardianEmail,
+    required this.username,
+    required this.password,
+  });
 
   @override
   State<OnboardingCategoriesScreen> createState() =>
@@ -32,11 +43,14 @@ class _OnboardingCategoriesScreenState extends State<OnboardingCategoriesScreen>
       context,
       MaterialPageRoute(
         builder: (_) => OnboardingBalanceScreen(
-          childName: widget.childName,
-          foodLimit: food,
-          gamesLimit: games,
-          schoolLimit: school,
-        ),
+  childName: widget.childName,
+  guardianEmail: widget.guardianEmail,
+  username: widget.username,
+  password: widget.password,
+  foodLimit: food,
+  gamesLimit: games,
+  schoolLimit: school,
+),
       ),
     );
   }

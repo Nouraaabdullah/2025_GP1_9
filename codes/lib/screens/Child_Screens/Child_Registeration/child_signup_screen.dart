@@ -82,10 +82,16 @@ class _ChildSignupScreenState extends State<ChildSignupScreen> {
         setState(() => _alertMsg =
             "That username isn't linked to this guardian. Ask them to check their account!");
       } else {
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const OnboardingNameScreen()),
-        );
+       Navigator.push(
+  context,
+  MaterialPageRoute(
+    builder: (_) => OnboardingNameScreen(
+      guardianEmail: email,
+      username: user,
+      password: pw,
+    ),
+  ),
+);
       }
     });
   }

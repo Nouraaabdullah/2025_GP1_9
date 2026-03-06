@@ -10,6 +10,7 @@ import 'dart:ui';
 import 'package:surra_application/services/gold_service.dart';
 import 'package:surra_application/screens/Log/log_transaction_options_sheet.dart';
 import 'dart:convert';
+import 'package:surra_application/screens/profile/add_child_page.dart';
 
 class ProfileMainPage
     extends
@@ -894,6 +895,62 @@ class _ProfileMainPageState
           .order(
             'name',
           );
+      final children =
+          <
+            _ChildSummary
+          >[];
+
+      // get guardian user_id from User_Profile
+      final guardianProfile = await _sb
+          .from(
+            'User_Profile',
+          )
+          .select(
+            'user_id',
+          )
+          .eq(
+            'profile_id',
+            profileId,
+          )
+          .maybeSingle();
+
+      final guardianUserId = guardianProfile?['user_id']?.toString();
+
+      if (guardianUserId !=
+          null) {
+        final childRows = await _sb
+            .from(
+              'Child_Guardian',
+            )
+            .select(
+              'child_id, user_name',
+            )
+            .eq(
+              'guardian_id',
+              guardianUserId,
+            );
+
+        if (childRows
+            is List) {
+          for (final row in childRows) {
+            final childId = row['child_id']?.toString();
+            final username = row['user_name']?.toString();
+
+            if (childId !=
+                    null &&
+                username !=
+                    null &&
+                username.trim().isNotEmpty) {
+              children.add(
+                _ChildSummary(
+                  childId: childId,
+                  username: username,
+                ),
+              );
+            }
+          }
+        }
+      }
 
       // ----- NEW: build totalByCat from Category_Summary when a monthly record exists -----
       final Map<
@@ -1056,6 +1113,7 @@ class _ProfileMainPageState
         categories: items,
         incomeItems: incomeItems,
         expenseItems: expenseItems,
+        children: children,
       );
     } catch (
       e
@@ -1072,6 +1130,7 @@ class _ProfileMainPageState
         categories: const [],
         incomeItems: const [],
         expenseItems: const [],
+        children: const [],
       );
     }
   }
@@ -1282,7 +1341,13 @@ class _ProfileMainPageState
                                         data,
                                       ),
                                       const SizedBox(
-                                        height: 32,
+                                        height: 60,
+                                      ),
+                                      _buildChildrenSummarySection(
+                                        data,
+                                      ),
+                                      const SizedBox(
+                                        height: 2,
                                       ),
                                     ],
                                   ),
@@ -1714,17 +1779,61 @@ class _ProfileMainPageState
                                                     : '${lowPrice.toStringAsFixed(0)}–${highPrice.toStringAsFixed(0)} SAR';
 
                                                 // --- Badge % (today vs last week) ---
-                                                final double diffPct =
-                                                    pastPrice ==
-                                                        0
-                                                    ? 0
-                                                    : ((currentPrice -
-                                                                  pastPrice) /
-                                                              pastPrice) *
-                                                          100.0;
+                                                String _fmtSignedPct(
+                                                  double v,
+                                                ) {
+                                                  final s = v.toStringAsFixed(
+                                                    0,
+                                                  );
+                                                  return v >=
+                                                          0
+                                                      ? '+$s%'
+                                                      : '$s%';
+                                                }
 
-                                                final String badgePct = '${diffPct >= 0 ? '+' : ''}${diffPct.toStringAsFixed(0)}%';
+                                                // Predicted % range vs today's price
+                                                String badgePct;
+                                                if (currentPrice ==
+                                                        0 ||
+                                                    (lowPrice ==
+                                                            0 &&
+                                                        highPrice ==
+                                                            0)) {
+                                                  badgePct = '—';
+                                                } else {
+                                                  final pctLo =
+                                                      ((lowPrice -
+                                                              currentPrice) /
+                                                          currentPrice) *
+                                                      100.0;
+                                                  final pctHi =
+                                                      ((highPrice -
+                                                              currentPrice) /
+                                                          currentPrice) *
+                                                      100.0;
 
+                                                  // Ensure ordering (just in case)
+                                                  final lo =
+                                                      pctLo <=
+                                                          pctHi
+                                                      ? pctLo
+                                                      : pctHi;
+                                                  final hi =
+                                                      pctLo <=
+                                                          pctHi
+                                                      ? pctHi
+                                                      : pctLo;
+
+                                                  // If the range collapses to ~same integer, show single value
+                                                  if (lo.round() ==
+                                                      hi.round()) {
+                                                    badgePct = _fmtSignedPct(
+                                                      lo,
+                                                    );
+                                                  } else {
+                                                    badgePct = '${_fmtSignedPct(lo)}–${_fmtSignedPct(hi)}';
+                                                  }
+                                                }
                                                 // --- Change (SAR/g) ---
                                                 final double changeValue =
                                                     currentPrice -
@@ -1809,6 +1918,88 @@ class _ProfileMainPageState
           );
         },
       ),
+    );
+  }
+
+  Widget _buildChildrenSummarySection(
+    _DashboardData data,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          "Children's Summary",
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 16,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        const SizedBox(
+          height: 14,
+        ),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(
+            horizontal: 14,
+            vertical: 16,
+          ),
+          decoration: BoxDecoration(
+            color: AppColors.card,
+            borderRadius: BorderRadius.circular(
+              20,
+            ),
+          ),
+          child: SizedBox(
+            height: 112,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount:
+                  data.children.length +
+                  1,
+              separatorBuilder:
+                  (
+                    _,
+                    __,
+                  ) => const SizedBox(
+                    width: 18,
+                  ),
+              itemBuilder:
+                  (
+                    context,
+                    index,
+                  ) {
+                    if (index ==
+                        data.children.length) {
+                      return _AddChildButton(
+                        onTap: () async {
+                          final result = await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder:
+                                  (
+                                    _,
+                                  ) => const AddChildPage(),
+                            ),
+                          );
+
+                          if (result ==
+                              true) {
+                            _refreshData();
+                          }
+                        },
+                      );
+                    }
+
+                    final child = data.children[index];
+                    return _ChildAvatarCard(
+                      username: child.username,
+                    );
+                  },
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -2217,6 +2408,10 @@ class _DashboardData {
     _TransactionItem
   >
   expenseItems;
+  final List<
+    _ChildSummary
+  >
+  children;
 
   _DashboardData({
     required this.fullName,
@@ -2227,6 +2422,7 @@ class _DashboardData {
     required this.categories,
     required this.incomeItems,
     required this.expenseItems,
+    required this.children,
   });
 }
 
@@ -2243,6 +2439,16 @@ class _CategoryDash {
     required this.percent,
     required this.icon,
     required this.color,
+  });
+}
+
+class _ChildSummary {
+  final String childId;
+  final String username;
+
+  const _ChildSummary({
+    required this.childId,
+    required this.username,
   });
 }
 
@@ -2816,34 +3022,102 @@ class _GoldTrendCard
             // ✅ Badge
             Positioned(
               right: pad,
-              top: 18,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: const Color(
-                    0x4C36325A,
-                  ),
-                  borderRadius: BorderRadius.circular(
-                    18.42,
-                  ),
-                ),
-                child: Text(
-                  badgePct,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 10,
-                    fontFamily: 'Poppins',
-                    fontWeight: FontWeight.w400,
-                    height: 1.0,
-                  ),
+              top: 16,
+              child: SizedBox(
+                width: 86, // controls how "centered" it feels; tweak 80–100
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    // % badge
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(
+                          0x4C36325A,
+                        ),
+                        borderRadius: BorderRadius.circular(
+                          18.42,
+                        ),
+                      ),
+                      child: Text(
+                        badgePct,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontFamily: 'Poppins',
+                          fontWeight: FontWeight.w400,
+                          height: 1.0,
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(
+                      height: 8,
+                    ),
+
+                    // ✅ Confidence label (NEW)
+                    const Text(
+                      "Confidence",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Color(
+                          0xFFCCCCCC,
+                        ),
+                        fontSize: 9,
+                        fontFamily: 'Poppins',
+                        fontWeight: FontWeight.w400,
+                        height: 1.0,
+                      ),
+                    ),
+
+                    const SizedBox(
+                      height: 6,
+                    ),
+
+                    // dot + level centered
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 8,
+                          height: 8,
+                          decoration: BoxDecoration(
+                            color: confidenceColor,
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: confidenceColor,
+                                blurRadius: 3,
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(
+                          width: 6,
+                        ),
+                        Text(
+                          confidenceLabel,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontFamily: 'Poppins',
+                            fontWeight: FontWeight.w400,
+                            height: 1.0,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
             ),
 
-            // ✅ Big range (تحت العنوان مباشرة + محاذاة صحيحة)
+            // ✅ Big range
             Positioned(
               left: textStartX,
               top: 45,
@@ -2854,7 +3128,7 @@ class _GoldTrendCard
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                   color: Colors.white,
-                  fontSize: 24,
+                  fontSize: 20,
                   fontFamily: 'Poppins',
                   fontWeight: FontWeight.w600,
                   height: 1.0,
@@ -3006,58 +3280,6 @@ class _GoldTrendCard
                             ],
                           ),
                         ),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            const Text(
-                              "Confidence",
-                              style: TextStyle(
-                                color: Color(
-                                  0xFFCCCCCC,
-                                ),
-                                fontSize: 10,
-                                fontFamily: 'Poppins',
-                                fontWeight: FontWeight.w400,
-                                height: 1.0,
-                              ),
-                            ),
-                            const SizedBox(
-                              height: 5,
-                            ),
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Container(
-                                  width: 9,
-                                  height: 9,
-                                  decoration: BoxDecoration(
-                                    color: confidenceColor,
-                                    shape: BoxShape.circle,
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: confidenceColor,
-                                        blurRadius: 3.9,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(
-                                  width: 6,
-                                ),
-                                Text(
-                                  confidenceLabel,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 11,
-                                    fontFamily: 'Poppins',
-                                    fontWeight: FontWeight.w400,
-                                    height: 1.0,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
                       ],
                     ),
                   ],
@@ -3066,6 +3288,139 @@ class _GoldTrendCard
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _ChildAvatarCard
+    extends
+        StatelessWidget {
+  final String username;
+
+  const _ChildAvatarCard({
+    required this.username,
+  });
+
+  @override
+  Widget build(
+    BuildContext context,
+  ) {
+    return SizedBox(
+      width: 82,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            width: 64,
+            height: 64,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: const Color(
+                0xFFFFD6E7,
+              ),
+              border: Border.all(
+                color: const Color(
+                  0xFFF4B6D2,
+                ),
+                width: 3,
+              ),
+            ),
+            alignment: Alignment.center,
+            child: const Text(
+              '🧒',
+              style: TextStyle(
+                fontSize: 28,
+              ),
+            ),
+          ),
+          const SizedBox(
+            height: 10,
+          ),
+          Text(
+            username,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AddChildButton
+    extends
+        StatelessWidget {
+  final VoidCallback onTap;
+
+  const _AddChildButton({
+    required this.onTap,
+  });
+
+  @override
+  Widget build(
+    BuildContext context,
+  ) {
+    return SizedBox(
+      width: 82,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          GestureDetector(
+            onTap: onTap,
+            child: Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: const LinearGradient(
+                  colors: [
+                    Color(
+                      0xFF8B6BFF,
+                    ),
+                    Color(
+                      0xFF6E4CF4,
+                    ),
+                  ],
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color:
+                        const Color(
+                          0xFF704EF4,
+                        ).withOpacity(
+                          0.45,
+                        ),
+                    blurRadius: 16,
+                    spreadRadius: 2,
+                  ),
+                ],
+              ),
+              child: const Icon(
+                Icons.add,
+                color: Colors.white,
+                size: 34,
+              ),
+            ),
+          ),
+          const SizedBox(
+            height: 10,
+          ),
+          const Text(
+            'Add',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
       ),
     );
   }

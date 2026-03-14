@@ -3,6 +3,7 @@ import '../../../theme/app_theme.dart';
 import '../../../widgets/kid_widgets.dart';
 import 'child_login_screen.dart';
 import 'onboarding_name_screen.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class ChildSignupScreen extends StatefulWidget {
   const ChildSignupScreen({super.key});
@@ -30,71 +31,107 @@ class _ChildSignupScreenState extends State<ChildSignupScreen> {
   bool _isValidEmail(String v) =>
       RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(v);
 
-  void _submit() {
+ void _submit() async {
+  setState(() {
+    _emailErr = null;
+    _userErr = null;
+    _pwErr = null;
+    _cpwErr = null;
+    _alertMsg = null;
+  });
+
+  final email = _emailCtrl.text.trim();
+  final user = _userCtrl.text.trim();
+  final pw = _pwCtrl.text;
+  final cpw = _cpwCtrl.text;
+
+  bool valid = true;
+
+  if (email.isEmpty) {
+    _emailErr = 'Guardian email required';
+    valid = false;
+  }
+
+  if (user.isEmpty) {
+    _userErr = 'Username required';
+    valid = false;
+  }
+
+  if (pw.length < 6) {
+    _pwErr = 'Minimum 6 characters';
+    valid = false;
+  }
+
+  if (pw != cpw) {
+    _cpwErr = 'Passwords do not match';
+    valid = false;
+  }
+
+  if (!valid) {
+    setState(() {});
+    return;
+  }
+
+  setState(() => _loading = true);
+
+  try {
+    final supabase = Supabase.instance.client;
+
+    /// 1️⃣ Find guardian
+    final guardian = await supabase
+        .from('User_Profile')
+        .select('user_id')
+        .eq('email', email)
+        .eq('user_type', 'guardian')
+        .maybeSingle();
+
+    if (guardian == null) {
+      setState(() {
+        _loading = false;
+        _alertMsg = "Guardian email not found.";
+      });
+      return;
+    }
+
+    final guardianId = guardian['user_id'];
+
+    /// 2️⃣ Verify child username
+    final relation = await supabase
+        .from('Child_Guardian')
+        .select()
+        .eq('guardian_id', guardianId)
+        .eq('user_name', user)
+        .maybeSingle();
+
+    if (relation == null) {
+      setState(() {
+        _loading = false;
+        _alertMsg =
+            "This username wasn't created by your guardian.";
+      });
+      return;
+    }
+
+    setState(() => _loading = false);
+
+    /// 3️⃣ Continue onboarding
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => OnboardingNameScreen(
+          guardianEmail: email,
+          username: user,
+          password: pw,
+        ),
+      ),
+    );
+  } catch (e) {
     setState(() {
-      _emailErr = null; _userErr = null; _pwErr = null; _cpwErr = null; _alertMsg = null;
-    });
-
-    final email = _emailCtrl.text.trim();
-    final user = _userCtrl.text.trim();
-    final pw = _pwCtrl.text;
-    final cpw = _cpwCtrl.text;
-    bool valid = true;
-
-    if (email.isEmpty) {
-      setState(() => _emailErr = 'Guardian email is required');
-      valid = false;
-    } else if (!_isValidEmail(email)) {
-      setState(() => _emailErr = 'Enter a valid email address');
-      valid = false;
-    }
-    if (user.isEmpty) {
-      setState(() => _userErr = 'Username is required');
-      valid = false;
-    }
-    if (pw.isEmpty) {
-      setState(() => _pwErr = 'Password is required');
-      valid = false;
-    } else if (pw.length < 6) {
-      setState(() => _pwErr = 'At least 6 characters!');
-      valid = false;
-    }
-    if (cpw.isEmpty) {
-      setState(() => _cpwErr = 'Please confirm your password');
-      valid = false;
-    } else if (pw != cpw) {
-      setState(() => _cpwErr = "Passwords don't match!");
-      valid = false;
-    }
-    if (!valid) return;
-
-    setState(() => _loading = true);
-
-    // Simulate API call
-    Future.delayed(const Duration(milliseconds: 1400), () {
-      if (!mounted) return;
-      setState(() => _loading = false);
-
-      if (email == 'notfound@example.com') {
-        setState(() => _alertMsg =
-            "We couldn't find a guardian with that email. Double-check with your grown-up!");
-      } else if (email == 'wrong@example.com') {
-        setState(() => _alertMsg =
-            "That username isn't linked to this guardian. Ask them to check their account!");
-      } else {
-       Navigator.push(
-  context,
-  MaterialPageRoute(
-    builder: (_) => OnboardingNameScreen(
-      guardianEmail: email,
-      username: user,
-      password: pw,
-    ),
-  ),
-);
-      }
+      _loading = false;
+      _alertMsg = "Error: $e";
     });
   }
+}
 
   @override
   Widget build(BuildContext context) {

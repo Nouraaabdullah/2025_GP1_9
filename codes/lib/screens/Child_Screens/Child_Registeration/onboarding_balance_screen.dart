@@ -72,45 +72,51 @@ class _OnboardingBalanceScreenState extends State<OnboardingBalanceScreen>
   try {
     final supabase = Supabase.instance.client;
 
-    // 1️⃣ Find the child created by the parent
-    final child = await supabase
+    /// 1️⃣ Find guardian
+    final guardian = await supabase
         .from('User_Profile')
-        .select()
-        .eq('username', widget.username)
+        .select('user_id')
+        .eq('email', widget.guardianEmail)
+        .eq('user_type', 'guardian')
         .single();
 
-    final childId = child['user_id'];
+    final guardianId = guardian['user_id'];
 
-    // 2️⃣ Verify guardian email matches
+    /// 2️⃣ Find child relation
     final relation = await supabase
         .from('Child_Guardian')
         .select()
-        .eq('child_id', childId)
-        .eq('guardian_email', widget.guardianEmail)
-        .maybeSingle();
+        .eq('guardian_id', guardianId)
+        .eq('user_name', widget.username)
+        .single();
 
-    if (relation == null) {
-      throw Exception("Guardian email does not match");
-    }
+    final childProfileId = relation['child_id'];
 
-    // 3️⃣ Set the child's password
+    /// 3️⃣ Update child profile
     await supabase
         .from('User_Profile')
         .update({
-          'password': widget.password,
+          'hashed_password': widget.password,
+          'full_name': widget.childName,
+          'current_balance': balance
         })
-        .eq('user_id', childId);
+        .eq('profile_id', childProfileId);
 
-    // 4️⃣ Save financial limits
-    await supabase.from('Monthly_Financial_Record').insert({
-      'child_id': childId,
-      'food_limit': widget.foodLimit,
-      'games_limit': widget.gamesLimit,
-      'school_limit': widget.schoolLimit,
-      'current_balance': balance,
-    });
+    /// 4️⃣ Save monthly limits
+    final now = DateTime.now();
 
-    // 5️⃣ Go to celebration screen
+await supabase.from('Monthly_Financial_Record').insert({
+  'record_id': const Uuid().v4(),
+  'profile_id': childProfileId,
+  'period_start': DateTime(now.year, now.month, 1).toIso8601String(),
+  'period_end': DateTime(now.year, now.month + 1, 0).toIso8601String(),
+  'total_expense': 0,
+  'total_income': balance,
+  'monthly_saving': 0,
+  'total_earning': balance
+});
+
+    /// 5️⃣ Go to celebration
     Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(
@@ -120,7 +126,7 @@ class _OnboardingBalanceScreenState extends State<OnboardingBalanceScreen>
       (route) => false,
     );
   } catch (e) {
-    print(e);
+    print("Signup error: $e");
   }
 }
 

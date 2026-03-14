@@ -306,13 +306,23 @@ class _AddChildPageState
       final guardianEmail = guardianProfile['email'].toString();
 
       // If the user has no type yet, make them a guardian
-await _sb
-    .from('User_Profile')
-    .update({
-      'user_type': 'guardian'
-    })
-    .eq('profile_id', guardianProfileId)
-    .isFilter('user_type', null);
+      await _sb
+          .from(
+            'User_Profile',
+          )
+          .update(
+            {
+              'user_type': 'guardian',
+            },
+          )
+          .eq(
+            'profile_id',
+            guardianProfileId,
+          )
+          .isFilter(
+            'user_type',
+            null,
+          );
 
       final existing = await _sb
           .from(
@@ -340,7 +350,6 @@ await _sb
       }
 
       final childProfileId = const Uuid().v4();
-      final childUserId = const Uuid().v4();
 
       await _sb
           .from(
@@ -349,8 +358,8 @@ await _sb
           .insert(
             {
               'profile_id': childProfileId,
-              'user_id': childUserId,
-              'email': guardianEmail,
+              'user_id': null,
+              'email': null,
               'current_balance': 0,
               'user_type': 'child',
             },

@@ -305,6 +305,15 @@ class _AddChildPageState
       final guardianUserId = guardianProfile['user_id'].toString();
       final guardianEmail = guardianProfile['email'].toString();
 
+      // If the user has no type yet, make them a guardian
+await _sb
+    .from('User_Profile')
+    .update({
+      'user_type': 'guardian'
+    })
+    .eq('profile_id', guardianProfileId)
+    .isFilter('user_type', null);
+
       final existing = await _sb
           .from(
             'Child_Guardian',

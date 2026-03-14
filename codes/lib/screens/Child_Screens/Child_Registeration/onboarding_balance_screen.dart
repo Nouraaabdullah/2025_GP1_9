@@ -101,7 +101,40 @@ class _OnboardingBalanceScreenState extends State<OnboardingBalanceScreen>
           'current_balance': balance
         })
         .eq('profile_id', childProfileId);
+final uuid = const Uuid();
 
+await supabase.from('Category').insert([
+  {
+    'category_id': uuid.v4(),
+    'name': 'Food',
+    'type': 'Fixed',
+    'monthly_limit': widget.foodLimit,
+    'icon': '🍔',
+    'icon_color': 'orange',
+    'is_archived': false,
+    'profile_id': childProfileId,
+  },
+  {
+    'category_id': uuid.v4(),
+    'name': 'Games',
+    'type': 'Fixed',
+    'monthly_limit': widget.gamesLimit,
+    'icon': '🎮',
+    'icon_color': 'purple',
+    'is_archived': false,
+    'profile_id': childProfileId,
+  },
+  {
+    'category_id': uuid.v4(),
+    'name': 'School',
+    'type': 'Fixed',
+    'monthly_limit': widget.schoolLimit,
+    'icon': '📚',
+    'icon_color': 'blue',
+    'is_archived': false,
+    'profile_id': childProfileId,
+  }
+]);
     /// 4️⃣ Save monthly limits
     final now = DateTime.now();
 

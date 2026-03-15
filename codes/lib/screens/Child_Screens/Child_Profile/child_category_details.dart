@@ -98,41 +98,88 @@ class _ChildCategoryDetailPageState
     Color
   >
   _colorOptions = [
-    const Color(
-      0xFF8B5CF6,
+    // Purple
+    const Color.fromARGB(
+      255,
+      246,
+      92,
+      92,
     ),
+
+    // Deep Violet
     const Color(
       0xFF6D28D9,
     ),
+
+    // Pink
     const Color(
       0xFFF472B6,
     ),
-    const Color(
-      0xFF34D399,
+
+    // Mint Green
+    const Color.fromARGB(
+      255,
+      179,
+      211,
+      52,
     ),
+
+    // Sky Blue
     const Color(
       0xFF60A5FA,
     ),
+
+    // Golden Yellow
     const Color(
       0xFFFBBF24,
     ),
+
+    // Orange
     const Color(
       0xFFFB923C,
     ),
+
+    // Coral Red
     const Color(
       0xFFFF6B6B,
     ),
+
+    // Lavender
     const Color(
       0xFFA78BFA,
     ),
+
+    // Teal
     const Color(
       0xFF2DD4BF,
     ),
+
+    // Bright Magenta
     const Color(
       0xFFE879F9,
     ),
+
+    // Lime Green
     const Color(
       0xFF4ADE80,
+    ),
+
+    // NEW — Aqua Blue
+    const Color(
+      0xFF22D3EE,
+    ),
+
+    // NEW — Hot Pink
+    const Color(
+      0xFFEC4899,
+    ),
+
+    // NEW — Indigo Blue
+    const Color.fromARGB(
+      255,
+      241,
+      161,
+      99,
     ),
   ];
 
@@ -187,14 +234,21 @@ class _ChildCategoryDetailPageState
   @override
   void initState() {
     super.initState();
+
     _nameCtrl = TextEditingController(
       text: widget.category.name,
     );
+
     _limitCtrl = TextEditingController(
-      text: widget.category.limit.toStringAsFixed(
-        0,
-      ),
+      text:
+          widget.category.limit ==
+              0
+          ? ''
+          : widget.category.limit.toStringAsFixed(
+              0,
+            ),
     );
+
     _selectedEmoji = widget.category.emoji;
     _selectedColor = widget.category.color;
 
@@ -258,45 +312,90 @@ class _ChildCategoryDetailPageState
     super.dispose();
   }
 
-  double get _pct {
-    final lim =
-        double.tryParse(
-          _limitCtrl.text,
+  double get _currentLimit {
+    final text = _limitCtrl.text.trim();
+    if (text.isEmpty) return 0.0;
+    return double.tryParse(
+          text,
         ) ??
-        widget.category.limit;
-    return lim >
-            0
-        ? (widget.category.spent /
-                  lim)
-              .clamp(
-                0.0,
-                1.0,
-              )
-        : 0.0;
+        0.0;
   }
 
+  double get _rawPct {
+    final lim = _currentLimit;
+    if (lim <=
+        0)
+      return 0.0;
+    return widget.category.spent /
+        lim;
+  }
+
+  double get _progressPct {
+    final lim = _currentLimit;
+    if (lim <=
+        0)
+      return 0.0;
+    return (widget.category.spent /
+            lim)
+        .clamp(
+          0.0,
+          1.0,
+        );
+  }
+
+  bool get _hasLimit =>
+      _currentLimit >
+      0;
+  bool get _isOver =>
+      _hasLimit &&
+      _rawPct >
+          1.0;
   bool get _isAlmost =>
-      _pct >
-      0.85;
+      _hasLimit &&
+      _rawPct >=
+          0.9;
   bool get _isOverHalf =>
-      _pct >
-      0.5;
+      _hasLimit &&
+      _rawPct >=
+          0.5;
 
-  Color get _statusColor => _isAlmost
-      ? const Color(
-          0xFFFC8181,
-        )
-      : _isOverHalf
-      ? const Color(
-          0xFFFBBF24,
-        )
-      : _selectedColor;
+  Color get _statusColor {
+    if (!_hasLimit) return _selectedColor;
+    if (_isOver)
+      return const Color(
+        0xFFE53E3E,
+      );
+    if (_isAlmost)
+      return const Color(
+        0xFFFC8181,
+      );
+    if (_isOverHalf)
+      return const Color(
+        0xFFFBBF24,
+      );
+    return _selectedColor;
+  }
 
-  String get _statusLabel => _isAlmost
-      ? 'Almost full! 😬'
-      : _isOverHalf
-      ? 'Halfway there 🙂'
-      : 'Looking good! 🎉';
+  String get _statusLabel {
+    if (!_hasLimit) return 'No limit set yet 🌟';
+
+    if (_rawPct >=
+        1.0)
+      return 'Limit reached 🚨';
+    if (_rawPct >=
+        0.9)
+      return 'Almost full! 😬';
+    if (_rawPct >=
+        0.75)
+      return 'Getting close 🙂';
+    if (_rawPct >=
+        0.5)
+      return 'Halfway there 😊';
+    if (_rawPct >=
+        0.25)
+      return 'Doing great! ✨';
+    return 'Excellent saving! 🎉';
+  }
 
   void _toggleEdit() {
     if (_saving) return;
@@ -305,9 +404,13 @@ class _ChildCategoryDetailPageState
       () {
         if (_isEditing) {
           _nameCtrl.text = widget.category.name;
-          _limitCtrl.text = widget.category.limit.toStringAsFixed(
-            0,
-          );
+          _limitCtrl.text =
+              widget.category.limit ==
+                  0
+              ? ''
+              : widget.category.limit.toStringAsFixed(
+                  0,
+                );
           _selectedEmoji = widget.category.emoji;
           _selectedColor = widget.category.color;
         }
@@ -321,23 +424,17 @@ class _ChildCategoryDetailPageState
   >
   _saveChanges() async {
     final newName = _nameCtrl.text.trim();
-    final newLimit =
-        double.tryParse(
-          _limitCtrl.text.trim(),
-        ) ??
-        widget.category.limit;
+    final text = _limitCtrl.text.trim();
+    final newLimit = text.isEmpty
+        ? 0.0
+        : (double.tryParse(
+                text,
+              ) ??
+              0.0);
 
     if (newName.isEmpty) {
       _showSnack(
         'Please give your category a name! 😊',
-      );
-      return;
-    }
-
-    if (newLimit <=
-        0) {
-      _showSnack(
-        'Limit must be more than 0 SAR 💰',
       );
       return;
     }
@@ -1220,21 +1317,8 @@ class _ChildCategoryDetailPageState
   }
 
   Widget _buildProgressCard() {
-    final lim =
-        double.tryParse(
-          _limitCtrl.text,
-        ) ??
-        widget.category.limit;
-    final pct =
-        lim >
-            0
-        ? (widget.category.spent /
-                  lim)
-              .clamp(
-                0.0,
-                1.0,
-              )
-        : 0.0;
+    final lim = _currentLimit;
+    final pct = _progressPct;
     final pctInt =
         (pct *
                 100)
@@ -1248,6 +1332,17 @@ class _ChildCategoryDetailPageState
               0.0,
               double.infinity,
             );
+
+    final limitText =
+        lim >
+            0
+        ? '${lim.toStringAsFixed(2)} SAR'
+        : 'No limit';
+    final leftText =
+        lim >
+            0
+        ? '${remaining.toStringAsFixed(2)} SAR'
+        : 'Unlimited';
 
     return Container(
       padding: const EdgeInsets.all(
@@ -1299,12 +1394,16 @@ class _ChildCategoryDetailPageState
                   ),
                 ),
                 child: Text(
-                  '$pctInt%',
+                  _hasLimit
+                      ? '$pctInt%'
+                      : 'No limit',
                   style: TextStyle(
                     fontFamily: 'Nunito',
                     fontWeight: FontWeight.w900,
                     fontSize: 13,
-                    color: _isAlmost
+                    color:
+                        _isOver ||
+                            _isAlmost
                         ? const Color(
                             0xFFE53E3E,
                           )
@@ -1392,7 +1491,7 @@ class _ChildCategoryDetailPageState
               Expanded(
                 child: _buildStatChip(
                   label: 'Limit',
-                  value: '${lim.toStringAsFixed(2)} SAR',
+                  value: limitText,
                   color: _kPurple,
                   soft: const Color(
                     0xFFEDE9FE,
@@ -1406,7 +1505,7 @@ class _ChildCategoryDetailPageState
               Expanded(
                 child: _buildStatChip(
                   label: 'Left',
-                  value: '${remaining.toStringAsFixed(2)} SAR',
+                  value: leftText,
                   color: const Color(
                     0xFF34D399,
                   ),
@@ -1586,7 +1685,7 @@ class _ChildCategoryDetailPageState
             height: 20,
           ),
           const Text(
-            'Monthly Limit (SAR)',
+            'Monthly Limit (SAR) - Optional',
             style: TextStyle(
               fontFamily: 'Nunito',
               fontSize: 13,
@@ -1638,7 +1737,7 @@ class _ChildCategoryDetailPageState
               inputFormatters: [
                 FilteringTextInputFormatter.allow(
                   RegExp(
-                    r'^\d+\.?\d{0,2}',
+                    r'^\d*\.?\d{0,2}$',
                   ),
                 ),
               ],
@@ -1649,7 +1748,7 @@ class _ChildCategoryDetailPageState
                 color: _kText,
               ),
               decoration: InputDecoration(
-                hintText: 'e.g. 50',
+                hintText: 'Leave empty or enter 0 for no limit',
                 hintStyle: TextStyle(
                   fontFamily: 'Nunito',
                   fontSize: 13,

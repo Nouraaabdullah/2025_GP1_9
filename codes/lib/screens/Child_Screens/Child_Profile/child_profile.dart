@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:surra_application/utils/auth_helpers.dart';
 import 'child_category_details.dart';
@@ -1484,6 +1485,12 @@ class _KidCategoryCard
         pct >
         0.85;
 
+    final limitText =
+        category.limit >
+            0
+        ? '${category.spent.toStringAsFixed(0)} / ${category.limit.toStringAsFixed(0)} SAR'
+        : '${category.spent.toStringAsFixed(0)} SAR spent';
+
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -1543,7 +1550,11 @@ class _KidCategoryCard
                     vertical: 4,
                   ),
                   decoration: BoxDecoration(
-                    color: isAlmostFull
+                    color:
+                        category.limit <=
+                            0
+                        ? category.softColor
+                        : isAlmostFull
                         ? const Color(
                             0xFFFFE4E4,
                           )
@@ -1557,12 +1568,19 @@ class _KidCategoryCard
                     ),
                   ),
                   child: Text(
-                    '$pctInt%',
+                    category.limit <=
+                            0
+                        ? 'No limit'
+                        : '$pctInt%',
                     style: TextStyle(
                       fontFamily: 'Nunito',
                       fontWeight: FontWeight.w900,
                       fontSize: 11,
-                      color: isAlmostFull
+                      color:
+                          category.limit <=
+                              0
+                          ? category.color
+                          : isAlmostFull
                           ? const Color(
                               0xFFE53E3E,
                             )
@@ -1588,7 +1606,7 @@ class _KidCategoryCard
               ),
             ),
             Text(
-              '${category.spent.toStringAsFixed(0)} / ${category.limit.toStringAsFixed(0)} SAR',
+              limitText,
               style: const TextStyle(
                 fontFamily: 'Nunito',
                 fontSize: 10,
@@ -1716,95 +1734,128 @@ class _ChildAddCategoryPageState
   final _nameController = TextEditingController();
   final _limitController = TextEditingController();
 
-  String _selectedIcon = '✨';
+  String _selectedIcon = '🍕';
   Color _selectedColor = const Color(
     0xFF8B5CF6,
   );
   bool _saving = false;
 
   final List<
-    Map<
-      String,
-      String
-    >
+    String
   >
-  _iconOptions = const [
-    {
-      'icon': '🍔',
-      'emoji': '🍔',
-    },
-    {
-      'icon': '🛍️',
-      'emoji': '🛍️',
-    },
-    {
-      'icon': '🎬',
-      'emoji': '🎬',
-    },
-    {
-      'icon': '🎮',
-      'emoji': '🎮',
-    },
-    {
-      'icon': '📖',
-      'emoji': '📖',
-    },
-    {
-      'icon': '🎨',
-      'emoji': '🎨',
-    },
-    {
-      'icon': '🎵',
-      'emoji': '🎵',
-    },
-    {
-      'icon': '⚽',
-      'emoji': '⚽',
-    },
-    {
-      'icon': '🧸',
-      'emoji': '🧸',
-    },
-    {
-      'icon': '🛒',
-      'emoji': '🛒',
-    },
-    {
-      'icon': '🍽️',
-      'emoji': '🍽️',
-    },
-    {
-      'icon': '✨',
-      'emoji': '✨',
-    },
+  _emojiOptions = const [
+    '🍕',
+    '🎮',
+    '📚',
+    '🎨',
+    '⚽',
+    '🎵',
+    '🎬',
+    '👕',
+    '🍔',
+    '🚀',
+    '🌟',
+    '🎁',
+    '🏆',
+    '🎭',
+    '🍦',
+    '🎪',
+    '🦋',
+    '🌈',
+    '🎸',
+    '🏄',
+    '🎯',
+    '🧩',
+    '🦄',
+    '🎠',
   ];
+
   final List<
     Color
   >
-  _colorOptions = const [
-    Color(
-      0xFF8B5CF6,
+  _colorOptions = [
+    // Purple
+    const Color.fromARGB(
+      255,
+      246,
+      92,
+      92,
     ),
-    Color(
+
+    // Deep Violet
+    const Color(
+      0xFF6D28D9,
+    ),
+
+    // Pink
+    const Color(
       0xFFF472B6,
     ),
-    Color(
-      0xFF34D399,
+
+    // Mint Green
+    const Color.fromARGB(
+      255,
+      179,
+      211,
+      52,
     ),
-    Color(
+
+    // Sky Blue
+    const Color(
       0xFF60A5FA,
     ),
-    Color(
+
+    // Golden Yellow
+    const Color(
       0xFFFBBF24,
     ),
-    Color(
+
+    // Orange
+    const Color(
       0xFFFB923C,
     ),
-    Color(
+
+    // Coral Red
+    const Color(
       0xFFFF6B6B,
     ),
-    Color(
+
+    // Lavender
+    const Color(
       0xFFA78BFA,
+    ),
+
+    // Teal
+    const Color(
+      0xFF2DD4BF,
+    ),
+
+    // Bright Magenta
+    const Color(
+      0xFFE879F9,
+    ),
+
+    // Lime Green
+    const Color(
+      0xFF4ADE80,
+    ),
+
+    // NEW — Aqua Blue
+    const Color(
+      0xFF22D3EE,
+    ),
+
+    // NEW — Hot Pink
+    const Color(
+      0xFFEC4899,
+    ),
+
+    // NEW — Indigo Blue
+    const Color.fromARGB(
+      255,
+      241,
+      161,
+      99,
     ),
   ];
 
@@ -1854,16 +1905,77 @@ class _ChildAddCategoryPageState
   }
 
   Future<
+    bool
+  >
+  _categoryNameExists(
+    String name,
+  ) async {
+    final rows = await _sb
+        .from(
+          'Category',
+        )
+        .select(
+          'category_id',
+        )
+        .eq(
+          'profile_id',
+          widget.profileId,
+        )
+        .eq(
+          'is_archived',
+          false,
+        )
+        .ilike(
+          'name',
+          name.trim(),
+        );
+
+    return rows
+            is List &&
+        rows.isNotEmpty;
+  }
+
+  Future<
     void
   >
   _saveCategory() async {
     if (!_formKey.currentState!.validate()) return;
+
+    final categoryName = _nameController.text.trim();
+    final limitText = _limitController.text.trim();
+    final monthlyLimit = limitText.isEmpty
+        ? 0.0
+        : (double.tryParse(
+                limitText,
+              ) ??
+              0.0);
 
     setState(
       () => _saving = true,
     );
 
     try {
+      final alreadyExists = await _categoryNameExists(
+        categoryName,
+      );
+
+      if (alreadyExists) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'This category name already exists',
+            ),
+          ),
+        );
+        setState(
+          () => _saving = false,
+        );
+        return;
+      }
+
       await _sb
           .from(
             'Category',
@@ -1871,13 +1983,9 @@ class _ChildAddCategoryPageState
           .insert(
             {
               'profile_id': widget.profileId,
-              'name': _nameController.text.trim(),
+              'name': categoryName,
               'type': 'Custom',
-              'monthly_limit':
-                  double.tryParse(
-                    _limitController.text.trim(),
-                  ) ??
-                  0.0,
+              'monthly_limit': monthlyLimit,
               'icon': _selectedIcon,
               'icon_color': _colorToHex(
                 _selectedColor,
@@ -1885,6 +1993,7 @@ class _ChildAddCategoryPageState
               'is_archived': false,
             },
           );
+
       if (!mounted) return;
       Navigator.pop(
         context,
@@ -1907,10 +2016,11 @@ class _ChildAddCategoryPageState
         ),
       );
     } finally {
-      if (mounted)
+      if (mounted) {
         setState(
           () => _saving = false,
         );
+      }
     }
   }
 
@@ -1980,6 +2090,214 @@ class _ChildAddCategoryPageState
     );
   }
 
+  Widget _buildScrollableEmojiGrid() {
+    const int columns = 5;
+    const double itemSize = 56;
+    const double spacing = 10;
+    const double visibleRows = 2.7;
+
+    final totalRows =
+        (_emojiOptions.length /
+                columns)
+            .ceil()
+            .toDouble();
+    final actualRows =
+        totalRows <
+            visibleRows
+        ? totalRows
+        : visibleRows;
+    final height =
+        (actualRows *
+            itemSize) +
+        ((actualRows -
+                1) *
+            spacing);
+
+    return Container(
+      height: height,
+      padding: const EdgeInsets.all(
+        4,
+      ),
+      decoration: BoxDecoration(
+        color: const Color(
+          0xFFFDFBFF,
+        ),
+        borderRadius: BorderRadius.circular(
+          20,
+        ),
+        border: Border.all(
+          color: const Color(
+            0xFFE9DDFC,
+          ),
+        ),
+      ),
+      child: GridView.builder(
+        itemCount: _emojiOptions.length,
+        physics: const BouncingScrollPhysics(),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: columns,
+          crossAxisSpacing: spacing,
+          mainAxisSpacing: spacing,
+          childAspectRatio: 1,
+        ),
+        itemBuilder:
+            (
+              context,
+              index,
+            ) {
+              final emoji = _emojiOptions[index];
+              final isSelected =
+                  _selectedIcon ==
+                  emoji;
+
+              return GestureDetector(
+                onTap: () {
+                  setState(
+                    () => _selectedIcon = emoji,
+                  );
+                },
+                child: Container(
+                  width: itemSize,
+                  height: itemSize,
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? const Color(
+                            0xFFEDE9FE,
+                          )
+                        : Colors.white,
+                    borderRadius: BorderRadius.circular(
+                      16,
+                    ),
+                    border: Border.all(
+                      color: isSelected
+                          ? _kPurple
+                          : const Color(
+                              0xFFE9DDFC,
+                            ),
+                      width: 1.5,
+                    ),
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    emoji,
+                    style: const TextStyle(
+                      fontSize: 24,
+                    ),
+                  ),
+                ),
+              );
+            },
+      ),
+    );
+  }
+
+  Widget _buildScrollableColorGrid() {
+    const int columns = 5;
+    const double itemSize = 50;
+    const double spacing = 12;
+    const double visibleRows = 2.9;
+
+    final totalRows =
+        (_colorOptions.length /
+                columns)
+            .ceil()
+            .toDouble();
+    final actualRows =
+        totalRows <
+            visibleRows
+        ? totalRows
+        : visibleRows;
+    final height =
+        (actualRows *
+            itemSize) +
+        ((actualRows -
+                1) *
+            spacing);
+
+    return Container(
+      height: height,
+      padding: const EdgeInsets.all(
+        8,
+      ),
+      decoration: BoxDecoration(
+        color: const Color(
+          0xFFFDFBFF,
+        ),
+        borderRadius: BorderRadius.circular(
+          20,
+        ),
+        border: Border.all(
+          color: const Color(
+            0xFFE9DDFC,
+          ),
+        ),
+      ),
+      child: GridView.builder(
+        itemCount: _colorOptions.length,
+        physics: const BouncingScrollPhysics(),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: columns,
+          crossAxisSpacing: spacing,
+          mainAxisSpacing: spacing,
+          childAspectRatio: 1,
+        ),
+        itemBuilder:
+            (
+              context,
+              index,
+            ) {
+              final color = _colorOptions[index];
+              final isSelected =
+                  _selectedColor.value ==
+                  color.value;
+
+              return GestureDetector(
+                onTap: () {
+                  setState(
+                    () => _selectedColor = color,
+                  );
+                },
+                child: Container(
+                  width: itemSize,
+                  height: itemSize,
+                  decoration: BoxDecoration(
+                    color: color,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: isSelected
+                          ? _kText
+                          : Colors.white,
+                      width: isSelected
+                          ? 3
+                          : 2,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: color.withOpacity(
+                          0.22,
+                        ),
+                        blurRadius: 10,
+                        offset: const Offset(
+                          0,
+                          3,
+                        ),
+                      ),
+                    ],
+                  ),
+                  child: isSelected
+                      ? const Icon(
+                          Icons.check,
+                          color: Colors.white,
+                          size: 18,
+                        )
+                      : null,
+                ),
+              );
+            },
+      ),
+    );
+  }
+
   @override
   Widget build(
     BuildContext context,
@@ -2027,6 +2345,7 @@ class _ChildAddCategoryPageState
                   decoration: _inputDecoration(
                     'Enter category name',
                   ),
+                  textInputAction: TextInputAction.next,
                   validator:
                       (
                         value,
@@ -2043,15 +2362,22 @@ class _ChildAddCategoryPageState
                   height: 18,
                 ),
                 _buildLabel(
-                  'Monthly Limit',
+                  'Monthly Limit (Optional)',
                 ),
                 TextFormField(
                   controller: _limitController,
                   keyboardType: const TextInputType.numberWithOptions(
                     decimal: true,
                   ),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(
+                      RegExp(
+                        r'^\d*\.?\d{0,2}$',
+                      ),
+                    ),
+                  ],
                   decoration: _inputDecoration(
-                    'Enter monthly limit',
+                    'Leave empty or enter 0 for no limit',
                   ),
                   validator:
                       (
@@ -2060,7 +2386,7 @@ class _ChildAddCategoryPageState
                         if (value ==
                                 null ||
                             value.trim().isEmpty) {
-                          return 'Please enter a monthly limit';
+                          return null;
                         }
                         if (double.tryParse(
                               value.trim(),
@@ -2077,104 +2403,14 @@ class _ChildAddCategoryPageState
                 _buildLabel(
                   'Choose an Icon',
                 ),
-                Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
-                  children: _iconOptions.map(
-                    (
-                      item,
-                    ) {
-                      final isSelected =
-                          _selectedIcon ==
-                          item['icon'];
-                      return GestureDetector(
-                        onTap: () {
-                          setState(
-                            () => _selectedIcon = item['icon']!,
-                          );
-                        },
-                        child: Container(
-                          width: 56,
-                          height: 56,
-                          decoration: BoxDecoration(
-                            color: isSelected
-                                ? const Color(
-                                    0xFFEDE9FE,
-                                  )
-                                : Colors.white,
-                            borderRadius: BorderRadius.circular(
-                              16,
-                            ),
-                            border: Border.all(
-                              color: isSelected
-                                  ? _kPurple
-                                  : const Color(
-                                      0xFFE9DDFC,
-                                    ),
-                              width: 1.5,
-                            ),
-                          ),
-                          alignment: Alignment.center,
-                          child: Text(
-                            item['emoji']!,
-                            style: const TextStyle(
-                              fontSize: 24,
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  ).toList(),
-                ),
+                _buildScrollableEmojiGrid(),
                 const SizedBox(
                   height: 18,
                 ),
                 _buildLabel(
                   'Choose a Color',
                 ),
-                Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
-                  children: _colorOptions.map(
-                    (
-                      color,
-                    ) {
-                      final isSelected =
-                          _selectedColor.value ==
-                          color.value;
-                      return GestureDetector(
-                        onTap: () {
-                          setState(
-                            () => _selectedColor = color,
-                          );
-                        },
-                        child: Container(
-                          width: 42,
-                          height: 42,
-                          decoration: BoxDecoration(
-                            color: color,
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: isSelected
-                                  ? _kText
-                                  : Colors.white,
-                              width: isSelected
-                                  ? 3
-                                  : 2,
-                            ),
-                          ),
-                          child: isSelected
-                              ? const Icon(
-                                  Icons.check,
-                                  color: Colors.white,
-                                  size: 18,
-                                )
-                              : null,
-                        ),
-                      );
-                    },
-                  ).toList(),
-                ),
+                _buildScrollableColorGrid(),
                 const SizedBox(
                   height: 28,
                 ),

@@ -24,6 +24,7 @@ import 'screens/registeration/profile_setup/setup_balance_screen.dart';
 import 'screens/registeration/profile_setup/setup_complete_screen.dart';
 import 'screens/registeration/profile_setup/setup_categories_screen.dart';
 import 'screens/registeration/profile_setup/add_edit_category_page.dart';
+import 'screens/Child_Screens/Child_Profile/child_profile.dart';
 
 // 🟣 Chatbot
 import 'screens/chatbot/chatbot_screen.dart';
@@ -120,15 +121,13 @@ Future<
 main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
- // ✅ Status bar style
+  // ✅ Status bar style
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
       statusBarIconBrightness: Brightness.light,
     ),
   );
-
-
 
   await Supabase.initialize(
     url: 'https://xvnkuqqzlstzwgeecijn.supabase.co',
@@ -139,8 +138,6 @@ main() async {
     const SurraApp(),
   );
 }
-
-
 
 class SurraApp
     extends
@@ -322,10 +319,9 @@ class _SurraAppState
         _user !=
         null;
     final String initialRoute = isLoggedIn
-        ? '/profile'
+        ? '/childProfile'
         // : '/welcome';
         : '/startpage';
-
 
     return MaterialApp(
       debugShowCheckedModeBanner: false,
@@ -408,6 +404,10 @@ class _SurraAppState
             (
               context,
             ) => const ChatbotLoader(),
+        '/childProfile':
+            (
+              context,
+            ) => const ChildProfilePage(),
       },
     );
   }

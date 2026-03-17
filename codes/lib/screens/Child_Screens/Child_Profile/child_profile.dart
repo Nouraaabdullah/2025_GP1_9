@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:surra_application/utils/auth_helpers.dart';
 import 'child_category_details.dart';
 
+
 class KidCategory {
   final String categoryId;
   String name;

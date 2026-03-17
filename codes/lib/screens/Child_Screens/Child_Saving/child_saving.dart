@@ -1,4 +1,4 @@
-// lib/pages/goals/savings_page.dart
+// lib/screens/Child_Screens/Child_Saving/child_saving.dart
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -7,8 +7,8 @@ import '../../../utils/auth_helpers.dart';
 import 'create_goal_page.dart';
 import 'edit_goal_page.dart';
 import '/../widgets/child_bottom_nav_bar.dart';
-import '../../dashboard/dashboard_page.dart';
 import '../../profile/profile_main.dart';
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ENUMS & MODELS
@@ -18,26 +18,23 @@ enum GoalType { active, completed, incompleted, achieved }
 
 GoalType _goalTypeFromString(String? s) {
   switch ((s ?? '').toLowerCase()) {
-    case 'achieved':
-      return GoalType.achieved;
-    case 'completed':
-      return GoalType.completed;
+    case 'achieved':    return GoalType.achieved;
+    case 'completed':   return GoalType.completed;
     case 'incompleted':
     case 'incomplete':
-    case 'failed':
-      return GoalType.incompleted;
-    default:
-      return GoalType.active;
+    case 'failed':      return GoalType.incompleted;
+    default:            return GoalType.active;
   }
 }
 
 class SavingGoal {
-  final String id;
-  String       title;
-  double       targetAmount;
-  double       savedAmount;
-  DateTime?    targetDate;
-  GoalType     type;
+  final String  id;
+  String        title;
+  double        targetAmount;
+  double        savedAmount;
+  DateTime?     targetDate;
+  GoalType      type;
+  final String  dbStatus; // original status string from DB
 
   SavingGoal({
     required this.id,
@@ -46,6 +43,7 @@ class SavingGoal {
     required this.savedAmount,
     required this.targetDate,
     required this.type,
+    required this.dbStatus,
   });
 
   double get progress =>
@@ -65,22 +63,19 @@ class SavingsPage extends StatefulWidget {
 }
 
 class _SavingsPageState extends State<SavingsPage>
-    with TickerProviderStateMixin {
-  // ── Supabase ──────────────────────────────────────────────────────────────
+    with TickerProviderStateMixin, WidgetsBindingObserver {
+
   final _supabase = Supabase.instance.client;
   String? _childProfileId;
 
-  // ── Data ──────────────────────────────────────────────────────────────────
-  List<SavingGoal> _goals       = [];
-  double _totalSaving           = 0; // internal — used for auto-adjust logic
-  double _assignedBalance       = 0; // DISPLAY: sum of past MFR monthly_saving
-  double _unassignedBalance     = 0; // DISPLAY: current_balance from User_Profile
-  bool   _loading               = true;
+  List<SavingGoal> _goals           = [];
+  double           _totalSaving     = 0;
+  double           _assignedBalance = 0;
+  double           _unassignedBalance = 0;
+  bool             _loading         = true;
 
-  // ── UI state ──────────────────────────────────────────────────────────────
   GoalType? _activeFilter;
 
-  // ── Animations ────────────────────────────────────────────────────────────
   late final AnimationController _floatCtrl;
   late final Animation<double>   _floatY;
   late final AnimationController _spinCtrl;
@@ -92,6 +87,7 @@ class _SavingsPageState extends State<SavingsPage>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _floatCtrl = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 2000))
       ..repeat(reverse: true);
@@ -100,16 +96,23 @@ class _SavingsPageState extends State<SavingsPage>
     _spinCtrl = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 2500))
       ..repeat();
-
     _init();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _floatCtrl.dispose();
     _spinCtrl.dispose();
     _supabase.removeAllChannels();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _childProfileId != null) {
+      _fetchGoals();
+    }
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -130,98 +133,48 @@ class _SavingsPageState extends State<SavingsPage>
   void _subscribeRealtime() {
     final id = _childProfileId!;
 
-    _supabase
-        .channel('savings_txn')
-        .onPostgresChanges(
-          event: PostgresChangeEvent.all,
-          schema: 'public',
-          table: 'Transaction',
-          filter: PostgresChangeFilter(
-              type: PostgresChangeFilterType.eq,
-              column: 'profile_id',
-              value: id),
-          callback: (_) async {
-            await _generateMonthlySavings();
-            _recalculateBalances();
-            await _autoAdjustOverAssigned();
-            await _refreshCurrentSavingFromRecord();
-          },
-        )
-        .subscribe();
+    _supabase.channel('savings_txn').onPostgresChanges(
+      event: PostgresChangeEvent.all, schema: 'public', table: 'Transaction',
+      filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'profile_id', value: id),
+      callback: (_) async {
+        await _generateMonthlySavings(); _recalculateBalances();
+        await _autoAdjustOverAssigned(); await _refreshCurrentSavingFromRecord();
+      },
+    ).subscribe();
 
-    _supabase
-        .channel('savings_mfr')
-        .onPostgresChanges(
-          event: PostgresChangeEvent.all,
-          schema: 'public',
-          table: 'Monthly_Financial_Record',
-          filter: PostgresChangeFilter(
-              type: PostgresChangeFilterType.eq,
-              column: 'profile_id',
-              value: id),
-          callback: (_) async {
-            await _generateMonthlySavings();
-            _recalculateBalances();
-            await _autoAdjustOverAssigned();
-            await _refreshCurrentSavingFromRecord();
-          },
-        )
-        .subscribe();
+    _supabase.channel('savings_mfr').onPostgresChanges(
+      event: PostgresChangeEvent.all, schema: 'public', table: 'Monthly_Financial_Record',
+      filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'profile_id', value: id),
+      callback: (_) async {
+        await _generateMonthlySavings(); _recalculateBalances();
+        await _autoAdjustOverAssigned(); await _refreshCurrentSavingFromRecord();
+      },
+    ).subscribe();
 
-    _supabase
-        .channel('savings_transfer')
-        .onPostgresChanges(
-          event: PostgresChangeEvent.all,
-          schema: 'public',
-          table: 'Goal_Transfer',
-          callback: (_) async {
-            await _fetchGoals();
-            await _generateMonthlySavings();
-            _recalculateBalances();
-          },
-        )
-        .subscribe();
+    _supabase.channel('savings_transfer').onPostgresChanges(
+      event: PostgresChangeEvent.all, schema: 'public', table: 'Goal_Transfer',
+      callback: (_) async {
+        await _fetchGoals(); await _generateMonthlySavings(); _recalculateBalances();
+      },
+    ).subscribe();
 
-    _supabase
-        .channel('savings_goal')
-        .onPostgresChanges(
-          event: PostgresChangeEvent.all,
-          schema: 'public',
-          table: 'Goal',
-          filter: PostgresChangeFilter(
-              type: PostgresChangeFilterType.eq,
-              column: 'profile_id',
-              value: id),
-          callback: (_) async {
-            await _fetchGoals();
-          },
-        )
-        .subscribe();
+    _supabase.channel('savings_goal').onPostgresChanges(
+      event: PostgresChangeEvent.all, schema: 'public', table: 'Goal',
+      filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'profile_id', value: id),
+      callback: (_) async { await _fetchGoals(); },
+    ).subscribe();
 
-    _supabase
-        .channel('savings_cat')
-        .onPostgresChanges(
-          event: PostgresChangeEvent.all,
-          schema: 'public',
-          table: 'Category',
-          filter: PostgresChangeFilter(
-              type: PostgresChangeFilterType.eq,
-              column: 'profile_id',
-              value: id),
-          callback: (_) {
-            if (mounted) setState(() {});
-          },
-        )
-        .subscribe();
+    _supabase.channel('savings_cat').onPostgresChanges(
+      event: PostgresChangeEvent.all, schema: 'public', table: 'Category',
+      filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'profile_id', value: id),
+      callback: (_) { if (mounted) setState(() {}); },
+    ).subscribe();
   }
 
   // ─────────────────────────────────────────────────────────────────────────
   // DATA FETCHING
   // ─────────────────────────────────────────────────────────────────────────
 
-  /// CHANGE 1: _assignedBalance = sum of past MFR monthly_saving (Monthly Saved pill)
-  /// CHANGE 2: _unassignedBalance = current_balance from User_Profile (Free to Use pill)
-  /// _totalSaving stays as internal value for auto-adjust logic (unchanged)
   Future<void> _generateMonthlySavings() async {
     try {
       final now        = DateTime.now();
@@ -237,16 +190,11 @@ class _SavingsPageState extends State<SavingsPage>
       for (final row in rows) {
         final ps = _parseDate(row['period_start']);
         if (ps != null && ps.isBefore(monthStart)) {
-          final v = (row['monthly_saving'] as num?)?.toDouble() ?? 0;
-          total += v;
+          total += (row['monthly_saving'] as num?)?.toDouble() ?? 0;
         }
       }
       _totalSaving = total.clamp(0, double.infinity);
 
-      // CHANGE 1: Monthly Saved pill = sum of past MFR monthly_saving
-      final double monthlySaved = _totalSaving;
-
-      // CHANGE 2: Free to Use pill = current_balance from User_Profile
       final profileRow = await _supabase
           .from('User_Profile')
           .select('current_balance')
@@ -257,7 +205,7 @@ class _SavingsPageState extends State<SavingsPage>
 
       if (mounted) {
         setState(() {
-          _assignedBalance   = monthlySaved;
+          _assignedBalance   = _totalSaving;
           _unassignedBalance = freeToUse.clamp(0, double.infinity);
         });
       }
@@ -305,17 +253,40 @@ class _SavingsPageState extends State<SavingsPage>
         }
       }
 
-      final now = DateTime.now();
       final List<SavingGoal> built = [];
       for (final row in goalRows) {
-        final gid      = row['goal_id'] as String;
-        final tList    = transferMap[gid] ?? [];
-        final saved    = _computeSaved(tList);
-        final target   = (row['target_amount'] as num?)?.toDouble() ?? 0;
-        final tdRaw    = row['target_date'];
-        final td       = _parseDate(tdRaw);
-        final dbStatus = (row['status'] as String?) ?? 'Active';
-        final type     = _goalTypeFromString(dbStatus);
+        final gid    = row['goal_id'] as String;
+        final tList  = transferMap[gid] ?? [];
+        final saved  = _computeSaved(tList);
+        final target = (row['target_amount'] as num?)?.toDouble() ?? 0;
+
+        // Robust target_date parsing — handles String, DateTime, or null
+        DateTime? td;
+        final rawDate = row['target_date'];
+        if (rawDate != null) {
+          if (rawDate is DateTime) {
+            td = DateTime(rawDate.year, rawDate.month, rawDate.day);
+          } else if (rawDate is String && rawDate.trim().isNotEmpty) {
+            final dt = DateTime.parse(rawDate.trim());
+            td = DateTime(dt.year, dt.month, dt.day);
+          }
+        }
+
+        final String dbStatus = (row['status'] as String?) ?? 'Active';
+
+        // ── LOCAL expiry override — UI reflects correct status immediately ──
+        // We keep dbStatus stored separately so _checkAndUpdateGoalStatus
+        // can compare against the TRUE DB value (not the local override).
+        final bool expired = _isExpired(td);
+        String effectiveStatus = dbStatus;
+        if (expired && dbStatus.toLowerCase() == 'active') {
+          effectiveStatus = 'Incompleted';
+        }
+
+        debugPrint(
+          '[FetchGoals] id=$gid td=$td expired=$expired '
+          'db=$dbStatus effective=$effectiveStatus',
+        );
 
         built.add(SavingGoal(
           id:           gid,
@@ -323,15 +294,18 @@ class _SavingsPageState extends State<SavingsPage>
           targetAmount: target,
           savedAmount:  saved,
           targetDate:   td,
-          type:         type,
+          type:         _goalTypeFromString(effectiveStatus),
+          dbStatus:     dbStatus, // store original DB value
         ));
       }
 
       if (mounted) setState(() { _goals = built; _loading = false; });
 
+      // Persist effective statuses to DB in background
+      // Passes dbStatus so the comparison is always DB-value vs computed-value
       for (final g in built) {
         if (g.type != GoalType.achieved) {
-          await _checkAndUpdateGoalStatus(g, now);
+          await _checkAndUpdateGoalStatus(g);
         }
       }
     } catch (e) {
@@ -357,8 +331,6 @@ class _SavingsPageState extends State<SavingsPage>
   // ─────────────────────────────────────────────────────────────────────────
 
   void _recalculateBalances() {
-    // _assignedBalance and _unassignedBalance are now set directly by
-    // _generateMonthlySavings. This method is kept for auto-adjust logic.
     final activeAssigned = _goals
         .where((g) => g.type == GoalType.active ||
                       g.type == GoalType.completed ||
@@ -371,9 +343,8 @@ class _SavingsPageState extends State<SavingsPage>
 
     final effectiveTotal = math.max(0.0, _totalSaving - achievedTotal);
 
-    // Only auto-adjust if over-assigned; display values come from DB directly.
     if (activeAssigned > effectiveTotal && effectiveTotal > 0) {
-      // Will be handled by _autoAdjustOverAssigned
+      // handled by _autoAdjustOverAssigned
     }
   }
 
@@ -389,10 +360,9 @@ class _SavingsPageState extends State<SavingsPage>
         .fold(0.0, (s, g) => s + g.savedAmount);
 
     final effectiveTotal = math.max(0.0, _totalSaving - achievedTotal);
-
     if (totalAssigned <= effectiveTotal) return;
-    final excess = totalAssigned - effectiveTotal;
 
+    final excess = totalAssigned - effectiveTotal;
     final active = _goals
         .where((g) => g.type == GoalType.active ||
                       g.type == GoalType.completed ||
@@ -427,30 +397,36 @@ class _SavingsPageState extends State<SavingsPage>
     final now   = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final d     = DateTime(targetDate.year, targetDate.month, targetDate.day);
-    return today.isAfter(d);
+    return today.isAfter(d); // strictly after — same day is NOT expired
   }
 
   String _computeNewStatus(SavingGoal g) {
-    if (g.savedAmount >= g.targetAmount && g.targetAmount > 0) {
-      return 'Completed';
-    }
+    if (g.savedAmount >= g.targetAmount && g.targetAmount > 0) return 'Completed';
     if (_isExpired(g.targetDate)) return 'Incompleted';
     return 'Active';
   }
 
-  Future<void> _checkAndUpdateGoalStatus(SavingGoal g, DateTime now) async {
-    final current   = _goalTypeToString(g.type);
+  /// Compares the ORIGINAL dbStatus (not the locally-overridden type) so the
+  /// write always fires when the real DB value differs from what it should be.
+  Future<void> _checkAndUpdateGoalStatus(SavingGoal g) async {
     final newStatus = _computeNewStatus(g);
-    if (newStatus == current) return;
+
+    // Compare against the actual DB value — prevents skipping when the local
+    // override already changed g.type but the DB still holds the old value.
+    if (newStatus == g.dbStatus) {
+      debugPrint('[StatusCheck] ${g.id} unchanged ($newStatus)');
+      return;
+    }
 
     try {
       await _supabase
           .from('Goal')
           .update({'status': newStatus})
           .eq('goal_id', g.id);
-      if (mounted && newStatus == 'Completed') {
-        _showStatusDialog(g, newStatus);
-      }
+      debugPrint('[StatusCheck] ${g.id} DB updated: ${g.dbStatus} → $newStatus');
+
+      // Show status alert dialog (same style as adult page)
+      if (mounted) await _showGoalStatusAlert(newStatus);
     } catch (e) {
       debugPrint('_checkAndUpdateGoalStatus error: $e');
     }
@@ -465,15 +441,52 @@ class _SavingsPageState extends State<SavingsPage>
     }
   }
 
-  void _showStatusDialog(SavingGoal g, String newStatus) {
-    final icon  = newStatus == 'Completed' ? '🏁' : '⏰';
-    final title = newStatus == 'Completed' ? 'Goal Reached!' : 'Goal Missed';
-    final msg   = newStatus == 'Completed'
-        ? '"${g.title}" is fully saved and ready to buy!'
-        : '"${g.title}" passed its deadline without reaching the target.';
+  // ─────────────────────────────────────────────────────────────────────────
+  // STATUS ALERT DIALOGS (same style as adult page)
+  // ─────────────────────────────────────────────────────────────────────────
 
-    showDialog(
-      context:            context,
+  Future<void> _showGoalStatusAlert(String status) {
+    final s = status.toLowerCase();
+    if (s == 'achieved') {
+      return _showStatusDialog(
+        icon: Icons.emoji_events_rounded,
+        ringColor: AppColors.kYellow,
+        title: 'What an Achievement!',
+        message: 'Goal status has been updated to Achieved.',
+      );
+    } else if (s == 'completed') {
+      return _showStatusDialog(
+        icon: Icons.check_circle_rounded,
+        ringColor: AppColors.kBlue,
+        title: 'Goal Completed!',
+        message: 'Goal status has been updated to Completed.',
+      );
+    } else if (s == 'incompleted' || s == 'incomplete') {
+      return _showStatusDialog(
+        icon: Icons.error_outline_rounded,
+        ringColor: AppColors.kPink,
+        title: 'Target Day is Due!',
+        message: 'Goal status has been updated to Incomplete.',
+      );
+    } else if (s == 'active') {
+      return _showStatusDialog(
+        icon: Icons.flash_on_rounded,
+        ringColor: AppColors.kPurple,
+        title: 'Active Again!',
+        message: 'Goal status has been updated to Active.',
+      );
+    }
+    return Future.value();
+  }
+
+  Future<void> _showStatusDialog({
+    required IconData icon,
+    required Color ringColor,
+    required String title,
+    required String message,
+  }) {
+    return showDialog(
+      context: context,
       barrierDismissible: true,
       builder: (ctx) => Dialog(
         backgroundColor: Colors.transparent,
@@ -482,13 +495,25 @@ class _SavingsPageState extends State<SavingsPage>
               color: Colors.white, borderRadius: BorderRadius.circular(28)),
           padding: const EdgeInsets.all(24),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Text(icon, style: const TextStyle(fontSize: 48)),
-            const SizedBox(height: 12),
+            Container(
+              width: 72, height: 72,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: ringColor.withOpacity(0.1),
+                border: Border.all(color: ringColor, width: 3),
+                boxShadow: [BoxShadow(
+                    color: ringColor.withOpacity(0.35),
+                    blurRadius: 16, spreadRadius: -2)],
+              ),
+              child: Icon(icon, color: ringColor, size: 34),
+            ),
+            const SizedBox(height: 16),
             Text(title,
+                textAlign: TextAlign.center,
                 style: const TextStyle(fontSize: 20,
                     fontWeight: FontWeight.w900, color: AppColors.kText)),
             const SizedBox(height: 8),
-            Text(msg,
+            Text(message,
                 textAlign: TextAlign.center,
                 style: const TextStyle(fontSize: 13,
                     color: AppColors.kTextSoft, height: 1.5)),
@@ -500,7 +525,7 @@ class _SavingsPageState extends State<SavingsPage>
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14)),
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 28, vertical: 12)),
+                      horizontal: 32, vertical: 12)),
               child: const Text('Got it',
                   style: TextStyle(color: Colors.white,
                       fontWeight: FontWeight.w800)),
@@ -523,8 +548,7 @@ class _SavingsPageState extends State<SavingsPage>
       return;
     }
     if (goal.remaining <= 0) {
-      _showInfoDialog('Goal Complete',
-          'This goal is already fully saved!', '🏁');
+      _showInfoDialog('Goal Complete', 'This goal is already fully saved!', '🏁');
       return;
     }
 
@@ -542,13 +566,11 @@ class _SavingsPageState extends State<SavingsPage>
         if (amount > max) amount = max;
 
         return Padding(
-          padding: EdgeInsets.only(
-              bottom: MediaQuery.of(ctx).viewInsets.bottom),
+          padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
           child: Container(
             decoration: const BoxDecoration(
                 color: Colors.white,
-                borderRadius:
-                    BorderRadius.vertical(top: Radius.circular(36))),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(36))),
             padding: const EdgeInsets.fromLTRB(24, 12, 24, 36),
             child: Column(mainAxisSize: MainAxisSize.min, children: [
               Container(
@@ -558,82 +580,63 @@ class _SavingsPageState extends State<SavingsPage>
                       borderRadius: BorderRadius.circular(3))),
               const SizedBox(height: 22),
               Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 16, vertical: 12),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 decoration: BoxDecoration(
                     color: AppColors.kPurple.withOpacity(0.08),
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                        color: AppColors.kPurple.withOpacity(0.2))),
+                    border: Border.all(color: AppColors.kPurple.withOpacity(0.2))),
                 child: Row(children: [
-                  Expanded(child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
+                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     Text(goal.title,
                         style: const TextStyle(fontSize: 15,
-                            fontWeight: FontWeight.w800,
-                            color: AppColors.kText)),
-                    Text('${_fmtSar(goal.savedAmount)} / '
-                        '${_fmtSar(goal.targetAmount)} SAR',
+                            fontWeight: FontWeight.w800, color: AppColors.kText)),
+                    Text('${_fmtSar(goal.savedAmount)} / ${_fmtSar(goal.targetAmount)} SAR',
                         style: TextStyle(fontSize: 12,
-                            color: AppColors.kPurple,
-                            fontWeight: FontWeight.w700)),
+                            color: AppColors.kPurple, fontWeight: FontWeight.w700)),
                   ])),
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 6),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(12),
                         boxShadow: [BoxShadow(
-                            color: AppColors.kPurple.withOpacity(0.15),
-                            blurRadius: 8)]),
+                            color: AppColors.kPurple.withOpacity(0.15), blurRadius: 8)]),
                     child: Column(children: [
-                      const Text('Free',
-                          style: TextStyle(fontSize: 10,
-                              color: Color(0xFFAAAAAA))),
+                      const Text('Balance',
+                          style: TextStyle(fontSize: 10, color: Color(0xFFAAAAAA))),
                       Text(_fmtSar(_unassignedBalance),
                           style: const TextStyle(fontSize: 13,
-                              fontWeight: FontWeight.w900,
-                              color: AppColors.kPurple)),
+                              fontWeight: FontWeight.w900, color: AppColors.kPurple)),
                     ]),
                   ),
                 ]),
               ),
               const SizedBox(height: 18),
               Row(children: [
-                Expanded(child: _toggleBtn(
-                    '➕  Assign', adding, AppColors.kPurple,
+                Expanded(child: _toggleBtn('➕  Assign', adding, AppColors.kPurple,
                     () => s(() { adding = true; amount = 0; }))),
                 const SizedBox(width: 10),
-                Expanded(child: _toggleBtn(
-                    '➖  Unassign', !adding, AppColors.kPink,
+                Expanded(child: _toggleBtn('➖  Unassign', !adding, AppColors.kPink,
                     () => s(() { adding = false; amount = 0; }))),
               ]),
               const SizedBox(height: 16),
               Text('${amount.toStringAsFixed(0)} SAR',
-                  style: TextStyle(fontSize: 36,
-                      fontWeight: FontWeight.w900,
+                  style: TextStyle(fontSize: 36, fontWeight: FontWeight.w900,
                       color: adding ? AppColors.kPurple : AppColors.kPink)),
               Text(max <= 0
                   ? 'Nothing to ${adding ? "assign" : "unassign"}'
                   : 'Max  ${_fmtSar(max)} SAR',
-                  style: const TextStyle(fontSize: 12,
-                      color: Color(0xFFBBBBBB))),
+                  style: const TextStyle(fontSize: 12, color: Color(0xFFBBBBBB))),
               const SizedBox(height: 8),
               if (max > 0) ...[
                 SliderTheme(
                   data: SliderThemeData(
                     trackHeight: 10,
-                    thumbShape: const RoundSliderThumbShape(
-                        enabledThumbRadius: 14),
-                    overlayShape: const RoundSliderOverlayShape(
-                        overlayRadius: 24),
-                    activeTrackColor:
-                        adding ? AppColors.kPurple : AppColors.kPink,
+                    thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 14),
+                    overlayShape: const RoundSliderOverlayShape(overlayRadius: 24),
+                    activeTrackColor: adding ? AppColors.kPurple : AppColors.kPink,
                     inactiveTrackColor: Colors.grey.shade100,
-                    thumbColor:
-                        adding ? AppColors.kPurple : AppColors.kPink,
+                    thumbColor: adding ? AppColors.kPurple : AppColors.kPink,
                   ),
                   child: Slider(
                     value: amount, min: 0, max: max,
@@ -650,17 +653,13 @@ class _SavingsPageState extends State<SavingsPage>
                       onTap: () => s(() => amount = v),
                       child: Container(
                         margin: const EdgeInsets.symmetric(horizontal: 4),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 13, vertical: 6),
+                        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 6),
                         decoration: BoxDecoration(
                             color: ia ? c : Colors.grey.shade100,
                             borderRadius: BorderRadius.circular(17)),
                         child: Text(p == 100 ? 'Max' : '$p%',
-                            style: TextStyle(fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                                color: ia
-                                    ? Colors.white
-                                    : Colors.grey.shade500)),
+                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700,
+                                color: ia ? Colors.white : Colors.grey.shade500)),
                       ),
                     );
                   }).toList(),
@@ -678,8 +677,7 @@ class _SavingsPageState extends State<SavingsPage>
                               goal, amount, adding ? 'Assign' : 'Unassign');
                         },
                   style: ElevatedButton.styleFrom(
-                      backgroundColor:
-                          adding ? AppColors.kPurple : AppColors.kPink,
+                      backgroundColor: adding ? AppColors.kPurple : AppColors.kPink,
                       disabledBackgroundColor: Colors.grey.shade200,
                       padding: const EdgeInsets.symmetric(vertical: 15),
                       shape: RoundedRectangleBorder(
@@ -687,7 +685,7 @@ class _SavingsPageState extends State<SavingsPage>
                       elevation: 0),
                   child: Text(
                     adding
-                        ? 'Assign ${amount.toStringAsFixed(0)} SAR ✅'
+                        ? 'Assign ${amount.toStringAsFixed(0)} SAR '
                         : 'Unassign ${amount.toStringAsFixed(0)} SAR',
                     style: const TextStyle(color: Colors.white,
                         fontSize: 15, fontWeight: FontWeight.w800),
@@ -713,9 +711,6 @@ class _SavingsPageState extends State<SavingsPage>
       await _fetchGoals();
       await _generateMonthlySavings();
       _recalculateBalances();
-      await _checkAndUpdateGoalStatus(
-          _goals.firstWhere((g) => g.id == goal.id),
-          DateTime.now());
     } catch (e) {
       debugPrint('_submitTransfer error: $e');
       if (mounted) {
@@ -752,20 +747,17 @@ class _SavingsPageState extends State<SavingsPage>
         backgroundColor: Colors.transparent,
         child: Container(
           decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(28)),
+              color: Colors.white, borderRadius: BorderRadius.circular(28)),
           padding: const EdgeInsets.all(24),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             const Text('🛍️', style: TextStyle(fontSize: 48)),
             const SizedBox(height: 10),
             const Text('Log as Expense',
                 style: TextStyle(fontSize: 20,
-                    fontWeight: FontWeight.w900,
-                    color: AppColors.kText)),
+                    fontWeight: FontWeight.w900, color: AppColors.kText)),
             const SizedBox(height: 6),
             Text('${goal.title} — ${_fmtSar(goal.targetAmount)} SAR',
-                style: const TextStyle(fontSize: 13,
-                    color: AppColors.kTextSoft)),
+                style: const TextStyle(fontSize: 13, color: AppColors.kTextSoft)),
             const SizedBox(height: 16),
             if (categories.isEmpty)
               const Text('No categories found.',
@@ -791,20 +783,14 @@ class _SavingsPageState extends State<SavingsPage>
                               : const Color(0xFFF8F8FF),
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
-                              color: sel
-                                  ? AppColors.kPurple
-                                  : Colors.transparent,
+                              color: sel ? AppColors.kPurple : Colors.transparent,
                               width: 1.5),
                         ),
                         child: Row(children: [
-                          Expanded(child: Text(
-                              cat['name'] as String? ?? '',
-                              style: TextStyle(
-                                  fontSize: 13,
+                          Expanded(child: Text(cat['name'] as String? ?? '',
+                              style: TextStyle(fontSize: 13,
                                   fontWeight: FontWeight.w700,
-                                  color: sel
-                                      ? AppColors.kPurple
-                                      : AppColors.kText))),
+                                  color: sel ? AppColors.kPurple : AppColors.kText))),
                           if (sel)
                             const Icon(Icons.check_circle_rounded,
                                 color: AppColors.kPurple, size: 18),
@@ -853,8 +839,7 @@ class _SavingsPageState extends State<SavingsPage>
     );
   }
 
-  Future<void> _confirmLogExpense(
-      SavingGoal goal, String categoryId) async {
+  Future<void> _confirmLogExpense(SavingGoal goal, String categoryId) async {
     try {
       final now        = DateTime.now();
       final monthStart = DateTime(now.year, now.month, 1);
@@ -867,7 +852,7 @@ class _SavingsPageState extends State<SavingsPage>
           .maybeSingle();
       final limit = (catRow?['monthly_limit'] as num?)?.toDouble();
 
-      if (limit != null) {
+      if (limit != null && limit > 0) {
         final summaryRows = await _supabase
             .from('Category_Summary')
             .select('total_expense, record_id')
@@ -887,15 +872,14 @@ class _SavingsPageState extends State<SavingsPage>
             if (ps != null && pe != null &&
                 !ps.isBefore(monthStart) &&
                 ps.isBefore(nextMonth)) {
-              currentExpense +=
-                  (sr['total_expense'] as num?)?.toDouble() ?? 0;
+              currentExpense += (sr['total_expense'] as num?)?.toDouble() ?? 0;
             }
           }
         }
 
         if (currentExpense + goal.targetAmount > limit) {
           if (!mounted) return;
-          // Show warning with Cancel / Continue options
+          // Show warning with Cancel / Continue — user can still proceed
           final proceed = await showDialog<bool>(
             context: context,
             barrierDismissible: false,
@@ -903,8 +887,7 @@ class _SavingsPageState extends State<SavingsPage>
               backgroundColor: Colors.transparent,
               child: Container(
                 decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(28)),
+                    color: Colors.white, borderRadius: BorderRadius.circular(28)),
                 padding: const EdgeInsets.all(24),
                 child: Column(mainAxisSize: MainAxisSize.min, children: [
                   const Text('⚠️', style: TextStyle(fontSize: 48)),
@@ -912,8 +895,7 @@ class _SavingsPageState extends State<SavingsPage>
                   const Text('Over Category Limit',
                       textAlign: TextAlign.center,
                       style: TextStyle(fontSize: 18,
-                          fontWeight: FontWeight.w900,
-                          color: AppColors.kText)),
+                          fontWeight: FontWeight.w900, color: AppColors.kText)),
                   const SizedBox(height: 10),
                   Text(
                     'Adding ${_fmtSar(goal.targetAmount)} SAR exceeds '
@@ -930,8 +912,7 @@ class _SavingsPageState extends State<SavingsPage>
                           padding: const EdgeInsets.symmetric(vertical: 13),
                           shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(14),
-                              side: const BorderSide(
-                                  color: Color(0xFFEEEEEE)))),
+                              side: const BorderSide(color: Color(0xFFEEEEEE)))),
                       child: const Text('Cancel',
                           style: TextStyle(color: Color(0xFFAAAAAA),
                               fontWeight: FontWeight.w700)),
@@ -940,8 +921,7 @@ class _SavingsPageState extends State<SavingsPage>
                     Expanded(child: ElevatedButton(
                       onPressed: () => Navigator.pop(ctx, true),
                       style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.kPurple,
-                          elevation: 0,
+                          backgroundColor: AppColors.kPurple, elevation: 0,
                           padding: const EdgeInsets.symmetric(vertical: 13),
                           shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(14))),
@@ -990,7 +970,7 @@ class _SavingsPageState extends State<SavingsPage>
       _recalculateBalances();
 
       if (mounted) setState(() => _activeFilter = GoalType.achieved);
-      if (mounted) _showTrophyDialog(goal);
+      if (mounted) await _showGoalStatusAlert('Achieved');
     } catch (e) {
       debugPrint('_confirmLogExpense error: $e');
       if (mounted) {
@@ -998,60 +978,6 @@ class _SavingsPageState extends State<SavingsPage>
             SnackBar(content: Text('Error logging expense: $e')));
       }
     }
-  }
-
-  void _showTrophyDialog(SavingGoal g) {
-    showDialog(
-      context: context,
-      builder: (ctx) => Dialog(
-        backgroundColor: Colors.transparent,
-        child: Container(
-          decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(28)),
-          padding: const EdgeInsets.all(24),
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            const Text('🏆', style: TextStyle(fontSize: 60)),
-            const SizedBox(height: 12),
-            const Text('Goal Achieved!',
-                style: TextStyle(fontSize: 22,
-                    fontWeight: FontWeight.w900,
-                    color: AppColors.kText)),
-            const SizedBox(height: 8),
-            Text('"${g.title}" has been logged as an expense.',
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 13,
-                    color: AppColors.kTextSoft, height: 1.5)),
-            const SizedBox(height: 14),
-            Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 18, vertical: 11),
-              decoration: BoxDecoration(
-                  color: AppColors.kYellowSoft,
-                  borderRadius: BorderRadius.circular(14)),
-              child: Text('🎉  ${_fmtSar(g.targetAmount)} SAR spent',
-                  style: const TextStyle(fontSize: 15,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.kYellow)),
-            ),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(ctx),
-              style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.kYellow,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14)),
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 32, vertical: 12)),
-              child: const Text('Woohoo! 🎊',
-                  style: TextStyle(color: Colors.white,
-                      fontWeight: FontWeight.w800)),
-            ),
-          ]),
-        ),
-      ),
-    );
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -1094,7 +1020,7 @@ class _SavingsPageState extends State<SavingsPage>
       builder: (ctx, child) => Theme(
         data: Theme.of(ctx).copyWith(
           colorScheme: const ColorScheme.light(
-              primary:   AppColors.kPurple,
+              primary: AppColors.kPurple,
               onPrimary: Colors.white,
               onSurface: AppColors.kText),
         ),
@@ -1105,8 +1031,7 @@ class _SavingsPageState extends State<SavingsPage>
     try {
       await _supabase
           .from('Goal')
-          .update({'target_date': picked.toIso8601String(),
-                   'status':      'Active'})
+          .update({'target_date': picked.toIso8601String(), 'status': 'Active'})
           .eq('goal_id', g.id);
       await _fetchGoals();
     } catch (e) {
@@ -1119,14 +1044,11 @@ class _SavingsPageState extends State<SavingsPage>
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(24)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         title: Text('Delete "${goal.title}"?',
             style: const TextStyle(fontSize: 16,
-                fontWeight: FontWeight.w800,
-                color: AppColors.kText)),
-        content: const Text(
-            'Budget assigned to this goal will be freed up.',
+                fontWeight: FontWeight.w800, color: AppColors.kText)),
+        content: const Text('Budget assigned to this goal will be freed up.',
             style: TextStyle(color: Color(0xFF888888), height: 1.5)),
         actions: [
           TextButton(
@@ -1143,18 +1065,14 @@ class _SavingsPageState extends State<SavingsPage>
                     borderRadius: BorderRadius.circular(12)),
                 elevation: 0),
             child: const Text('Delete',
-                style: TextStyle(color: Colors.white,
-                    fontWeight: FontWeight.w800)),
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800)),
           ),
         ],
       ),
     );
     if (confirm != true) return;
     try {
-      await _supabase
-          .from('Goal')
-          .delete()
-          .eq('goal_id', goal.id);
+      await _supabase.from('Goal').delete().eq('goal_id', goal.id);
       await _fetchGoals();
       _recalculateBalances();
     } catch (e) {
@@ -1185,16 +1103,14 @@ class _SavingsPageState extends State<SavingsPage>
         backgroundColor: Colors.transparent,
         child: Container(
           decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(28)),
+              color: Colors.white, borderRadius: BorderRadius.circular(28)),
           padding: const EdgeInsets.all(24),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             Text(emoji, style: const TextStyle(fontSize: 44)),
             const SizedBox(height: 12),
             Text(title,
                 style: const TextStyle(fontSize: 18,
-                    fontWeight: FontWeight.w900,
-                    color: AppColors.kText)),
+                    fontWeight: FontWeight.w900, color: AppColors.kText)),
             const SizedBox(height: 8),
             Text(msg,
                 textAlign: TextAlign.center,
@@ -1204,8 +1120,7 @@ class _SavingsPageState extends State<SavingsPage>
             ElevatedButton(
               onPressed: () => Navigator.pop(ctx),
               style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.kPurple,
-                  elevation: 0,
+                  backgroundColor: AppColors.kPurple, elevation: 0,
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14)),
                   padding: const EdgeInsets.symmetric(
@@ -1229,26 +1144,21 @@ class _SavingsPageState extends State<SavingsPage>
       : _goals.where((g) => g.type == _activeFilter).toList();
 
   static const _statusCfg = [
-    (type: null,                 label: '✨ All',     color: AppColors.kPurple),
-    (type: GoalType.active,      label: '⚡ Active',  color: AppColors.kBlue),
-    (type: GoalType.completed,   label: '🏁 Done',    color: AppColors.kGreen),
-    (type: GoalType.incompleted, label: '⏰ Missed',  color: AppColors.kPink),
-    (type: GoalType.achieved,    label: '🏆 Got it!', color: AppColors.kYellow),
+    (type: null,                 label: 'All',     color: AppColors.kPurple),
+    (type: GoalType.active,      label: 'Active',  color: AppColors.kBlue),
+    (type: GoalType.completed,   label: 'Done',    color: AppColors.kGreen),
+    (type: GoalType.incompleted, label: 'Missed',  color: AppColors.kPink),
+    (type: GoalType.achieved,    label: 'Got it!', color: AppColors.kYellow),
   ];
 
   @override
   Widget build(BuildContext context) {
     final screenH = MediaQuery.of(context).size.height;
     return Scaffold(
-      backgroundColor: const Color(0xFFF0EBFF), // matches bar painter colour
+      backgroundColor: const Color(0xFFF0EBFF),
       extendBody: true,
       bottomNavigationBar: ChildBottomBar(
-        selectedIndex:  1, // Savings tab
-        onTapSavings:   () {},
-        onTapDashboard: () => Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const DashboardPage()),
-        ),
+        selectedIndex: 1,
         onTapProfile: () => Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (_) => const ProfileMainPage()),
@@ -1264,9 +1174,7 @@ class _SavingsPageState extends State<SavingsPage>
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     _buildHeader(),
-                    SizedBox(
-                        height: screenH * 0.28,
-                        child: _buildHeroSection()),
+                    SizedBox(height: screenH * 0.28, child: _buildHeroSection()),
                     Expanded(
                       child: Padding(
                         padding: const EdgeInsets.fromLTRB(16, 0, 16, 80),
@@ -1300,8 +1208,7 @@ class _SavingsPageState extends State<SavingsPage>
           const Expanded(
             child: Text('My Savings',
                 style: TextStyle(fontSize: 24,
-                    fontWeight: FontWeight.w900,
-                    color: AppColors.kText)),
+                    fontWeight: FontWeight.w900, color: AppColors.kText)),
           ),
         ]),
       );
@@ -1330,21 +1237,17 @@ class _SavingsPageState extends State<SavingsPage>
           padding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
           child: Row(children: [
             Expanded(child: _statPill(
-              emoji:    '🪙',
-              label:    'Monthly Saved',
-              value:    _fmtSar(_assignedBalance),
-              color:    AppColors.kPurpleDark,
+              emoji: '🪙', label: 'Monthly Saved',
+              value: _fmtSar(_assignedBalance),
+              color: AppColors.kPurpleDark,
               barValue: _assignedBalance > 0 ? 1.0 : 0.0,
               barColor: AppColors.kPurple,
             )),
             const SizedBox(width: 10),
             Expanded(child: _statPill(
-              emoji:    '✨',
-              label:    'Free to Use',
-              value:    _fmtSar(_unassignedBalance),
-              color:    AppColors.kBlue,
-              barValue: 1.0,
-              barColor: AppColors.kBlue,
+              emoji: '🪙', label: 'Available Amount',
+              value: _fmtSar(_unassignedBalance),
+              color: AppColors.kBlue, barValue: 1.0, barColor: AppColors.kBlue,
             )),
           ]),
         ),
@@ -1353,55 +1256,42 @@ class _SavingsPageState extends State<SavingsPage>
   }
 
   Widget _statPill({
-    required String emoji,
-    required String label,
-    required String value,
-    required Color  color,
-    required double barValue,
-    required Color  barColor,
+    required String emoji, required String label, required String value,
+    required Color color, required double barValue, required Color barColor,
   }) =>
       Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
         decoration: BoxDecoration(
-          color:        Colors.white.withOpacity(0.45),
+          color: Colors.white.withOpacity(0.45),
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-              color: Colors.white.withOpacity(0.7), width: 1.2),
+          border: Border.all(color: Colors.white.withOpacity(0.7), width: 1.2),
         ),
         child: Row(children: [
           Text(emoji, style: const TextStyle(fontSize: 16)),
           const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-              Text(label,
-                  style: TextStyle(fontSize: 9.5,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.kText.withOpacity(0.5))),
-              const SizedBox(height: 2),
-              RichText(text: TextSpan(children: [
-                TextSpan(text: value,
-                    style: TextStyle(fontSize: 18,
-                        fontWeight: FontWeight.w900,
-                        color: color, height: 1.1)),
-                const TextSpan(text: ' SAR',
-                    style: TextStyle(fontSize: 9,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.kTextSoft)),
-              ])),
-              const SizedBox(height: 4),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(99),
-                child: LinearProgressIndicator(
-                  value:           barValue,
-                  minHeight:       3,
-                  backgroundColor: barColor.withOpacity(0.12),
-                  valueColor:      AlwaysStoppedAnimation<Color>(barColor),
-                ),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(label,
+                style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w700,
+                    color: AppColors.kText.withOpacity(0.5))),
+            const SizedBox(height: 2),
+            RichText(text: TextSpan(children: [
+              TextSpan(text: value,
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900,
+                      color: color, height: 1.1)),
+              const TextSpan(text: ' SAR',
+                  style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700,
+                      color: AppColors.kTextSoft)),
+            ])),
+            const SizedBox(height: 4),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(99),
+              child: LinearProgressIndicator(
+                value: barValue, minHeight: 3,
+                backgroundColor: barColor.withOpacity(0.12),
+                valueColor: AlwaysStoppedAnimation<Color>(barColor),
               ),
-            ]),
-          ),
+            ),
+          ])),
         ]),
       );
 
@@ -1409,10 +1299,10 @@ class _SavingsPageState extends State<SavingsPage>
     final filtered = _filtered;
     return Container(
       decoration: BoxDecoration(
-        color:        Colors.white,
+        color: Colors.white,
         borderRadius: BorderRadius.circular(32),
         boxShadow: [BoxShadow(
-            color:      AppColors.kPurple.withOpacity(0.13),
+            color: AppColors.kPurple.withOpacity(0.13),
             blurRadius: 28, offset: const Offset(0, 6))],
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -1421,19 +1311,16 @@ class _SavingsPageState extends State<SavingsPage>
           child: Row(children: [
             const Text('🎯', style: TextStyle(fontSize: 19)),
             const SizedBox(width: 8),
-            const Expanded(
-                child: Text('My Goals',
-                    style: TextStyle(fontSize: 17,
-                        fontWeight: FontWeight.w900,
-                        color: AppColors.kText))),
+            const Expanded(child: Text('My Goals',
+                style: TextStyle(fontSize: 17,
+                    fontWeight: FontWeight.w900, color: AppColors.kText))),
             GestureDetector(
               onTap: _openCreatePage,
               child: Container(
                 width: 34, height: 34,
                 decoration: const BoxDecoration(
                     color: AppColors.kPurple, shape: BoxShape.circle),
-                child: const Icon(Icons.add_rounded,
-                    color: Colors.white, size: 20),
+                child: const Icon(Icons.add_rounded, color: Colors.white, size: 20),
               ),
             ),
           ]),
@@ -1467,17 +1354,13 @@ class _SavingsPageState extends State<SavingsPage>
                           : [],
                     ),
                     child: Row(mainAxisSize: MainAxisSize.min, children: [
-                      Text(cfg.label.split(' ')[0],
-                          style: const TextStyle(fontSize: 11)),
-                      const SizedBox(width: 4),
-                      Text(cfg.label.split(' ').skip(1).join(' '),
+                      Text(cfg.label,
                           style: TextStyle(fontSize: 11,
                               fontWeight: FontWeight.w800,
                               color: isActive ? Colors.white : AppColors.kTextSoft)),
                       const SizedBox(width: 4),
                       Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 5, vertical: 1),
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                         decoration: BoxDecoration(
                           color: isActive
                               ? Colors.white.withOpacity(0.9)
@@ -1487,7 +1370,7 @@ class _SavingsPageState extends State<SavingsPage>
                         child: Text('$count',
                             style: TextStyle(fontSize: 10,
                                 fontWeight: FontWeight.w900,
-                                color: isActive ? cfg.color : cfg.color)),
+                                color: cfg.color)),
                       ),
                     ]),
                   ),
@@ -1527,7 +1410,7 @@ class _SavingsPageState extends State<SavingsPage>
                 style: TextStyle(fontSize: 13,
                     fontWeight: FontWeight.w900, color: AppColors.kText)),
             SizedBox(height: 2),
-            Text('Tap + to add one 🚀',
+            Text('Tap + to add one ',
                 style: TextStyle(fontSize: 11, color: AppColors.kTextSoft)),
           ]),
         ),
@@ -1543,13 +1426,13 @@ class _SavingsPageState extends State<SavingsPage>
     final String sText;
     switch (type) {
       case GoalType.active:
-        sColor = AppColors.kBlue;  sText = '$daysLeft d left'; break;
+        sColor = AppColors.kBlue;   sText = '$daysLeft d left'; break;
       case GoalType.completed:
-        sColor = AppColors.kGreen; sText = '🏁 Ready!';        break;
+        sColor = AppColors.kGreen;  sText = '🏁 Ready!';        break;
       case GoalType.incompleted:
-        sColor = AppColors.kPink;  sText = '⏰ Missed';         break;
+        sColor = AppColors.kPink;   sText = '⏰ Missed';         break;
       case GoalType.achieved:
-        sColor = AppColors.kYellow; sText = '🏆 Got it!';       break;
+        sColor = AppColors.kYellow; sText = '🏆 Got it!';        break;
     }
 
     final barColor = type == GoalType.incompleted ? AppColors.kPink
@@ -1569,7 +1452,7 @@ class _SavingsPageState extends State<SavingsPage>
           Container(
             width: 42, height: 42,
             decoration: BoxDecoration(
-                color:        sColor.withOpacity(0.16),
+                color: sColor.withOpacity(0.16),
                 borderRadius: BorderRadius.circular(12)),
             child: Center(
               child: Text(
@@ -1590,13 +1473,11 @@ class _SavingsPageState extends State<SavingsPage>
                     child: Text(goal.title, maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(fontSize: 13,
-                            fontWeight: FontWeight.w900,
-                            color: AppColors.kText)),
+                            fontWeight: FontWeight.w900, color: AppColors.kText)),
                   ),
                   const SizedBox(width: 4),
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 6, vertical: 2),
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
                         color: sColor.withOpacity(0.13),
                         borderRadius: BorderRadius.circular(20)),
@@ -1614,8 +1495,7 @@ class _SavingsPageState extends State<SavingsPage>
                         value:           goal.progress,
                         minHeight:       5,
                         backgroundColor: sColor.withOpacity(0.12),
-                        valueColor:
-                            AlwaysStoppedAnimation<Color>(barColor),
+                        valueColor:      AlwaysStoppedAnimation<Color>(barColor),
                       ),
                     ),
                   ),
@@ -1646,20 +1526,19 @@ class _SavingsPageState extends State<SavingsPage>
                   color: AppColors.kTextSoft.withOpacity(0.6), size: 20),
               color: Colors.white,
               elevation: 8,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14)),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
               onSelected: (v) async {
-                if (v == 'assign')     _openAssignSheet(goal);
-                if (v == 'buy')       _logExpense(goal);
-                if (v == 'edit')      _openEditPage(goal);
-                if (v == 'delete')    _deleteGoal(goal);
+                if (v == 'assign')      _openAssignSheet(goal);
+                if (v == 'buy')        _logExpense(goal);
+                if (v == 'edit')       _openEditPage(goal);
+                if (v == 'delete')     _deleteGoal(goal);
                 if (v == 'reschedule') _rescheduleGoal(goal);
               },
               itemBuilder: (_) {
                 final items = <PopupMenuEntry<String>>[];
                 if (type == GoalType.active) {
                   items.add(_menuItem('assign', Icons.savings_rounded,
-                      AppColors.kPurple, AppColors.kPurpleSoft, 'Assign money'));
+                      AppColors.kPurple, AppColors.kPurpleSoft, 'Assign/Unassign'));
                 } else if (type == GoalType.completed) {
                   items.add(_menuItem('buy', Icons.shopping_bag_rounded,
                       AppColors.kGreen, AppColors.kGreenSoft, 'Mark as bought'));
@@ -1717,8 +1596,7 @@ class _SavingsPageState extends State<SavingsPage>
           ),
           child: Center(
               child: Text(label,
-                  style: TextStyle(fontSize: 13,
-                      fontWeight: FontWeight.w800,
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800,
                       color: active ? Colors.white : Colors.grey.shade400))),
         ),
       );

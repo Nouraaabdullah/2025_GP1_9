@@ -1282,17 +1282,19 @@ class _SavingsPageState extends State<SavingsPage>
           padding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
           child: Row(children: [
             Expanded(child: _statPill(
-              emoji: '🪙', label: 'Monthly Saved',
+              emoji: '🪙', label: 'Total Monthly Saving',
               value: _fmtSar(_assignedBalance),
               color: AppColors.kPurpleDark,
               barValue: _assignedBalance > 0 ? 1.0 : 0.0,
               barColor: AppColors.kPurple,
+              tooltip: 'Total Savings includes all the money you’ve saved across previous months, showing your overall accumulated savings.',
             )),
             const SizedBox(width: 10),
             Expanded(child: _statPill(
               emoji: '🪙', label: 'Available Amount',
               value: _fmtSar(_unassignedBalance),
               color: AppColors.kBlue, barValue: 1.0, barColor: AppColors.kBlue,
+              tooltip: 'Your current balance — money available to spend or assign to goals.',
             )),
           ]),
         ),
@@ -1303,6 +1305,7 @@ class _SavingsPageState extends State<SavingsPage>
   Widget _statPill({
     required String emoji, required String label, required String value,
     required Color color, required double barValue, required Color barColor,
+    String? tooltip,
   }) =>
       Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
@@ -1315,9 +1318,62 @@ class _SavingsPageState extends State<SavingsPage>
           Text(emoji, style: const TextStyle(fontSize: 16)),
           const SizedBox(width: 8),
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(label,
-                style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w700,
-                    color: AppColors.kText.withOpacity(0.5))),
+            Row(children: [
+              Expanded(
+                child: Text(label,
+                    style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w700,
+                        color: AppColors.kText.withOpacity(0.5))),
+              ),
+              if (tooltip != null)
+                GestureDetector(
+                  onTap: () => showModalBottomSheet(
+                    context: context,
+                    backgroundColor: Colors.transparent,
+                    builder: (ctx) => Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+                      padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(24),
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(children: [
+                            Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: BoxDecoration(
+                                color: color.withOpacity(0.12),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(Icons.info_outline_rounded, color: color, size: 16),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(label,
+                                style: TextStyle(color: AppColors.kText,
+                                    fontWeight: FontWeight.w800, fontSize: 15)),
+                          ]),
+                          const SizedBox(height: 12),
+                          Text(tooltip,
+                              style: const TextStyle(color: AppColors.kTextSoft,
+                                  height: 1.5, fontSize: 13)),
+                          const SizedBox(height: 20),
+                          Center(child: Container(
+                            width: 40, height: 4,
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade200,
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                          )),
+                        ],
+                      ),
+                    ),
+                  ),
+                  child: Icon(Icons.info_outline_rounded,
+                      size: 13, color: AppColors.kText.withOpacity(0.35)),
+                ),
+            ]),
             const SizedBox(height: 2),
             RichText(text: TextSpan(children: [
               TextSpan(text: value,

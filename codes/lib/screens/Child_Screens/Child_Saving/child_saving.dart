@@ -7,7 +7,7 @@ import '../../../utils/auth_helpers.dart';
 import 'create_goal_page.dart';
 import 'edit_goal_page.dart';
 import '/../widgets/child_bottom_nav_bar.dart';
-import '../Child_Profile/child_profile.dart';
+import '../Child_Profile/child_profile.dart'; // ✅ replaced profile_main.dart
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -260,7 +260,6 @@ class _SavingsPageState extends State<SavingsPage>
         final saved  = _computeSaved(tList);
         final target = (row['target_amount'] as num?)?.toDouble() ?? 0;
 
-        // Robust target_date parsing — handles String, DateTime, or null
         DateTime? td;
         final rawDate = row['target_date'];
         if (rawDate != null) {
@@ -274,13 +273,10 @@ class _SavingsPageState extends State<SavingsPage>
 
         final String dbStatus = (row['status'] as String?) ?? 'Active';
 
-        // ── LOCAL expiry override — UI reflects correct status immediately ──
-        // We keep dbStatus stored separately so _checkAndUpdateGoalStatus
-        // can compare against the TRUE DB value (not the local override).
         final bool expired = _isExpired(td);
         String effectiveStatus = dbStatus;
         if (expired && dbStatus.toLowerCase() == 'active') {
-          effectiveStatus = 'Incompleted';
+          effectiveStatus = 'Incomplete';
         }
 
         debugPrint(
@@ -295,14 +291,12 @@ class _SavingsPageState extends State<SavingsPage>
           savedAmount:  saved,
           targetDate:   td,
           type:         _goalTypeFromString(effectiveStatus),
-          dbStatus:     dbStatus, // store original DB value
+          dbStatus:     dbStatus,
         ));
       }
 
       if (mounted) setState(() { _goals = built; _loading = false; });
 
-      // Persist effective statuses to DB in background
-      // Passes dbStatus so the comparison is always DB-value vs computed-value
       for (final g in built) {
         if (g.type != GoalType.achieved) {
           await _checkAndUpdateGoalStatus(g);
@@ -397,38 +391,102 @@ class _SavingsPageState extends State<SavingsPage>
     final now   = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final d     = DateTime(targetDate.year, targetDate.month, targetDate.day);
-    return today.isAfter(d); // strictly after — same day is NOT expired
+    return !today.isBefore(d); // expired if today is ON or AFTER the target date
   }
 
   String _computeNewStatus(SavingGoal g) {
     if (g.savedAmount >= g.targetAmount && g.targetAmount > 0) return 'Completed';
-    if (_isExpired(g.targetDate)) return 'Incompleted';
+    if (_isExpired(g.targetDate)) return 'Incomplete';
     return 'Active';
   }
 
-  /// Compares the ORIGINAL dbStatus (not the locally-overridden type) so the
-  /// write always fires when the real DB value differs from what it should be.
   Future<void> _checkAndUpdateGoalStatus(SavingGoal g) async {
-    final newStatus = _computeNewStatus(g);
-
-    // Compare against the actual DB value — prevents skipping when the local
-    // override already changed g.type but the DB still holds the old value.
-    if (newStatus == g.dbStatus) {
-      debugPrint('[StatusCheck] ${g.id} unchanged ($newStatus)');
-      return;
-    }
-
     try {
-      await _supabase
+      // ── 1. Re-fetch transfers to get the true assigned amount ──────────
+      final transfers = await _supabase
+          .from('Goal_Transfer')
+          .select('amount, direction')
+          .eq('goal_id', g.id);
+
+      double totalAssigned = 0.0;
+      for (final t in (transfers as List? ?? [])) {
+        final amt = (t['amount'] ?? 0).toDouble();
+        final dir = (t['direction'] ?? '').toString().toLowerCase();
+        if (dir == 'assign')   totalAssigned += amt;
+        if (dir == 'unassign') totalAssigned -= amt;
+      }
+      totalAssigned = totalAssigned.clamp(0, double.infinity);
+
+      // ── 2. Re-fetch the goal row fresh from DB ─────────────────────────
+      final goalRow = await _supabase
+          .from('Goal')
+          .select('target_amount, status, target_date')
+          .eq('goal_id', g.id)
+          .maybeSingle();
+
+      if (goalRow == null) return;
+
+      final target     = (goalRow['target_amount'] ?? 0).toDouble();
+      final oldStatus  = (goalRow['status'] as String?) ?? 'Active';
+
+      // robust target_date parse
+      DateTime? targetDate;
+      final raw = goalRow['target_date'];
+      if (raw != null) {
+        if (raw is DateTime) {
+          targetDate = DateTime(raw.year, raw.month, raw.day);
+        } else if (raw is String && raw.trim().isNotEmpty) {
+          final dt = DateTime.parse(raw.trim());
+          targetDate = DateTime(dt.year, dt.month, dt.day);
+        }
+      }
+
+      final expired = _isExpired(targetDate);
+
+      // ── 3. Decide the correct status ───────────────────────────────────
+      final String newStatus;
+      if (totalAssigned >= target && target > 0) {
+        newStatus = 'Completed';
+      } else if (expired) {
+        newStatus = 'Incomplete';
+      } else {
+        newStatus = 'Active';
+      }
+
+      debugPrint(
+        '[StatusCheck] goal=${g.id}, assigned=$totalAssigned, '
+        'target=$target, expired=$expired, old=$oldStatus, new=$newStatus',
+      );
+
+      // ── 4. Only write if something actually changed ────────────────────
+      if (newStatus == oldStatus) {
+        debugPrint('[StatusCheck] ${g.id} unchanged ($newStatus)');
+        return;
+      }
+
+      final result = await _supabase
           .from('Goal')
           .update({'status': newStatus})
-          .eq('goal_id', g.id);
-      debugPrint('[StatusCheck] ${g.id} DB updated: ${g.dbStatus} → $newStatus');
+          .eq('goal_id', g.id)
+          .select('goal_id, status');
 
-      // Show status alert dialog (same style as adult page)
+      debugPrint('[StatusCheck] ${g.id} DB updated: $oldStatus → $newStatus | result: $result');
+
+      if (mounted && (result as List).isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(backgroundColor: Colors.red, content: Text('DB write returned 0 rows for ${g.id} — RLS may be blocking update')),
+        );
+        return;
+      }
+
       if (mounted) await _showGoalStatusAlert(newStatus);
     } catch (e) {
       debugPrint('_checkAndUpdateGoalStatus error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(backgroundColor: Colors.red, content: Text('Status update error: $e')),
+        );
+      }
     }
   }
 
@@ -436,13 +494,13 @@ class _SavingsPageState extends State<SavingsPage>
     switch (t) {
       case GoalType.achieved:    return 'Achieved';
       case GoalType.completed:   return 'Completed';
-      case GoalType.incompleted: return 'Incompleted';
+      case GoalType.incompleted: return 'Incomplete';
       case GoalType.active:      return 'Active';
     }
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  // STATUS ALERT DIALOGS (same style as adult page)
+  // STATUS ALERT DIALOGS
   // ─────────────────────────────────────────────────────────────────────────
 
   Future<void> _showGoalStatusAlert(String status) {
@@ -879,7 +937,6 @@ class _SavingsPageState extends State<SavingsPage>
 
         if (currentExpense + goal.targetAmount > limit) {
           if (!mounted) return;
-          // Show warning with Cancel / Continue — user can still proceed
           final proceed = await showDialog<bool>(
             context: context,
             barrierDismissible: false,
@@ -1159,7 +1216,7 @@ class _SavingsPageState extends State<SavingsPage>
       extendBody: true,
       bottomNavigationBar: ChildBottomBar(
         selectedIndex: 1,
-        onTapProfile: () => Navigator.pushReplacement(
+        onTapProfile: () => Navigator.pushReplacement( // ✅ now goes to ChildProfilePage
           context,
           MaterialPageRoute(builder: (_) => const ChildProfilePage()),
         ),
@@ -1177,7 +1234,7 @@ class _SavingsPageState extends State<SavingsPage>
                     SizedBox(height: screenH * 0.28, child: _buildHeroSection()),
                     Expanded(
                       child: Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 80),
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 130),
                         child: _buildGoalsCard(),
                       ),
                     ),
@@ -1191,18 +1248,6 @@ class _SavingsPageState extends State<SavingsPage>
   Widget _buildHeader() => Padding(
         padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
         child: Row(children: [
-          GestureDetector(
-            onTap: () => Navigator.maybePop(context),
-            child: Container(
-              width: 40, height: 40,
-              decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.5),
-                  shape: BoxShape.circle),
-              child: const Icon(Icons.chevron_left_rounded,
-                  color: AppColors.kText, size: 24),
-            ),
-          ),
-          const SizedBox(width: 10),
           const Text('🐷', style: TextStyle(fontSize: 26)),
           const SizedBox(width: 8),
           const Expanded(

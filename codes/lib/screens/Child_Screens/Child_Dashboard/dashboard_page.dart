@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:surra_application/screens/Child_Screens/Child_Profile/child_profile.dart';
 import 'package:surra_application/screens/Child_Screens/Child_Saving/child_saving.dart';
+import 'package:surra_application/screens/Child_Screens/Child_Chatbot/chatbot_screen.dart';
 
 import '../../../theme/app_theme.dart';
 import '../../../widgets/kid_widgets.dart';
@@ -993,6 +994,12 @@ return Scaffold(
             builder: (_) => const ChildProfilePage(),
           ),
         ),
+          onTapAssistant: () => Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const ChildFAQScreen(),
+            ),
+          ),
         onTapAdd: () {
           Navigator.of(context).push(
             MaterialPageRoute(

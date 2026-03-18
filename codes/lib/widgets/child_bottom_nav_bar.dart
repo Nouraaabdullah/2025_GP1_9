@@ -1,6 +1,7 @@
 // lib/widgets/child_bottom_nav_bar.dart
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:surra_application/screens/Child_Screens/Child_Chatbot/chatbot_screen.dart';
 
 import '../screens/Child_Screens/Child_Saving/child_saving.dart' as child;
 import '../screens/Child_Screens/Child_Log/log_transaction_manually.dart' show ChildLogTransactionManuallyPage;
@@ -150,9 +151,7 @@ class ChildBottomBar extends StatelessWidget {
                             if (context.mounted) {
                               Navigator.push(context,
                                   MaterialPageRoute(
-                                      builder: (_) => ChatBotScreen(
-                                            profileId: profileId,
-                                            userId:    userId,
+                                      builder: (_) => ChildFAQScreen(
                                           )));
                             }
                           },

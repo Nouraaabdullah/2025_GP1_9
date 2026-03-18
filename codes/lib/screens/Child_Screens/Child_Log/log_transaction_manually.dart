@@ -321,40 +321,106 @@ class _ChildLogTransactionManuallyPageState
     );
   }
 
-  Future<void> _showSuccessDialog(String message) async {
-    await _showKidDialog(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Text(
-            'Done!',
-            style: TextStyle(
-              fontFamily: AppTextStyles.fredoka,
-              fontSize: 22,
-              color: AppColors.kText,
-            ),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            message,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontFamily: AppTextStyles.nunito,
-              fontSize: 14,
-              fontWeight: FontWeight.w800,
-              color: AppColors.kTextSoft,
-              height: 1.4,
-            ),
-          ),
-          const SizedBox(height: 16),
-          KidPrimaryButton(
-            label: 'OK',
-            onTap: () => Navigator.of(context, rootNavigator: true).pop(),
-          ),
-        ],
+Future<void> _showSuccessDialog(String message) async {
+  await showDialog<void>(
+    context: context,
+    barrierDismissible: true,
+    builder: (ctx) => Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(40),
       ),
-    );
-  }
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(32),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.kPurple.withOpacity(0.15),
+              blurRadius: 30,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppColors.kGreenSoft,
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.kGreen.withOpacity(0.4),
+                    blurRadius: 18,
+                    spreadRadius: 2,
+                  ),
+                ],
+                border: Border.all(color: AppColors.kGreen, width: 3),
+              ),
+              child: const Center(
+                child: Icon(
+                  Icons.check_circle_outline,
+                  color: AppColors.kGreen,
+                  size: 42,
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+            const Text(
+              'Done!',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: AppColors.kText,
+                fontSize: 22,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: AppColors.kTextSoft,
+                fontSize: 14,
+                height: 1.5,
+              ),
+            ),
+            const SizedBox(height: 28),
+            SizedBox(
+              width: 120,
+              height: 44,
+              child: ElevatedButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.kPurple,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  elevation: 16,
+                  shadowColor: AppColors.kPurple.withOpacity(0.5),
+                ),
+                child: const Text(
+                  'OK',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    ),
+  );
+}
 
   Future<void> _showWarningDialog(String message) async {
     await _showKidDialog(
@@ -938,32 +1004,86 @@ class _ChildLogTransactionManuallyPageState
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final isEarning = _type == 'Earning';
+@override
+Widget build(BuildContext context) {
+  final isEarning = _type == 'Earning';
 
-    return KidScaffold(
-      child: Stack(
-        children: [
-          const KidBubbles(),
+  return Scaffold(
+    body: Stack(
+      children: [
+        Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              stops: [0.0, 0.45, 1.0],
+              colors: [
+                Color(0xFFD4B3F5),
+                Color(0xFFB8D4F8),
+                Color(0xFFF7B8D4),
+              ],
+            ),
+          ),
+        ),
 
-          SafeArea(
+        Container(
+          height: 230,
+          width: double.infinity,
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFF9B6FFF), Color(0xFF6C8FFF)],
+            ),
+            borderRadius: BorderRadius.only(
+              bottomLeft: Radius.circular(40),
+              bottomRight: Radius.circular(40),
+            ),
+          ),
+        ),
+
+        const KidBubbles(),
+
+        SafeArea(
+          bottom: false,
+          child: Align(
+            alignment: Alignment.topCenter,
+            child: GestureDetector(
+              onTap: () => Navigator.pop(context),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: const [
+                  SizedBox(height: 8),
+                  Text(
+                    'Back',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 22,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  SizedBox(height: 6),
+                  Icon(Icons.expand_more, color: Colors.white),
+                ],
+              ),
+            ),
+          ),
+        ),
+
+        Positioned(
+          top: 150,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          child: SafeArea(
+            top: false,
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(18, 58, 18, 18),
+              padding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
               child: SingleChildScrollView(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: KidBackButton(
-                        onTap: () => Navigator.pop(context),
-                      ),
-                    ),
                     const SizedBox(height: 12),
-
-                    const SizedBox(height: 12),
-
                     const Text(
                       'Log Transaction',
                       textAlign: TextAlign.center,
@@ -1019,38 +1139,31 @@ class _ChildLogTransactionManuallyPageState
                                       ),
                                     ),
                                   ),
-                                  GestureDetector(
-                                    onTap: () async {
-                                      try {
-                                        final created = await _createCategoryDialog();
-                                        await _loadCategories();
-                                        setState(() {
-                                          _selectedCategory = created;
-                                          _categoryErrorText = null;
-                                        });
-                                      } catch (_) {}
-                                    },
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                                      decoration: BoxDecoration(
-                                        color: AppColors.kPurple.withOpacity(0.12),
-                                        borderRadius: BorderRadius.circular(12),
-                                        border: Border.all(
-                                          color: AppColors.kPurple.withOpacity(0.35),
-                                          width: 1.5,
-                                        ),
-                                      ),
-                                      child: const Text(
-                                        'Add',
-                                        style: TextStyle(
-                                          fontFamily: AppTextStyles.nunito,
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w900,
-                                          color: AppColors.kPurple,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
+GestureDetector(
+  onTap: () async {
+    try {
+      final created = await _createCategoryDialog();
+      await _loadCategories();
+      setState(() {
+        _selectedCategory = created;
+        _categoryErrorText = null;
+      });
+    } catch (_) {}
+  },
+  child: Container(
+    width: 42,
+    height: 42,
+    decoration: const BoxDecoration(
+      color: AppColors.kPurple,
+      shape: BoxShape.circle,
+    ),
+    child: const Icon(
+      Icons.add_rounded,
+      color: Colors.white,
+      size: 24,
+    ),
+  ),
+),
                                 ],
                               ),
                               const SizedBox(height: 8),
@@ -1229,10 +1342,11 @@ class _ChildLogTransactionManuallyPageState
               ),
             ),
           ),
-        ],
-      ),
-    );
-  }
+        ),
+      ],
+    ),
+  );
+}
 
   String _fmt(DateTime d) {
     return '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';

@@ -5,7 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../screens/Child_Screens/Child_Saving/child_saving.dart' as child;
 import '../screens/Child_Screens/Child_Log/log_transaction_manually.dart' show ChildLogTransactionManuallyPage;
 import '../screens/chatbot/chatbot_screen.dart';
-import '../screens/dashboard/dashboard_page.dart';
+import '../screens/Child_Screens/Child_Dashboard/dashboard_page.dart' as child_dashboard;
 import '../utils/auth_helpers.dart';
 
 // ── Kid theme colours ─────────────────────────────────────────────────────────
@@ -124,11 +124,13 @@ class ChildBottomBar extends StatelessWidget {
                           isSelected:  selectedIndex == 2,
                           activeColor: const Color(0xFF34D399),
                           onTap: onTapDashboard ?? () =>
-                              Navigator.pushReplacement(context,
-                                  MaterialPageRoute(
-                                      builder: (_) => DashboardPage())),
+                              Navigator.pushReplacement(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => const child_dashboard.DashboardPage(),
+                                ),
+                              ),
                         )),
-
                         // Assistant
                         Expanded(child: _NavItem(
                           icon:        Icons.smart_toy_outlined,

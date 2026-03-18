@@ -7,7 +7,7 @@ import '../../../utils/auth_helpers.dart';
 import 'create_goal_page.dart';
 import 'edit_goal_page.dart';
 import '/../widgets/child_bottom_nav_bar.dart';
-import '../../profile/profile_main.dart';
+import '../Child_Profile/child_profile.dart';
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1161,7 +1161,7 @@ class _SavingsPageState extends State<SavingsPage>
         selectedIndex: 1,
         onTapProfile: () => Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (_) => const ProfileMainPage()),
+          MaterialPageRoute(builder: (_) => const ChildProfilePage()),
         ),
       ),
       body: Container(

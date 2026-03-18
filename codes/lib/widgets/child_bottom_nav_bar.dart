@@ -1,45 +1,73 @@
-// lib/widgets/child_bottom_bar.dart
+// lib/widgets/child_bottom_nav_bar.dart
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../screens/Child_Screens/Child_Saving/child_saving.dart' as child;
-import '../screens/profile/profile_main.dart';
-import '../screens/log/log_transaction_manually.dart';
+import '../screens/Child_Screens/Child_Log/log_transaction_manually.dart' show ChildLogTransactionManuallyPage;
 import '../screens/chatbot/chatbot_screen.dart';
 import '../screens/dashboard/dashboard_page.dart';
 import '../utils/auth_helpers.dart';
 
 // ── Kid theme colours ─────────────────────────────────────────────────────────
-const _kPurple    = Color(0xFF8B5CF6);
-const _kTextSoft  = Color(0xFF7C6FA0);
-const _kText      = Color(0xFF2D1B69);
-const _kCardBg    = Color(0xFFF5F0FF); // very light lavender — same feel as kidBg
+const _kPurple   = Color(0xFF8B5CF6);
+const _kTextSoft = Color(0xFF7C6FA0);
+const _kText     = Color(0xFF2D1B69);
+const _kCardBg   = Color(0xFFF5F0FF);
 
 class ChildBottomBar extends StatelessWidget {
-  final VoidCallback  onTapDashboard;
-  final VoidCallback  onTapSavings;
+  final VoidCallback? onTapDashboard;
+  final VoidCallback? onTapSavings;
   final VoidCallback? onTapProfile;
   final VoidCallback? onTapAssistant;
   final VoidCallback? onTapAdd;
-  final int           selectedIndex; // 0=Profile 1=Savings 2=Dashboard 3=Assistant
+
+  /// 0=Profile  1=Savings  2=Dashboard  3=Assistant
+  final int selectedIndex;
+
+  /// Pass this from every screen that uses ChildBottomBar so the bar
+  /// can navigate to ChildProfilePage WITHOUT importing it directly
+  /// (which would cause a circular import since child_profile.dart
+  /// imports this file).
+  ///
+  /// Usage on child_profile.dart (already on profile, do nothing):
+  ///   ChildBottomBar(
+  ///     selectedIndex: 0,
+  ///     onTapProfile: () {},
+  ///     profilePageBuilder: () => const ChildProfilePage(),
+  ///   )
+  ///
+  /// Usage on every other child screen:
+  ///   ChildBottomBar(
+  ///     selectedIndex: 2,
+  ///     profilePageBuilder: () => const ChildProfilePage(),
+  ///   )
+  final Widget Function()? profilePageBuilder;
 
   const ChildBottomBar({
     super.key,
-    required this.onTapDashboard,
-    required this.onTapSavings,
+    this.onTapDashboard,
+    this.onTapSavings,
     this.selectedIndex = -1,
     this.onTapProfile,
     this.onTapAssistant,
     this.onTapAdd,
+    this.profilePageBuilder,
   });
 
-  static const _heroTag = 'child-add-fab';
+  void _defaultGoToProfile(BuildContext context) {
+    final builder = profilePageBuilder;
+    if (builder == null) return;
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => builder()),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return Stack(
       clipBehavior: Clip.none,
-      alignment:    Alignment.topCenter,
+      alignment: Alignment.topCenter,
       children: [
         SizedBox(
           height: 110,
@@ -47,7 +75,7 @@ class ChildBottomBar extends StatelessWidget {
             clipBehavior: Clip.none,
             children: [
 
-              // ── Curved bar — light lavender ───────────────────────────
+              // ── Curved bar ───────────────────────────────────────────
               Positioned(
                 left: 0, right: 0, bottom: 0,
                 child: CustomPaint(
@@ -56,7 +84,7 @@ class ChildBottomBar extends StatelessWidget {
                 ),
               ),
 
-              // ── Icon row ──────────────────────────────────────────────
+              // ── Icon row ─────────────────────────────────────────────
               Positioned.fill(
                 child: SafeArea(
                   child: Padding(
@@ -71,10 +99,7 @@ class ChildBottomBar extends StatelessWidget {
                           label:       'Profile',
                           isSelected:  selectedIndex == 0,
                           activeColor: _kPurple,
-                          onTap: onTapProfile ?? () =>
-                              Navigator.pushReplacement(context,
-                                  MaterialPageRoute(
-                                      builder: (_) => const ProfileMainPage())),
+                          onTap: onTapProfile ?? () => _defaultGoToProfile(context),
                         )),
 
                         // Savings
@@ -83,7 +108,10 @@ class ChildBottomBar extends StatelessWidget {
                           label:       'Savings',
                           isSelected:  selectedIndex == 1,
                           activeColor: const Color(0xFF60A5FA),
-                          onTap:       onTapSavings,
+                          onTap: onTapSavings ?? () =>
+                              Navigator.pushReplacement(context,
+                                  MaterialPageRoute(
+                                      builder: (_) => child.SavingsPage())),
                         )),
 
                         // Empty centre slot for FAB
@@ -95,7 +123,10 @@ class ChildBottomBar extends StatelessWidget {
                           label:       'Dashboard',
                           isSelected:  selectedIndex == 2,
                           activeColor: const Color(0xFF34D399),
-                          onTap:       onTapDashboard,
+                          onTap: onTapDashboard ?? () =>
+                              Navigator.pushReplacement(context,
+                                  MaterialPageRoute(
+                                      builder: (_) => DashboardPage())),
                         )),
 
                         // Assistant
@@ -106,13 +137,11 @@ class ChildBottomBar extends StatelessWidget {
                           activeColor: const Color(0xFFF472B6),
                           onTap: onTapAssistant ?? () async {
                             final profileId = await getProfileId(context);
-                            final userId    = Supabase.instance.client
-                                .auth.currentUser?.id;
+                            final userId = Supabase.instance.client.auth.currentUser?.id;
                             if (profileId == null) {
                               if (context.mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                        content: Text('Unable to load profile.')));
+                                    const SnackBar(content: Text('Unable to load profile.')));
                               }
                               return;
                             }
@@ -135,13 +164,13 @@ class ChildBottomBar extends StatelessWidget {
           ),
         ),
 
-        // ── Centre FAB ────────────────────────────────────────────────────
+        // ── Centre FAB ───────────────────────────────────────────────────
         Positioned(
-          top: -18,
+          top: -4,
           child: _FabButton(
             onTap: onTapAdd ?? () => Navigator.of(context).push(
               MaterialPageRoute(
-                builder:         (_) => const LogTransactionManuallyPage(),
+                builder:         (_) => const ChildLogTransactionManuallyPage(),
                 fullscreenDialog: true,
               ),
             ),
@@ -152,7 +181,7 @@ class ChildBottomBar extends StatelessWidget {
   }
 }
 
-// ── Nav item — icon + label, bubble when selected ─────────────────────────────
+// ── Nav item ──────────────────────────────────────────────────────────────────
 class _NavItem extends StatelessWidget {
   final IconData     icon;
   final String       label;
@@ -204,7 +233,6 @@ class _NavItem extends StatelessWidget {
                 maxLines:  1,
                 overflow:  TextOverflow.clip,
                 textAlign: TextAlign.center),
-
           ],
         ),
       ),
@@ -254,25 +282,22 @@ class _FabButtonState extends State<_FabButton> {
               ),
             ],
           ),
-          child: const Icon(Icons.add_rounded,
-              color: Colors.white, size: 28),
+          child: const Icon(Icons.add_rounded, color: Colors.white, size: 28),
         ),
       ),
     );
   }
 }
 
-// ── Curved bar painter — light lavender bar, same path as adult ───────────────
+// ── Curved bar painter ────────────────────────────────────────────────────────
 class _KidBarPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
-    // Soft shadow
     final shadowPaint = Paint()
       ..color      = const Color(0x208B5CF6)
       ..style      = PaintingStyle.fill
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10);
 
-    // Bar fill — light lavender matching the page
     final fillPaint = Paint()
       ..color = const Color(0xFFF0EBFF)
       ..style = PaintingStyle.fill;
@@ -288,19 +313,15 @@ class _KidBarPainter extends CustomPainter {
     path.lineTo(0, 40);
     path.quadraticBezierTo(0, 25, 15, 20);
     path.lineTo(size.width * 0.35, 20);
-    path.quadraticBezierTo(
-        size.width * 0.38, 20, size.width * 0.40, 25);
-    path.quadraticBezierTo(
-        size.width * 0.43, 35, size.width * 0.45, 50);
+    path.quadraticBezierTo(size.width * 0.38, 20, size.width * 0.40, 25);
+    path.quadraticBezierTo(size.width * 0.43, 35, size.width * 0.45, 50);
     path.arcToPoint(
       Offset(size.width * 0.55, 50),
       radius:    const Radius.circular(30),
       clockwise: false,
     );
-    path.quadraticBezierTo(
-        size.width * 0.57, 35, size.width * 0.60, 25);
-    path.quadraticBezierTo(
-        size.width * 0.62, 20, size.width * 0.65, 20);
+    path.quadraticBezierTo(size.width * 0.57, 35, size.width * 0.60, 25);
+    path.quadraticBezierTo(size.width * 0.62, 20, size.width * 0.65, 20);
     path.lineTo(size.width - 15, 20);
     path.quadraticBezierTo(size.width, 25, size.width, 40);
     path.lineTo(size.width, size.height);

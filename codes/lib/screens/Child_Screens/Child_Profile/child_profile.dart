@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:surra_application/utils/auth_helpers.dart';
 import 'child_category_details.dart';
+import '/../widgets/child_bottom_nav_bar.dart';
+
 
 
 class KidCategory {
@@ -964,11 +966,19 @@ class _ChildProfilePageState
   ) {
     return Scaffold(
       backgroundColor: Colors.transparent,
+      extendBody: true,
+      // ── The bar handles its own navigation internally via its own imports ──
+bottomNavigationBar: ChildBottomBar(
+  selectedIndex: 0,
+  onTapProfile: () {}, // already here, do nothing
+  profilePageBuilder: () => const ChildProfilePage(), // ← add this
+),
       body: Container(
         decoration: const BoxDecoration(
           gradient: _kidBg,
         ),
         child: SafeArea(
+          bottom: false,
           child: _loading
               ? const Center(
                   child: CircularProgressIndicator(),
@@ -1775,83 +1785,54 @@ class _ChildAddCategoryPageState
     Color
   >
   _colorOptions = [
-    // Purple
     const Color.fromARGB(
       255,
       246,
       92,
       92,
     ),
-
-    // Deep Violet
     const Color(
       0xFF6D28D9,
     ),
-
-    // Pink
     const Color(
       0xFFF472B6,
     ),
-
-    // Mint Green
     const Color.fromARGB(
       255,
       179,
       211,
       52,
     ),
-
-    // Sky Blue
     const Color(
       0xFF60A5FA,
     ),
-
-    // Golden Yellow
     const Color(
       0xFFFBBF24,
     ),
-
-    // Orange
     const Color(
       0xFFFB923C,
     ),
-
-    // Coral Red
     const Color(
       0xFFFF6B6B,
     ),
-
-    // Lavender
     const Color(
       0xFFA78BFA,
     ),
-
-    // Teal
     const Color(
       0xFF2DD4BF,
     ),
-
-    // Bright Magenta
     const Color(
       0xFFE879F9,
     ),
-
-    // Lime Green
     const Color(
       0xFF4ADE80,
     ),
-
-    // NEW — Aqua Blue
     const Color(
       0xFF22D3EE,
     ),
-
-    // NEW — Hot Pink
     const Color(
       0xFFEC4899,
     ),
-
-    // NEW — Indigo Blue
     const Color.fromARGB(
       255,
       241,

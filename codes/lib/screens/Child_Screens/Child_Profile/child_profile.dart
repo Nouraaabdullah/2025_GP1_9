@@ -4,8 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:surra_application/utils/auth_helpers.dart';
 import 'child_category_details.dart';
 import '/../widgets/child_bottom_nav_bar.dart';
-
-
+import 'edit_child_profile_page.dart';
 
 class KidCategory {
   final String categoryId;
@@ -149,6 +148,7 @@ class _ChildProfilePageState
   bool _isRefreshing = false;
 
   String _childName = 'Kid';
+  String _childIcon = '⭐';
   double _balance = 0.0;
   double _spent = 0.0;
   double _earned = 0.0;
@@ -406,6 +406,19 @@ class _ChildProfilePageState
           )
           .maybeSingle();
 
+      final childRelation = await _sb
+          .from(
+            'Child_Guardian',
+          )
+          .select(
+            'icon',
+          )
+          .eq(
+            'child_id',
+            profileId,
+          )
+          .maybeSingle();
+
       final fullName =
           (prof?['full_name']
                   as String?)
@@ -413,6 +426,10 @@ class _ChildProfilePageState
       final currentBalance = _toDouble(
         prof?['current_balance'],
       );
+      final childIcon =
+          (childRelation?['icon']
+                  as String?)
+              ?.trim();
 
       final monthlyRecord = await _sb
           .from(
@@ -685,6 +702,12 @@ class _ChildProfilePageState
                   fullName.isNotEmpty)
               ? fullName
               : 'Kid';
+          _childIcon =
+              (childIcon !=
+                      null &&
+                  childIcon.isNotEmpty)
+              ? childIcon
+              : '⭐';
           _balance = currentBalance;
           _spent = totalExpense;
           _earned = totalEarning;
@@ -702,6 +725,7 @@ class _ChildProfilePageState
       setState(
         () {
           _childName = 'Kid';
+          _childIcon = '⭐';
           _balance = 0.0;
           _spent = 0.0;
           _earned = 0.0;
@@ -967,12 +991,11 @@ class _ChildProfilePageState
     return Scaffold(
       backgroundColor: Colors.transparent,
       extendBody: true,
-      // ── The bar handles its own navigation internally via its own imports ──
-bottomNavigationBar: ChildBottomBar(
-  selectedIndex: 0,
-  onTapProfile: () {}, // already here, do nothing
-  profilePageBuilder: () => const ChildProfilePage(), // ← add this
-),
+      bottomNavigationBar: ChildBottomBar(
+        selectedIndex: 0,
+        onTapProfile: () {},
+        profilePageBuilder: () => const ChildProfilePage(),
+      ),
       body: Container(
         decoration: const BoxDecoration(
           gradient: _kidBg,
@@ -1025,9 +1048,9 @@ bottomNavigationBar: ChildBottomBar(
                       ),
                       child: child,
                     ),
-                child: const Text(
-                  '⭐',
-                  style: TextStyle(
+                child: Text(
+                  _childIcon,
+                  style: const TextStyle(
                     fontSize: 28,
                   ),
                 ),
@@ -1075,7 +1098,22 @@ bottomNavigationBar: ChildBottomBar(
                   ),
                 ),
               _KidIconButton(
-                onTap: () {},
+                onTap: () async {
+                  final result = await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder:
+                          (
+                            _,
+                          ) => const EditChildProfilePage(),
+                    ),
+                  );
+
+                  if (result ==
+                      true) {
+                    await _refreshData();
+                  }
+                },
                 emoji: '✏️',
                 bgColor: const Color(
                   0xFFEDE9FE,

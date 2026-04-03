@@ -9,6 +9,7 @@ class OnboardingBalanceScreen
     extends
         StatefulWidget {
   final String childName;
+  final String childEmoji;
   final String guardianEmail;
   final String username;
   final String password;
@@ -19,6 +20,7 @@ class OnboardingBalanceScreen
   const OnboardingBalanceScreen({
     super.key,
     required this.childName,
+    required this.childEmoji,
     required this.guardianEmail,
     required this.username,
     required this.password,
@@ -143,7 +145,6 @@ class _OnboardingBalanceScreenState
 
       final guardianId = guardian['user_id'];
 
-      /// 2) Find pre-created child relation
       final relation = await supabase
           .from(
             'Child_Guardian',
@@ -164,6 +165,20 @@ class _OnboardingBalanceScreenState
       final childProfileId =
           relation['child_id']
               as String;
+
+      await supabase
+          .from(
+            'Child_Guardian',
+          )
+          .update(
+            {
+              'icon': widget.childEmoji,
+            },
+          )
+          .eq(
+            'child_id',
+            childProfileId,
+          );
 
       /// 3) Generate hidden child email for auth
       final childEmail = '${widget.username.toLowerCase()}_${childProfileId.substring(0, 6)}@child.surra.app';

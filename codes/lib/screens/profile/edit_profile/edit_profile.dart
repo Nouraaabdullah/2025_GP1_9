@@ -8,6 +8,7 @@ import 'add_edit_income_page.dart';
 import 'add_edit_expense_page.dart';
 import 'add_edit_category_page.dart';
 import 'edit_balance_page.dart';
+import 'package:surra_application/screens/profile/add_child_page.dart';
 
 class EditProfilePage
     extends
@@ -56,6 +57,9 @@ class _EditProfilePageState
   bool _loading = true;
   String? _error;
 
+  String? _profileUserId;
+  String? _userType;
+
   @override
   void initState() {
     super.initState();
@@ -101,7 +105,7 @@ class _EditProfilePageState
             'User_Profile',
           )
           .select(
-            'current_balance',
+            'current_balance, user_id, user_type',
           )
           .eq(
             'profile_id',
@@ -178,6 +182,8 @@ class _EditProfilePageState
                       as num?)
                   ?.toDouble() ??
               0.0;
+          _profileUserId = profileData['user_id']?.toString();
+          _userType = profileData['user_type']?.toString();
           _incomes =
               (incomesData
                       as List)
@@ -359,6 +365,92 @@ class _EditProfilePageState
     ) {
       _showError(
         'Error navigating to category page: $e',
+      );
+    }
+  }
+
+  Future<
+    int
+  >
+  _getChildCountForCurrentUser() async {
+    if (_profileUserId ==
+            null ||
+        _profileUserId!.isEmpty) {
+      return 0;
+    }
+
+    final rows = await _sb
+        .from(
+          'Child_Guardian',
+        )
+        .select(
+          'child_id',
+        )
+        .eq(
+          'guardian_id',
+          _profileUserId!,
+        );
+
+    if (rows
+        is List) {
+      return rows.length;
+    }
+
+    return 0;
+  }
+
+  Future<
+    void
+  >
+  _updateUserTypeToGuardianIfNeeded() async {
+    final profileId = await _getProfileId();
+
+    final childCount = await _getChildCountForCurrentUser();
+
+    if (childCount >
+            0 &&
+        _userType !=
+            'guardian') {
+      await _sb
+          .from(
+            'User_Profile',
+          )
+          .update(
+            {
+              'user_type': 'guardian',
+            },
+          )
+          .eq(
+            'profile_id',
+            profileId,
+          );
+
+      _userType = 'guardian';
+    }
+  }
+
+  void _navigateToAddChild() async {
+    try {
+      final result = await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder:
+              (
+                context,
+              ) => const AddChildPage(),
+        ),
+      );
+
+      if (result ==
+          true) {
+        await _updateUserTypeToGuardianIfNeeded();
+        await _loadAll();
+      }
+    } catch (
+      e
+    ) {
+      _showError(
+        'Error navigating to add child page: $e',
       );
     }
   }
@@ -794,6 +886,101 @@ class _EditProfilePageState
                                   ),
                                 ),
                               ],
+                              const SizedBox(
+                                height: 20,
+                              ),
+
+                              // ===== Add Child Account =====
+                              const Text(
+                                'Add Child Account',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              const SizedBox(
+                                height: 12,
+                              ),
+                              InkWell(
+                                onTap: _navigateToAddChild,
+                                borderRadius: BorderRadius.circular(
+                                  16,
+                                ),
+                                child: Container(
+                                  height: 56,
+                                  decoration: BoxDecoration(
+                                    color: const Color(
+                                      0xFF2A2840,
+                                    ),
+                                    borderRadius: BorderRadius.circular(
+                                      16,
+                                    ),
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      _squareIcon(
+                                        const Color(
+                                          0xFF8B6BFF,
+                                        ),
+                                        Icons.child_care,
+                                      ),
+                                      const SizedBox(
+                                        width: 12,
+                                      ),
+                                      const Expanded(
+                                        child: Column(
+                                          mainAxisAlignment: MainAxisAlignment.center,
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              'Create child account',
+                                              overflow: TextOverflow.ellipsis,
+                                              style: TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 14,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                            SizedBox(
+                                              height: 2,
+                                            ),
+                                            Text(
+                                              'Set a username for your child',
+                                              overflow: TextOverflow.ellipsis,
+                                              style: TextStyle(
+                                                color: Colors.white70,
+                                                fontSize: 12,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      Container(
+                                        height: 28,
+                                        width: 28,
+                                        decoration: BoxDecoration(
+                                          color: Colors.white.withOpacity(
+                                            .08,
+                                          ),
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                        ),
+                                        child: const Icon(
+                                          Icons.arrow_forward_ios,
+                                          size: 14,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+
                               const SizedBox(
                                 height: 22,
                               ),

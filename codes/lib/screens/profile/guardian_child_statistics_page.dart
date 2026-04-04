@@ -5,7 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../theme/app_colors.dart';
 
 // Reuse child chart widgets
-import '../Child_Screens/Child_Dashboard/income_chart.dart';
+import '../Child_Screens/Child_Dashboard/money_left_chart.dart';
 import '../Child_Screens/Child_Dashboard/trends_chart.dart';
 import '../Child_Screens/Child_Dashboard/savings_chart.dart';
 import '../Child_Screens/Child_Dashboard/category_chart.dart';
@@ -36,6 +36,7 @@ class _GuardianChildStatisticsPageState
 
   int _periodIndex = 1; // 0 weekly, 1 monthly, 2 yearly
   bool _loading = true;
+  bool _deletingChild = false;
   String? _error;
 
   String _childName = 'Child Name';
@@ -58,6 +59,7 @@ class _GuardianChildStatisticsPageState
     num
   >
   _seriesIncome = [];
+
   List<
     CategorySlice
   >
@@ -93,11 +95,46 @@ class _GuardianChildStatisticsPageState
   >
   _allBuckets = [];
 
+  List<
+    List<
+      CategorySlice
+    >
+  >
+  _weeklySlices = [
+    [],
+    [],
+    [],
+    [],
+  ];
+  List<
+    num
+  >
+  _weeklyTotals = [
+    0,
+    0,
+    0,
+    0,
+  ];
+  List<
+    bool
+  >
+  _weekIsFuture = [
+    false,
+    false,
+    false,
+    false,
+  ];
+  List<
+    _LegendItem
+  >
+  _weeklyLegend = [];
+
   bool _donutExpanded = false;
+  bool _showAllCategories = false;
+  bool _showAllWeekly = false;
 
   static const _violet = AppColors.accent;
   static const _cyan = AppColors.pCyan;
-  static const _muted = AppColors.textGrey;
 
   @override
   void initState() {
@@ -112,6 +149,18 @@ class _GuardianChildStatisticsPageState
       '${d.year.toString().padLeft(4, '0')}-'
       '${d.month.toString().padLeft(2, '0')}-'
       '${d.day.toString().padLeft(2, '0')}';
+
+  DateTime?
+  _parseOrNull(
+    dynamic s,
+  ) =>
+      (s ==
+          null)
+      ? null
+      : DateTime.tryParse(
+          s
+              as String,
+        );
 
   Future<
     void
@@ -167,6 +216,269 @@ class _GuardianChildStatisticsPageState
         : null;
   }
 
+  Future<
+    void
+  >
+  _confirmDeleteChild() async {
+    final shouldDelete =
+        await showDialog<
+          bool
+        >(
+          context: context,
+          builder:
+              (
+                context,
+              ) {
+                return AlertDialog(
+                  backgroundColor: AppColors.card,
+                  title: const Text(
+                    'Delete child account?',
+                    style: TextStyle(
+                      color: Colors.white,
+                    ),
+                  ),
+                  content: Text(
+                    'Are you sure you want to delete $_childName\'s account? This action cannot be undone.',
+                    style: const TextStyle(
+                      color: Colors.white70,
+                    ),
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(
+                        context,
+                        false,
+                      ),
+                      child: const Text(
+                        'Cancel',
+                        style: TextStyle(
+                          color: Colors.white70,
+                        ),
+                      ),
+                    ),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.redAccent,
+                        foregroundColor: Colors.white,
+                      ),
+                      onPressed: () => Navigator.pop(
+                        context,
+                        true,
+                      ),
+                      child: const Text(
+                        'OK',
+                      ),
+                    ),
+                  ],
+                );
+              },
+        );
+
+    if (shouldDelete ==
+        true) {
+      await _deleteChildAccount();
+    }
+  }
+
+  Future<
+    void
+  >
+  _deleteChildAccount() async {
+    if (_deletingChild) return;
+
+    setState(
+      () {
+        _deletingChild = true;
+      },
+    );
+
+    try {
+      final profileId = widget.childProfileId;
+
+      // Get dependent IDs first
+      final monthlyRows = await _sb
+          .from(
+            'Monthly_Financial_Record',
+          )
+          .select(
+            'record_id',
+          )
+          .eq(
+            'profile_id',
+            profileId,
+          );
+
+      final categoryRows = await _sb
+          .from(
+            'Category',
+          )
+          .select(
+            'category_id',
+          )
+          .eq(
+            'profile_id',
+            profileId,
+          );
+
+      final recordIds =
+          <
+            String
+          >[
+            for (final r
+                in monthlyRows)
+              if (r['record_id'] !=
+                  null)
+                r['record_id']
+                    as String,
+          ];
+
+      final categoryIds =
+          <
+            String
+          >[
+            for (final r
+                in categoryRows)
+              if (r['category_id'] !=
+                  null)
+                r['category_id']
+                    as String,
+          ];
+
+      // Delete rows that depend on monthly records/categories first
+      if (recordIds.isNotEmpty) {
+        await _sb
+            .from(
+              'Category_Summary',
+            )
+            .delete()
+            .inFilter(
+              'record_id',
+              recordIds,
+            );
+      }
+
+      // Delete child-owned rows
+      await _sb
+          .from(
+            'Transaction',
+          )
+          .delete()
+          .eq(
+            'profile_id',
+            profileId,
+          );
+      await _sb
+          .from(
+            'Fixed_Income',
+          )
+          .delete()
+          .eq(
+            'profile_id',
+            profileId,
+          );
+      await _sb
+          .from(
+            'Fixed_Expense',
+          )
+          .delete()
+          .eq(
+            'profile_id',
+            profileId,
+          );
+
+      // If you have more child-owned tables, delete them here too
+      // await _sb.from('Goal_Transfer').delete().eq('profile_id', profileId);
+      // await _sb.from('Goal').delete().eq('profile_id', profileId);
+      // await _sb.from('Notification').delete().eq('profile_id', profileId);
+
+      // Delete categories and monthly records
+      if (categoryIds.isNotEmpty) {
+        await _sb
+            .from(
+              'Category',
+            )
+            .delete()
+            .inFilter(
+              'category_id',
+              categoryIds,
+            );
+      }
+
+      if (recordIds.isNotEmpty) {
+        await _sb
+            .from(
+              'Monthly_Financial_Record',
+            )
+            .delete()
+            .inFilter(
+              'record_id',
+              recordIds,
+            );
+      }
+
+      // Delete guardian relation
+      await _sb
+          .from(
+            'Child_Guardian',
+          )
+          .delete()
+          .eq(
+            'child_id',
+            profileId,
+          );
+
+      // Delete child profile LAST
+      await _sb
+          .from(
+            'User_Profile',
+          )
+          .delete()
+          .eq(
+            'profile_id',
+            profileId,
+          );
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Child account deleted successfully.',
+          ),
+        ),
+      );
+
+      Navigator.pop(
+        context,
+        true,
+      );
+    } catch (
+      e
+    ) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Failed to delete child account: $e',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(
+          () {
+            _deletingChild = false;
+          },
+        );
+      }
+    }
+  }
+
   Color _hexToColor(
     String value,
   ) {
@@ -185,11 +497,10 @@ class _GuardianChildStatisticsPageState
             8;
 
     if (isDecimal) {
-      final dec = int.parse(
-        value,
-      );
       return Color(
-        dec,
+        int.parse(
+          value,
+        ),
       );
     }
 
@@ -672,6 +983,7 @@ class _GuardianChildStatisticsPageState
           r['date']
               as String,
         );
+
         if (date.isBefore(
               rangeStart,
             ) ||
@@ -798,6 +1110,145 @@ class _GuardianChildStatisticsPageState
       }
 
       if (_periodIndex ==
+          1) {
+        for (
+          var i = 0;
+          i <
+              n;
+          i++
+        ) {
+          _rawExpenses[i] = 0;
+          _rawEarnings[i] = 0;
+          _seriesExpenses[i] = 0;
+          _seriesEarnings[i] = 0;
+        }
+
+        final byMonthExp =
+            List<
+              num
+            >.filled(
+              12,
+              0,
+            );
+        final byMonthEarn =
+            List<
+              num
+            >.filled(
+              12,
+              0,
+            );
+
+        for (final r in mfrRows) {
+          final d = DateTime.parse(
+            r['period_start']
+                as String,
+          );
+          final mIdx =
+              d.month -
+              1;
+          byMonthExp[mIdx] +=
+              (r['total_expense']
+                  as num?) ??
+              0;
+          byMonthEarn[mIdx] +=
+              (r['total_earning']
+                  as num?) ??
+              0;
+        }
+
+        for (
+          var i = 0;
+          i <
+              n;
+          i++
+        ) {
+          final mIdx =
+              buckets[i].month! -
+              1;
+          final e = byMonthExp[mIdx];
+          final er = byMonthEarn[mIdx];
+          _rawExpenses[i] = e;
+          _seriesExpenses[i] = e;
+          _rawEarnings[i] = er;
+          _seriesEarnings[i] = er;
+        }
+      } else if (_periodIndex ==
+          2) {
+        final mfrAllYears = await _sb
+            .from(
+              'Monthly_Financial_Record',
+            )
+            .select(
+              'period_start, total_expense, total_earning',
+            )
+            .eq(
+              'profile_id',
+              profileId,
+            )
+            .gte(
+              'period_start',
+              _iso(
+                rangeStart,
+              ),
+            )
+            .lte(
+              'period_start',
+              _iso(
+                rangeEnd,
+              ),
+            );
+
+        final expByYear =
+            <
+              int,
+              num
+            >{};
+        final earnByYear =
+            <
+              int,
+              num
+            >{};
+
+        for (final r in mfrAllYears) {
+          final d = DateTime.parse(
+            r['period_start']
+                as String,
+          );
+          expByYear[d.year] =
+              (expByYear[d.year] ??
+                  0) +
+              ((r['total_expense']
+                      as num?) ??
+                  0);
+          earnByYear[d.year] =
+              (earnByYear[d.year] ??
+                  0) +
+              ((r['total_earning']
+                      as num?) ??
+                  0);
+        }
+
+        for (
+          var i = 0;
+          i <
+              n;
+          i++
+        ) {
+          final y = buckets[i].year!;
+          final e =
+              expByYear[y] ??
+              0;
+          final er =
+              earnByYear[y] ??
+              0;
+          _rawExpenses[i] = e;
+          _seriesExpenses[i] = e;
+          _rawEarnings[i] = er;
+          _seriesEarnings[i] = er;
+        }
+      }
+
+      if (_periodIndex ==
           2) {
         _rawLabels = [
           for (final b in buckets) '${b.year}',
@@ -827,6 +1278,25 @@ class _GuardianChildStatisticsPageState
         ];
       }
 
+      if (_periodIndex ==
+          1) {
+        final currentMonthIdx =
+            DateTime.now().month -
+            1;
+        for (
+          int i =
+              currentMonthIdx +
+              1;
+          i <
+              _seriesExpenses.length;
+          i++
+        ) {
+          _seriesExpenses[i] = 0;
+          _seriesEarnings[i] = 0;
+          _seriesIncome[i] = 0;
+        }
+      }
+
       final filtered = _filterEmpty(
         _rawLabels,
         _seriesExpenses,
@@ -845,10 +1315,190 @@ class _GuardianChildStatisticsPageState
             num
           >{};
 
-      if (_periodIndex ==
-          0) {
-        final y = now.year;
-        final m = now.month;
+      Future<
+        void
+      >
+      loadCategorySlicesMonthly() async {
+        final nowM = DateTime.now();
+        final y = nowM.year, m = nowM.month;
+        final mStart = DateTime(
+          y,
+          m,
+          1,
+        );
+        final mEnd = DateTime(
+          y,
+          m +
+              1,
+          0,
+        );
+
+        final mfrForMonth = await _sb
+            .from(
+              'Monthly_Financial_Record',
+            )
+            .select(
+              'record_id, period_start, period_end',
+            )
+            .eq(
+              'profile_id',
+              profileId,
+            )
+            .gte(
+              'period_start',
+              _iso(
+                mStart,
+              ),
+            )
+            .lte(
+              'period_start',
+              _iso(
+                mEnd,
+              ),
+            );
+
+        final recordIds =
+            <
+              String
+            >[
+              for (final r
+                  in mfrForMonth)
+                if (r['record_id'] !=
+                    null)
+                  r['record_id']
+                      as String,
+            ];
+        if (recordIds.isEmpty) return;
+
+        final catSumRows = await _sb
+            .from(
+              'Category_Summary',
+            )
+            .select(
+              'category_id, total_expense, record_id',
+            )
+            .inFilter(
+              'record_id',
+              recordIds,
+            );
+
+        for (final r in catSumRows) {
+          final cid =
+              r['category_id']
+                  as String?;
+          if (cid ==
+                  null ||
+              !activeCategoryIds.contains(
+                cid,
+              ))
+            continue;
+          final amt =
+              (r['total_expense']
+                  as num?) ??
+              0;
+          if (amt <=
+              0)
+            continue;
+          catTotals[cid] =
+              (catTotals[cid] ??
+                  0) +
+              amt;
+        }
+      }
+
+      Future<
+        void
+      >
+      loadCategorySlicesYearly() async {
+        final nowY = DateTime.now();
+        final y = nowY.year;
+        final yStart = DateTime(
+          y,
+          1,
+          1,
+        );
+        final yEnd = DateTime(
+          y,
+          12,
+          31,
+        );
+
+        final mfrForYear = await _sb
+            .from(
+              'Monthly_Financial_Record',
+            )
+            .select(
+              'record_id, period_start, period_end',
+            )
+            .eq(
+              'profile_id',
+              profileId,
+            )
+            .gte(
+              'period_start',
+              _iso(
+                yStart,
+              ),
+            )
+            .lte(
+              'period_start',
+              _iso(
+                yEnd,
+              ),
+            );
+
+        final recordIds =
+            <
+              String
+            >[
+              for (final r
+                  in mfrForYear)
+                if (r['record_id'] !=
+                    null)
+                  r['record_id']
+                      as String,
+            ];
+        if (recordIds.isEmpty) return;
+
+        final catSumRows = await _sb
+            .from(
+              'Category_Summary',
+            )
+            .select(
+              'category_id, total_expense, record_id',
+            )
+            .inFilter(
+              'record_id',
+              recordIds,
+            );
+
+        for (final r in catSumRows) {
+          final cid =
+              r['category_id']
+                  as String?;
+          if (cid ==
+                  null ||
+              !activeCategoryIds.contains(
+                cid,
+              ))
+            continue;
+          final amt =
+              (r['total_expense']
+                  as num?) ??
+              0;
+          if (amt <=
+              0)
+            continue;
+          catTotals[cid] =
+              (catTotals[cid] ??
+                  0) +
+              amt;
+        }
+      }
+
+      void loadCategorySlicesWeekly() {
+        final nowW = DateTime.now();
+        final y = nowW.year, m = nowW.month;
         final lastDay = DateTime(
           y,
           m +
@@ -857,7 +1507,7 @@ class _GuardianChildStatisticsPageState
         ).day;
 
         late int wStartDay, wEndDay;
-        final d = now.day;
+        final d = nowW.day;
         if (d <=
             7) {
           wStartDay = 1;
@@ -907,7 +1557,6 @@ class _GuardianChildStatisticsPageState
           if (amt <=
               0)
             continue;
-
           final dt = DateTime.parse(
             r['date']
                 as String,
@@ -924,62 +1573,90 @@ class _GuardianChildStatisticsPageState
                   0) +
               amt;
         }
-      } else {
-        final recordIds =
-            <
-              String
-            >[
-              for (final r
-                  in mfrRows)
-                if (r['record_id'] !=
-                    null)
-                  r['record_id']
-                      as String,
-            ];
 
-        if (recordIds.isNotEmpty) {
-          final catSumRows = await _sb
-              .from(
-                'Category_Summary',
-              )
-              .select(
-                'category_id, total_expense, record_id',
-              )
-              .inFilter(
-                'record_id',
-                recordIds,
-              );
+        for (final r in fixedExpenseRows) {
+          final monthly =
+              (r['amount']
+                  as num?) ??
+              0;
+          if (monthly <=
+              0)
+            continue;
+          final cid =
+              r['category_id']
+                  as String?;
+          if (cid ==
+                  null ||
+              !activeCategoryIds.contains(
+                cid,
+              ))
+            continue;
 
-          for (final r in catSumRows) {
-            final cid =
-                r['category_id']
-                    as String?;
-            if (cid ==
-                    null ||
-                !activeCategoryIds.contains(
-                  cid,
-                ))
-              continue;
-            final amt =
-                (r['total_expense']
-                    as num?) ??
-                0;
-            if (amt <=
-                0)
-              continue;
+          final dueDay =
+              (r['due_date']
+                  as int?) ??
+              1;
+          final dd = dueDay.clamp(
+            1,
+            lastDay,
+          );
+          final dueDate = DateTime(
+            y,
+            m,
+            dd,
+          );
+
+          final st = _parseOrNull(
+            r['start_time'],
+          );
+          final en = _parseOrNull(
+            r['end_time'],
+          );
+          final active =
+              (st ==
+                      null ||
+                  !dueDate.isBefore(
+                    st,
+                  )) &&
+              (en ==
+                      null ||
+                  !dueDate.isAfter(
+                    en,
+                  ));
+          if (!active) continue;
+
+          if (!dueDate.isBefore(
+                weekStart,
+              ) &&
+              !dueDate.isAfter(
+                weekEnd,
+              )) {
             catTotals[cid] =
                 (catTotals[cid] ??
                     0) +
-                amt;
+                monthly;
           }
         }
+      }
+
+      if (_periodIndex ==
+          0) {
+        loadCategorySlicesWeekly();
+      } else if (_periodIndex ==
+          1) {
+        await loadCategorySlicesMonthly();
+      } else {
+        await loadCategorySlicesYearly();
       }
 
       _categorySlices =
           [
             for (final e in catTotals.entries)
               if (e.value >
-                  0)
+                      0 &&
+                  activeCategoryIds.contains(
+                    e.key,
+                  ))
                 CategorySlice(
                   id: e.key,
                   name:
@@ -1001,103 +1678,340 @@ class _GuardianChildStatisticsPageState
             ),
           );
 
+      if (_periodIndex ==
+          0) {
+        final y = now.year, m = now.month;
+        final lastDay = DateTime(
+          y,
+          m +
+              1,
+          0,
+        ).day;
+        final weekRanges =
+            <
+              List<
+                DateTime
+              >
+            >[
+              [
+                DateTime(
+                  y,
+                  m,
+                  1,
+                ),
+                DateTime(
+                  y,
+                  m,
+                  7,
+                ),
+              ],
+              [
+                DateTime(
+                  y,
+                  m,
+                  8,
+                ),
+                DateTime(
+                  y,
+                  m,
+                  14,
+                ),
+              ],
+              [
+                DateTime(
+                  y,
+                  m,
+                  15,
+                ),
+                DateTime(
+                  y,
+                  m,
+                  22,
+                ),
+              ],
+              [
+                DateTime(
+                  y,
+                  m,
+                  23,
+                ),
+                DateTime(
+                  y,
+                  m,
+                  lastDay,
+                ),
+              ],
+            ];
+
+        _weeklySlices = [
+          [],
+          [],
+          [],
+          [],
+        ];
+        _weeklyTotals = [
+          0,
+          0,
+          0,
+          0,
+        ];
+        _weekIsFuture = [
+          false,
+          false,
+          false,
+          false,
+        ];
+
+        final today = DateTime(
+          now.year,
+          now.month,
+          now.day,
+        );
+        for (
+          int i = 0;
+          i <
+              4;
+          i++
+        ) {
+          final start = weekRanges[i][0];
+          _weekIsFuture[i] = start.isAfter(
+            today,
+          );
+        }
+
+        final perWeekTotals =
+            <
+              int,
+              Map<
+                String,
+                num
+              >
+            >{
+              0: {},
+              1: {},
+              2: {},
+              3: {},
+            };
+
+        for (final r in trxRows) {
+          if ((r['type']
+                  as String?) !=
+              'Expense')
+            continue;
+          final cid =
+              r['category_id']
+                  as String?;
+          if (cid ==
+                  null ||
+              !activeCategoryIds.contains(
+                cid,
+              ))
+            continue;
+          final amt =
+              (r['amount']
+                  as num?) ??
+              0;
+          if (amt <=
+              0)
+            continue;
+          final dt = DateTime.parse(
+            r['date']
+                as String,
+          );
+          if (dt.year !=
+                  y ||
+              dt.month !=
+                  m)
+            continue;
+          final i =
+              (dt.day <=
+                  7)
+              ? 0
+              : (dt.day <=
+                    14)
+              ? 1
+              : (dt.day <=
+                    22)
+              ? 2
+              : 3;
+          perWeekTotals[i]![cid] =
+              (perWeekTotals[i]![cid] ??
+                  0) +
+              amt;
+        }
+
+        for (final r in fixedExpenseRows) {
+          final monthly =
+              (r['amount']
+                  as num?) ??
+              0;
+          if (monthly <=
+              0)
+            continue;
+          final cid =
+              r['category_id']
+                  as String?;
+          if (cid ==
+                  null ||
+              !activeCategoryIds.contains(
+                cid,
+              ))
+            continue;
+
+          final dd =
+              (r['due_date']
+                          as int? ??
+                      1)
+                  .clamp(
+                    1,
+                    lastDay,
+                  );
+          final dueDate = DateTime(
+            y,
+            m,
+            dd,
+          );
+
+          final st = _parseOrNull(
+            r['start_time'],
+          );
+          final en = _parseOrNull(
+            r['end_time'],
+          );
+          final active =
+              (st ==
+                      null ||
+                  !dueDate.isBefore(
+                    st,
+                  )) &&
+              (en ==
+                      null ||
+                  !dueDate.isAfter(
+                    en,
+                  ));
+          if (!active) continue;
+
+          final i =
+              (dd <=
+                  7)
+              ? 0
+              : (dd <=
+                    14)
+              ? 1
+              : (dd <=
+                    22)
+              ? 2
+              : 3;
+          if (_weekIsFuture[i]) continue;
+
+          perWeekTotals[i]![cid] =
+              (perWeekTotals[i]![cid] ??
+                  0) +
+              monthly;
+        }
+
+        final combinedTotals =
+            <
+              String,
+              num
+            >{};
+        for (
+          int i = 0;
+          i <
+              4;
+          i++
+        ) {
+          final totals = perWeekTotals[i]!;
+          final slices =
+              <
+                CategorySlice
+              >[];
+          num weekSum = 0;
+
+          if (!_weekIsFuture[i] &&
+              totals.isNotEmpty) {
+            for (final e in totals.entries) {
+              weekSum += e.value;
+              combinedTotals[e.key] =
+                  (combinedTotals[e.key] ??
+                      0) +
+                  e.value;
+              slices.add(
+                CategorySlice(
+                  id: e.key,
+                  name:
+                      catNameById[e.key] ??
+                      'Unknown',
+                  value: e.value,
+                  color:
+                      catColorById[e.key] ??
+                      colorFromIconOrSeed(
+                        categoryId: e.key,
+                      ),
+                ),
+              );
+            }
+            slices.sort(
+              (
+                a,
+                b,
+              ) => b.value.compareTo(
+                a.value,
+              ),
+            );
+          }
+
+          _weeklySlices[i] = slices;
+          _weeklyTotals[i] = weekSum;
+        }
+
+        _weeklyLegend = [
+          for (final e
+              in (combinedTotals.entries.toList()..sort(
+                (
+                  a,
+                  b,
+                ) => (b.value).compareTo(
+                  a.value,
+                ),
+              )))
+            _LegendItem(
+              catNameById[e.key] ??
+                  'Unknown',
+              '${e.value.toStringAsFixed(0)} SAR',
+              catColorById[e.key] ??
+                  colorFromIconOrSeed(
+                    categoryId: e.key,
+                  ),
+            ),
+        ];
+      } else {
+        _weeklySlices = [
+          [],
+          [],
+          [],
+          [],
+        ];
+        _weeklyTotals = [
+          0,
+          0,
+          0,
+          0,
+        ];
+        _weekIsFuture = [
+          false,
+          false,
+          false,
+          false,
+        ];
+        _weeklyLegend = [];
+      }
+
       _savingsSeries = [];
       _savingsLabels = [];
 
       if (_periodIndex ==
-          1) {
-        final byMonth =
-            List<
-              num
-            >.filled(
-              12,
-              0,
-            );
-        for (final r in mfrRows) {
-          final d = DateTime.parse(
-            r['period_start']
-                as String,
-          );
-          byMonth[d.month -
-                  1] +=
-              (r['monthly_saving']
-                  as num?) ??
-              0;
-        }
-
-        const monthNames = [
-          'Jan',
-          'Feb',
-          'Mar',
-          'Apr',
-          'May',
-          'Jun',
-          'Jul',
-          'Aug',
-          'Sep',
-          'Oct',
-          'Nov',
-          'Dec',
-        ];
-
-        for (
-          var i = 0;
-          i <
-              12;
-          i++
-        ) {
-          if (byMonth[i] !=
-              0) {
-            _savingsSeries.add(
-              byMonth[i] <
-                      0
-                  ? 0
-                  : byMonth[i],
-            );
-            _savingsLabels.add(
-              monthNames[i],
-            );
-          }
-        }
-      } else if (_periodIndex ==
-          2) {
-        final byYear =
-            <
-              int,
-              num
-            >{};
-        for (final r in mfrRows) {
-          final d = DateTime.parse(
-            r['period_start']
-                as String,
-          );
-          byYear[d.year] =
-              (byYear[d.year] ??
-                  0) +
-              ((r['monthly_saving']
-                      as num?) ??
-                  0);
-        }
-
-        final years = byYear.keys.toList()..sort();
-        for (final y in years) {
-          final total =
-              byYear[y] ??
-              0;
-          if (total !=
-              0) {
-            _savingsSeries.add(
-              total <
-                      0
-                  ? 0
-                  : total,
-            );
-            _savingsLabels.add(
-              '$y',
-            );
-          }
-        }
-      } else {
+          0) {
         final weeklyVals =
             List<
               num
@@ -1111,6 +2025,44 @@ class _GuardianChildStatisticsPageState
               (r['monthly_income']
                   as num?) ??
               0;
+          final st = _parseOrNull(
+            r['start_time'],
+          );
+          final en = _parseOrNull(
+            r['end_time'],
+          );
+          final payday =
+              (r['payday']
+                  as int?) ??
+              1;
+
+          final lastDay = DateTime(
+            now.year,
+            now.month +
+                1,
+            0,
+          ).day;
+          final payDate = DateTime(
+            now.year,
+            now.month,
+            payday.clamp(
+              1,
+              lastDay,
+            ),
+          );
+          final active =
+              (st ==
+                      null ||
+                  !payDate.isBefore(
+                    st,
+                  )) &&
+              (en ==
+                      null ||
+                  !payDate.isAfter(
+                    en,
+                  ));
+          if (!active) continue;
+
           final perWeek =
               monthly /
               4;
@@ -1165,6 +2117,95 @@ class _GuardianChildStatisticsPageState
           }
         }
 
+        for (final r in fixedExpenseRows) {
+          final monthly =
+              (r['amount']
+                  as num?) ??
+              0;
+          final dueDay =
+              (r['due_date']
+                  as int?) ??
+              1;
+          final st = _parseOrNull(
+            r['start_time'],
+          );
+          final en = _parseOrNull(
+            r['end_time'],
+          );
+
+          final lastDay = DateTime(
+            now.year,
+            now.month +
+                1,
+            0,
+          ).day;
+          final dd = dueDay.clamp(
+            1,
+            lastDay,
+          );
+          final dueDate = DateTime(
+            now.year,
+            now.month,
+            dd,
+          );
+          final active =
+              (st ==
+                      null ||
+                  !dueDate.isBefore(
+                    st,
+                  )) &&
+              (en ==
+                      null ||
+                  !dueDate.isAfter(
+                    en,
+                  ));
+          if (!active) continue;
+
+          final idx =
+              (dd <=
+                  7)
+              ? 0
+              : (dd <=
+                    14)
+              ? 1
+              : (dd <=
+                    22)
+              ? 2
+              : 3;
+          weeklyVals[idx] -= monthly;
+        }
+
+        for (
+          int i = 0;
+          i <
+              4;
+          i++
+        ) {
+          if (weeklyVals[i] <
+              0) {
+            final deficit = -weeklyVals[i];
+            weeklyVals[i] = 0;
+            if (i +
+                    1 <
+                4)
+              weeklyVals[i +
+                      1] -=
+                  deficit;
+          }
+        }
+
+        final currentWeekIdx =
+            (now.day <=
+                7)
+            ? 0
+            : (now.day <=
+                  14)
+            ? 1
+            : (now.day <=
+                  22)
+            ? 2
+            : 3;
+
         const wLabels = [
           'W1',
           'W2',
@@ -1173,25 +2214,117 @@ class _GuardianChildStatisticsPageState
         ];
         for (
           int i = 0;
-          i <
-              4;
+          i <=
+                  currentWeekIdx &&
+              i <
+                  4;
           i++
         ) {
           if (weeklyVals[i] !=
               0) {
             _savingsSeries.add(
-              weeklyVals[i] <
-                      0
-                  ? 0
-                  : weeklyVals[i],
+              weeklyVals[i],
             );
             _savingsLabels.add(
               wLabels[i],
             );
           }
         }
+      } else if (_periodIndex ==
+          1) {
+        final byMonth =
+            List<
+              num
+            >.filled(
+              12,
+              0,
+            );
+        for (final r in mfrRows) {
+          final d = DateTime.parse(
+            r['period_start']
+                as String,
+          );
+          byMonth[d.month -
+                  1] +=
+              (r['monthly_saving']
+                  as num?) ??
+              0;
+        }
+
+        const monthNames = [
+          'Jan',
+          'Feb',
+          'Mar',
+          'Apr',
+          'May',
+          'Jun',
+          'Jul',
+          'Aug',
+          'Sep',
+          'Oct',
+          'Nov',
+          'Dec',
+        ];
+
+        for (
+          var i = 0;
+          i <
+              12;
+          i++
+        ) {
+          if (byMonth[i] !=
+              0) {
+            _savingsSeries.add(
+              byMonth[i] <
+                      0
+                  ? 0
+                  : byMonth[i],
+            );
+            _savingsLabels.add(
+              monthNames[i],
+            );
+          }
+        }
+      } else {
+        final byYear =
+            <
+              int,
+              num
+            >{};
+        for (final r in mfrRows) {
+          final d = DateTime.parse(
+            r['period_start']
+                as String,
+          );
+          byYear[d.year] =
+              (byYear[d.year] ??
+                  0) +
+              ((r['monthly_saving']
+                      as num?) ??
+                  0);
+        }
+
+        final years = byYear.keys.toList()..sort();
+        for (final y in years) {
+          final total =
+              byYear[y] ??
+              0;
+          if (total !=
+              0) {
+            _savingsSeries.add(
+              total <
+                      0
+                  ? 0
+                  : total,
+            );
+            _savingsLabels.add(
+              '$y',
+            );
+          }
+        }
       }
 
+      if (!mounted) return;
       setState(
         () {
           _loading = false;
@@ -1200,6 +2333,7 @@ class _GuardianChildStatisticsPageState
     } catch (
       e
     ) {
+      if (!mounted) return;
       setState(
         () {
           _error = e.toString();
@@ -1228,6 +2362,30 @@ class _GuardianChildStatisticsPageState
             fontWeight: FontWeight.w600,
           ),
         ),
+        actions: [
+          IconButton(
+            tooltip: 'Delete child',
+            onPressed: _deletingChild
+                ? null
+                : _confirmDeleteChild,
+            icon: _deletingChild
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Icon(
+                    Icons.delete_outline,
+                    color: Colors.redAccent,
+                  ),
+          ),
+          const SizedBox(
+            width: 6,
+          ),
+        ],
       ),
       body: _loading
           ? const Center(
@@ -1252,19 +2410,16 @@ class _GuardianChildStatisticsPageState
   Widget _buildBody() {
     final idx = _currentRawBucketIndex();
 
-    num totalExpenses = 0, totalEarnings = 0, totalIncome = 0;
+    num totalExpenses = 0, totalEarnings = 0;
     if (idx >=
             0 &&
         idx <
             _rawExpenses.length) {
       totalExpenses = _rawExpenses[idx];
       totalEarnings = _rawEarnings[idx];
-      totalIncome = _rawIncome[idx];
     }
 
-    final denom =
-        (totalIncome +
-        totalEarnings);
+    final denom = totalEarnings;
     final left = math.max(
       0,
       denom -
@@ -1282,7 +2437,7 @@ class _GuardianChildStatisticsPageState
               )
               .toDouble();
 
-    final incomeLegends = [
+    final overviewLegends = [
       _LegendItem(
         'Expenses',
         '${totalExpenses.toStringAsFixed(0)} SAR',
@@ -1293,14 +2448,9 @@ class _GuardianChildStatisticsPageState
         '${totalEarnings.toStringAsFixed(0)} SAR',
         _cyan,
       ),
-      _LegendItem(
-        'Income',
-        '${totalIncome.toStringAsFixed(0)} SAR',
-        _muted,
-      ),
     ];
 
-    final monthlyLegends = [
+    final trendsLegends = [
       _LegendItem(
         'Expenses',
         '${_seriesExpenses.fold<num>(0, (a, b) => a + b).toStringAsFixed(0)} SAR',
@@ -1310,11 +2460,6 @@ class _GuardianChildStatisticsPageState
         'Earnings',
         '${_seriesEarnings.fold<num>(0, (a, b) => a + b).toStringAsFixed(0)} SAR',
         _cyan,
-      ),
-      _LegendItem(
-        'Income',
-        '${_seriesIncome.fold<num>(0, (a, b) => a + b).toStringAsFixed(0)} SAR',
-        _muted,
       ),
     ];
 
@@ -1354,6 +2499,8 @@ class _GuardianChildStatisticsPageState
                     () {
                       _periodIndex = i;
                       _donutExpanded = false;
+                      _showAllWeekly = false;
+                      _showAllCategories = false;
                     },
                   );
                   _loadAll();
@@ -1363,7 +2510,7 @@ class _GuardianChildStatisticsPageState
             height: 18,
           ),
           const _SectionTitle(
-            'Income Overview',
+            'Money Overview',
           ),
           const SizedBox(
             height: 10,
@@ -1374,19 +2521,17 @@ class _GuardianChildStatisticsPageState
                 const SizedBox(
                   height: 8,
                 ),
-                IncomeSemicircleGauge(
+                MoneyLeftSemicircleGauge(
                   percent: percentLeft,
-                  label: '${(percentLeft * 100).round()}% of\nincome left',
+                  label: '${(percentLeft * 100).round()}% of\nmoney left',
                   expenses: totalExpenses.toDouble(),
                   earnings: totalEarnings.toDouble(),
-                  income: totalIncome.toDouble(),
-                  centerTextColor: Colors.white,
                 ),
                 const SizedBox(
                   height: 8,
                 ),
                 _LegendRow(
-                  items: incomeLegends,
+                  items: overviewLegends,
                 ),
               ],
             ),
@@ -1429,16 +2574,8 @@ class _GuardianChildStatisticsPageState
                             ) => e.toDouble(),
                           )
                           .toList(),
-                      seriesC: _seriesIncome
-                          .map(
-                            (
-                              e,
-                            ) => e.toDouble(),
-                          )
-                          .toList(),
                       colorA: _violet,
                       colorB: _cyan,
-                      colorC: _muted,
                     ),
                   ),
                 ),
@@ -1446,7 +2583,7 @@ class _GuardianChildStatisticsPageState
                   height: 12,
                 ),
                 _LegendRow(
-                  items: monthlyLegends,
+                  items: trendsLegends,
                 ),
               ],
             ),
@@ -1492,45 +2629,165 @@ class _GuardianChildStatisticsPageState
             height: 10,
           ),
           _AdultSectionCard(
-            child: _categorySlices.isEmpty
-                ? const Padding(
-                    padding: EdgeInsets.all(
-                      20,
-                    ),
-                    child: Center(
-                      child: Text(
-                        'No money spent',
-                        style: TextStyle(
-                          color: AppColors.textGrey,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                  )
-                : Column(
-                    children: [
-                      CategoryDonut(
-                        slices: _categorySlices,
-                        centerLabel: 'Total Expenses\nSAR ${_categorySlices.fold<num>(0, (a, b) => a + b.value).toStringAsFixed(0)}',
-                        centerTextColor: Colors.white,
-                        onCenterTap: () {
-                          setState(
-                            () {
-                              _donutExpanded = !_donutExpanded;
-                            },
-                          );
-                        },
-                      ),
-                      const SizedBox(
-                        height: 12,
-                      ),
-                      if (_donutExpanded)
-                        _PeriodCategoryDetailsList(
-                          slices: _categorySlices,
-                        ),
-                    ],
+            child: Padding(
+              padding: const EdgeInsets.only(
+                bottom: 10,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(
+                    height: 8,
                   ),
+                  if (_periodIndex ==
+                      0)
+                    Column(
+                      children: [
+                        _WeeklyMiniCategoryGrid(
+                          weeklySlices: _weeklySlices,
+                          weeklyTotals: _weeklyTotals,
+                          weekIsFuture: _weekIsFuture,
+                        ),
+                        const SizedBox(
+                          height: 14,
+                        ),
+                        if (_weeklyLegend.isEmpty)
+                          const Center(
+                            child: Text(
+                              'No money spent yet',
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          )
+                        else ...[
+                          _CategoryGrid(
+                            items: _weeklyLegend,
+                            showAll: _showAllWeekly,
+                            initialCount: 3,
+                          ),
+                          const SizedBox(
+                            height: 8,
+                          ),
+                          if (_weeklyLegend.length >
+                              3)
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: TextButton(
+                                style: TextButton.styleFrom(
+                                  foregroundColor: AppColors.accent,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 0,
+                                    vertical: 6,
+                                  ),
+                                ),
+                                onPressed: () {
+                                  setState(
+                                    () {
+                                      _showAllWeekly = !_showAllWeekly;
+                                    },
+                                  );
+                                },
+                                child: Text(
+                                  _showAllWeekly
+                                      ? 'Show less'
+                                      : 'Show more',
+                                ),
+                              ),
+                            ),
+                        ],
+                      ],
+                    )
+                  else
+                    Column(
+                      children: [
+                        if (_categorySlices.isEmpty)
+                          const Padding(
+                            padding: EdgeInsets.all(
+                              20,
+                            ),
+                            child: Center(
+                              child: Text(
+                                'No money spent',
+                                style: TextStyle(
+                                  color: AppColors.textGrey,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          )
+                        else ...[
+                          CategoryDonut(
+                            slices: _categorySlices,
+                            centerLabel: 'Total Expenses\nSAR ${_categorySlices.fold<num>(0, (a, b) => a + b.value).toStringAsFixed(0)}',
+                            centerTextColor: Colors.white,
+                            onCenterTap: () {
+                              setState(
+                                () {
+                                  _donutExpanded = !_donutExpanded;
+                                },
+                              );
+                            },
+                          ),
+                          const SizedBox(
+                            height: 12,
+                          ),
+                          if (_donutExpanded)
+                            _PeriodCategoryDetailsList(
+                              slices: _categorySlices,
+                            ),
+                          const SizedBox(
+                            height: 12,
+                          ),
+                          _CategoryGrid(
+                            items: [
+                              for (final s in _categorySlices)
+                                _LegendItem(
+                                  s.name,
+                                  '${s.value.toStringAsFixed(0)} SAR',
+                                  s.color,
+                                ),
+                            ],
+                            showAll: _showAllCategories,
+                            initialCount: 3,
+                          ),
+                          const SizedBox(
+                            height: 8,
+                          ),
+                          if (_categorySlices.length >
+                              3)
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: TextButton(
+                                style: TextButton.styleFrom(
+                                  foregroundColor: AppColors.accent,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 0,
+                                    vertical: 6,
+                                  ),
+                                ),
+                                onPressed: () {
+                                  setState(
+                                    () {
+                                      _showAllCategories = !_showAllCategories;
+                                    },
+                                  );
+                                },
+                                child: Text(
+                                  _showAllCategories
+                                      ? 'Show less'
+                                      : 'Show more',
+                                ),
+                              ),
+                            ),
+                        ],
+                      ],
+                    ),
+                ],
+              ),
+            ),
           ),
         ],
       ),
@@ -1778,6 +3035,7 @@ class _Bucket {
   final int? year;
   final int? month;
   final DateTime? middleDate;
+
   _Bucket(
     this.year,
     this.month,
@@ -1815,6 +3073,7 @@ class _LegendItem {
   final String title;
   final String value;
   final Color color;
+
   const _LegendItem(
     this.title,
     this.value,
@@ -1829,6 +3088,7 @@ class _LegendRow
     _LegendItem
   >
   items;
+
   const _LegendRow({
     required this.items,
   });
@@ -1837,8 +3097,10 @@ class _LegendRow
   Widget build(
     BuildContext context,
   ) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return Wrap(
+      alignment: WrapAlignment.spaceBetween,
+      spacing: 8,
+      runSpacing: 8,
       children: items
           .map(
             (
@@ -1856,6 +3118,7 @@ class _LegendCard
     extends
         StatelessWidget {
   final _LegendItem item;
+
   const _LegendCard({
     required this.item,
   });
@@ -1921,6 +3184,358 @@ class _LegendCard
   }
 }
 
+class _CategoryGrid
+    extends
+        StatelessWidget {
+  final List<
+    _LegendItem
+  >
+  items;
+  final bool showAll;
+  final int initialCount;
+
+  const _CategoryGrid({
+    required this.items,
+    required this.showAll,
+    this.initialCount = 3,
+  });
+
+  @override
+  Widget build(
+    BuildContext context,
+  ) {
+    final visible = showAll
+        ? items
+        : items
+              .take(
+                initialCount,
+              )
+              .toList();
+
+    if (visible.isEmpty) {
+      return const Center(
+        child: Text(
+          'No money spent',
+          style: TextStyle(
+            color: Colors.white70,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      );
+    }
+
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: visible.length,
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 3,
+        mainAxisSpacing: 12,
+        crossAxisSpacing: 12,
+        childAspectRatio:
+            98 /
+            86,
+      ),
+      itemBuilder:
+          (
+            _,
+            i,
+          ) => _LegendCard(
+            item: visible[i],
+          ),
+    );
+  }
+}
+
+class _WeeklyMiniCategoryGrid
+    extends
+        StatefulWidget {
+  final List<
+    List<
+      CategorySlice
+    >
+  >
+  weeklySlices;
+  final List<
+    num
+  >
+  weeklyTotals;
+  final List<
+    bool
+  >
+  weekIsFuture;
+
+  const _WeeklyMiniCategoryGrid({
+    required this.weeklySlices,
+    required this.weeklyTotals,
+    required this.weekIsFuture,
+  });
+
+  @override
+  State<
+    _WeeklyMiniCategoryGrid
+  >
+  createState() => _WeeklyMiniCategoryGridState();
+}
+
+class _WeeklyMiniCategoryGridState
+    extends
+        State<
+          _WeeklyMiniCategoryGrid
+        > {
+  int? _expandedIndex;
+
+  @override
+  Widget build(
+    BuildContext context,
+  ) {
+    final wLabels = const [
+      'W1',
+      'W2',
+      'W3',
+      'W4',
+    ];
+    const baseMinHeight = 180.0;
+
+    return LayoutBuilder(
+      builder:
+          (
+            ctx,
+            constraints,
+          ) {
+            final gap = 12.0;
+            final cardWidth =
+                (constraints.maxWidth -
+                    gap) /
+                2;
+
+            return Wrap(
+              spacing: gap,
+              runSpacing: gap,
+              children: List.generate(
+                4,
+                (
+                  i,
+                ) {
+                  final isFuture = widget.weekIsFuture[i];
+                  final total = widget.weeklyTotals[i];
+                  final slices = widget.weeklySlices[i];
+                  final isExpanded =
+                      _expandedIndex ==
+                      i;
+
+                  Widget tileCore = Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Center(
+                        child: isFuture
+                            ? const Text(
+                                'No data yet',
+                                style: TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              )
+                            : (slices.isEmpty &&
+                                  total ==
+                                      0)
+                            ? const Text(
+                                '0 SAR spent',
+                                style: TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              )
+                            : SizedBox.square(
+                                dimension: 120,
+                                child: Center(
+                                  child: CategoryDonut(
+                                    slices: slices,
+                                    centerLabel: '${total.toStringAsFixed(0)} SAR',
+                                    enableTooltip: false,
+                                    centerTextColor: Colors.white,
+                                    onTapAnywhere: () {
+                                      if (isFuture ||
+                                          (slices.isEmpty &&
+                                              total ==
+                                                  0)) {
+                                        return;
+                                      }
+                                      setState(
+                                        () {
+                                          _expandedIndex = isExpanded
+                                              ? null
+                                              : i;
+                                        },
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ),
+                      ),
+                      const SizedBox(
+                        height: 6,
+                      ),
+                      Center(
+                        child: Text(
+                          wLabels[i],
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                      AnimatedSize(
+                        duration: const Duration(
+                          milliseconds: 220,
+                        ),
+                        curve: Curves.easeInOut,
+                        alignment: Alignment.topCenter,
+                        child:
+                            (!isFuture &&
+                                slices.isNotEmpty &&
+                                isExpanded)
+                            ? Padding(
+                                padding: const EdgeInsets.only(
+                                  top: 8,
+                                ),
+                                child: _WeeklyMiniDetailsList(
+                                  slices: slices,
+                                  total: total,
+                                ),
+                              )
+                            : const SizedBox.shrink(),
+                      ),
+                    ],
+                  );
+
+                  return SizedBox(
+                    width: cardWidth,
+                    child: GestureDetector(
+                      onTap: () {
+                        if (isFuture ||
+                            (slices.isEmpty &&
+                                total ==
+                                    0))
+                          return;
+                        setState(
+                          () {
+                            _expandedIndex = isExpanded
+                                ? null
+                                : i;
+                          },
+                        );
+                      },
+                      child: Container(
+                        constraints: const BoxConstraints(
+                          minHeight: baseMinHeight,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.bg,
+                          borderRadius: BorderRadius.circular(
+                            18,
+                          ),
+                          border: Border.all(
+                            color: Colors.white10,
+                            width: 1.2,
+                          ),
+                        ),
+                        padding: const EdgeInsets.fromLTRB(
+                          10,
+                          10,
+                          10,
+                          10,
+                        ),
+                        child: tileCore,
+                      ),
+                    ),
+                  );
+                },
+              ),
+            );
+          },
+    );
+  }
+}
+
+class _WeeklyMiniDetailsList
+    extends
+        StatelessWidget {
+  final List<
+    CategorySlice
+  >
+  slices;
+  final num total;
+
+  const _WeeklyMiniDetailsList({
+    required this.slices,
+    required this.total,
+  });
+
+  @override
+  Widget build(
+    BuildContext context,
+  ) {
+    Widget
+    row(
+      String l,
+      String r,
+    ) => Padding(
+      padding: const EdgeInsets.only(
+        top: 4,
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              l,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: AppColors.textGrey,
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          const SizedBox(
+            width: 10,
+          ),
+          Text(
+            r,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 12,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
+      ),
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final s in slices)
+          row(
+            s.name,
+            '${s.value.toStringAsFixed(0)} SAR',
+          ),
+        const SizedBox(
+          height: 6,
+        ),
+        row(
+          'Total',
+          '${total.toStringAsFixed(0)} SAR',
+        ),
+      ],
+    );
+  }
+}
+
 class _PeriodCategoryDetailsList
     extends
         StatelessWidget {
@@ -1950,6 +3565,43 @@ class _PeriodCategoryDetailsList
               b.value,
         );
 
+    Widget
+    row(
+      String l,
+      String r,
+    ) => Padding(
+      padding: const EdgeInsets.only(
+        top: 6,
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              l,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: AppColors.textGrey,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          const SizedBox(
+            width: 10,
+          ),
+          Text(
+            r,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(
@@ -1967,57 +3619,16 @@ class _PeriodCategoryDetailsList
       child: Column(
         children: [
           for (final s in slices)
-            Padding(
-              padding: const EdgeInsets.only(
-                top: 6,
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      s.name,
-                      style: const TextStyle(
-                        color: AppColors.textGrey,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                  Text(
-                    '${s.value.toStringAsFixed(0)} SAR',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
-              ),
+            row(
+              s.name,
+              '${s.value.toStringAsFixed(0)} SAR',
             ),
           const SizedBox(
             height: 8,
           ),
-          Row(
-            children: [
-              const Expanded(
-                child: Text(
-                  'Total',
-                  style: TextStyle(
-                    color: AppColors.textGrey,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              Text(
-                '${total.toStringAsFixed(0)} SAR',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
+          row(
+            'Total',
+            '${total.toStringAsFixed(0)} SAR',
           ),
         ],
       ),

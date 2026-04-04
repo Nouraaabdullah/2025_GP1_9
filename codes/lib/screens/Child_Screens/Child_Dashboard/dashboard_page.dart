@@ -12,7 +12,7 @@ import '../../../widgets/child_bottom_nav_bar.dart';
 import '../Child_Log/log_transaction_manually.dart';
 
 // Charts split into separate files
-import 'income_chart.dart';
+import 'money_left_chart.dart';
 import 'trends_chart.dart';
 import 'savings_chart.dart';
 import 'category_chart.dart';
@@ -1014,14 +1014,13 @@ return Scaffold(
 
   Widget _buildBody(BuildContext context) {
     final idx = _currentRawBucketIndex();
-    num totalExpenses = 0, totalEarnings = 0, totalIncome = 0;
+    num totalExpenses = 0, totalEarnings = 0;
     if (idx >= 0 && idx < _rawExpenses.length) {
       totalExpenses = _rawExpenses[idx];
       totalEarnings = _rawEarnings[idx];
-      totalIncome = _rawIncome[idx];
     }
 
-    final denom = (totalIncome + totalEarnings);
+    final denom = totalEarnings;
     final left = math.max(0, denom - totalExpenses);
     final percentLeft =
         denom <= 0 ? 0.0 : (left / denom).clamp(0, 1).toDouble();
@@ -1029,12 +1028,10 @@ return Scaffold(
     final incomeLegends = [
       _LegendItem('Expenses', '${totalExpenses.toStringAsFixed(0)} SAR', _violet),
       _LegendItem('Earnings', '${totalEarnings.toStringAsFixed(0)} SAR', _cyan),
-      _LegendItem('Income', '${totalIncome.toStringAsFixed(0)} SAR', _muted),
     ];
 
     final trendsTotalExpenses = _seriesExpenses.fold<num>(0, (a, b) => a + b);
     final trendsTotalEarnings = _seriesEarnings.fold<num>(0, (a, b) => a + b);
-    final trendsTotalIncome = _seriesIncome.fold<num>(0, (a, b) => a + b);
 
     final monthlyLegends = [
       _LegendItem(
@@ -1047,15 +1044,10 @@ return Scaffold(
         '${trendsTotalEarnings.toStringAsFixed(0)} SAR',
         _cyan,
       ),
-      _LegendItem(
-        'Income',
-        '${trendsTotalIncome.toStringAsFixed(0)} SAR',
-        _muted,
-      ),
     ];
 
     final gaugeKey = ValueKey<String>(
-      'gauge_${_periodIndex}_${idx}_${totalExpenses}_${totalEarnings}_${totalIncome}',
+      'gauge_${_periodIndex}_${idx}_${totalExpenses}_${totalEarnings}',
     );
 
     final String savingsYAxisTitle = _periodIndex == 0
@@ -1110,23 +1102,22 @@ return Scaffold(
               }),
             ),
             const SizedBox(height: 18),
-            const _BlockTitle('Income Overview'),
+            const _BlockTitle('Money Overview'),
             const SizedBox(height: _betweenTitleAndCard),
             _SectionCard(
               onInfo: () => _showInfo(
                 context,
-                'This chart tracks how efficiently you’re managing your income this ${_periodIndex == 0 ? 'week' : _periodIndex == 1 ? 'month' : 'year'}. It shows what portion of your total funds (earnings + income) is still available after spending. The purple gauge shows how much of your income remains after all expenses.',
+                'This chart tracks how efficiently you’re managing your money this ${_periodIndex == 0 ? 'week' : _periodIndex == 1 ? 'month' : 'year'}. It shows what portion of your earnings is still available after spending.',
               ),
               child: Column(
                 children: [
                   const SizedBox(height: 8),
-                  IncomeSemicircleGauge(
+                  MoneyLeftSemicircleGauge(
                     key: gaugeKey,
                     percent: percentLeft,
-                    label: '${(percentLeft * 100).round()}% of\nincome left',
+                    label: '${(percentLeft * 100).round()}% of\nmoney left',
                     expenses: totalExpenses.toDouble(),
                     earnings: totalEarnings.toDouble(),
-                    income: totalIncome.toDouble(),
                   ),
                   const SizedBox(height: 1),
                   _LegendRow(items: incomeLegends),
@@ -1139,7 +1130,7 @@ return Scaffold(
             _SectionCard(
               onInfo: () => _showInfo(
                 context,
-                'This chart compares your total expenses, earnings, and income for each available period. It helps you identify whether your spending is growing or decreasing over time.',
+                'This chart compares your total expenses and earnings for each available period. It helps you see whether you spent less or earned more over time.',
               ),
               child: Column(
                 children: [
@@ -1153,18 +1144,10 @@ return Scaffold(
                       ),
                       child: TrendsGroupedBars(
                         labels: _bucketLabels,
-                        seriesA: _seriesExpenses
-                            .map((e) => e.toDouble())
-                            .toList(),
-                        seriesB: _seriesEarnings
-                            .map((e) => e.toDouble())
-                            .toList(),
-                        seriesC: _seriesIncome
-                            .map((e) => e.toDouble())
-                            .toList(),
+                        seriesA: _seriesExpenses.map((e) => e.toDouble()).toList(),
+                        seriesB: _seriesEarnings.map((e) => e.toDouble()).toList(),
                         colorA: _violet,
-                        colorB: _cyan,
-                        colorC: _muted,
+                        colorB: _cyan, 
                       ),
                     ),
                   ),
@@ -1501,8 +1484,10 @@ class _LegendRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return Wrap(
+      spacing: 12,
+      runSpacing: 12,
+      alignment: WrapAlignment.center,
       children: items.map((e) => _LegendCard(item: e)).toList(),
     );
   }

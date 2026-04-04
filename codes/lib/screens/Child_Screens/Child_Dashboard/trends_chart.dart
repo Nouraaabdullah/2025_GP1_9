@@ -8,18 +8,15 @@ class TrendsGroupedBars extends StatefulWidget {
   final List<String> labels;
   final List<double> seriesA;
   final List<double> seriesB;
-  final List<double> seriesC;
-  final Color colorA, colorB, colorC;
+  final Color colorA, colorB;
 
   const TrendsGroupedBars({
     super.key,
     required this.labels,
     required this.seriesA,
     required this.seriesB,
-    required this.seriesC,
     required this.colorA,
     required this.colorB,
-    required this.colorC,
   });
 
   @override
@@ -62,7 +59,7 @@ class _TrendsGroupedBarsState extends State<TrendsGroupedBars> {
       widget.labels.length,
       math.min(
         widget.seriesA.length,
-        math.min(widget.seriesB.length, widget.seriesC.length),
+        widget.seriesB.length,
       ),
     );
 
@@ -85,7 +82,6 @@ class _TrendsGroupedBarsState extends State<TrendsGroupedBars> {
     final maxV = [
       ...widget.seriesA.take(n),
       ...widget.seriesB.take(n),
-      ...widget.seriesC.take(n),
     ].fold<double>(0, (m, v) => math.max(m, v));
 
     return SizedBox(
@@ -94,8 +90,8 @@ class _TrendsGroupedBarsState extends State<TrendsGroupedBars> {
         builder: (context, constraints) {
           final totalW = constraints.maxWidth;
           final groupW = totalW / n;
-          const barW = 12.0;
-          const gap = 6.0;
+          const barW = 14.0;
+          const gap = 8.0;
           final maxH = (maxV <= 0) ? 1.0 : 160.0;
           double h(double v) => (maxV <= 0) ? 2 : (v / maxV) * maxH;
 
@@ -106,27 +102,23 @@ class _TrendsGroupedBarsState extends State<TrendsGroupedBars> {
 
               final group = (dx / groupW).floor().clamp(0, n - 1);
               final originX =
-                  group * groupW + (groupW - (barW * 3 + gap * 2)) / 2;
+                  group * groupW + (groupW - (barW * 2 + gap)) / 2;
               final localX = dx - originX;
 
               int? which;
-              if (localX >= 0 && localX <= barW * 3 + gap * 2) {
+              if (localX >= 0 && localX <= barW * 2 + gap) {
                 if (localX < barW) {
                   which = 0;
                 } else if (localX < barW + gap + barW) {
                   which = 1;
-                } else if (localX < barW + gap + barW + gap + barW) {
-                  which = 2;
                 }
               }
               if (which == null) return;
 
               final a = widget.seriesA[group];
               final b = widget.seriesB[group];
-              final c = widget.seriesC[group];
-              final val = which == 0 ? a : which == 1 ? b : c;
-              final name =
-                  which == 0 ? 'Expenses' : which == 1 ? 'Earnings' : 'Income';
+              final val = which == 0 ? a : b;
+              final name = which == 0 ? 'Expenses' : 'Earnings';
 
               final barTop = (200 - 40) - h(val);
               final tip = Offset(
@@ -147,7 +139,7 @@ class _TrendsGroupedBarsState extends State<TrendsGroupedBars> {
                   children: List.generate(n, (i) {
                     final a = widget.seriesA[i];
                     final b = widget.seriesB[i];
-                    final c = widget.seriesC[i];
+
                     return Expanded(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.end,
@@ -159,8 +151,6 @@ class _TrendsGroupedBarsState extends State<TrendsGroupedBars> {
                               _bar(h(a), widget.colorA, width: barW),
                               const SizedBox(width: gap),
                               _bar(h(b), widget.colorB, width: barW),
-                              const SizedBox(width: gap),
-                              _bar(h(c), widget.colorC, width: barW),
                             ],
                           ),
                           const SizedBox(height: 6),

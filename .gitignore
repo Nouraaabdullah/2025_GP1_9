@@ -47,3 +47,29 @@ Thumbs.db
 # Logs
 # ======================
 *.log
+codes/windows/flutter/ephemeral/.plugin_symlinks/shared_preferences_windows
+codes/linux/flutter/ephemeral/.plugin_symlinks/app_links_linux
+codes/linux/flutter/ephemeral/.plugin_symlinks/file_picker
+codes/linux/flutter/ephemeral/.plugin_symlinks/gtk
+codes/linux/flutter/ephemeral/.plugin_symlinks/image_picker_linux
+codes/windows/flutter/ephemeral/.plugin_symlinks/url_launcher_windows
+codes/windows/flutter/ephemeral/.plugin_symlinks/shared_preferences_windows
+codes/windows/flutter/ephemeral/.plugin_symlinks/path_provider_windows
+codes/windows/flutter/ephemeral/.plugin_symlinks/url_launcher_windows
+codes/windows/flutter/ephemeral/.plugin_symlinks/shared_preferences_windows
+codes/windows/flutter/ephemeral/.plugin_symlinks/path_provider_windows
+codes/windows/flutter/ephemeral/.plugin_symlinks/image_picker_windows
+codes/windows/flutter/ephemeral/.plugin_symlinks/file_selector_windows
+codes/windows/flutter/ephemeral/.plugin_symlinks/file_picker
+codes/windows/flutter/ephemeral/.plugin_symlinks/app_links
+codes/pubspec.lock
+codes/macos/Flutter/ephemeral/flutter_export_environment.sh
+codes/macos/Flutter/ephemeral/Flutter-Generated.xcconfig
+codes/linux/flutter/ephemeral/.plugin_symlinks/url_launcher_linux
+codes/linux/flutter/ephemeral/.plugin_symlinks/shared_preferences_linux
+codes/linux/flutter/ephemeral/.plugin_symlinks/path_provider_linux
+codes/linux/flutter/ephemeral/.plugin_symlinks/image_picker_linux
+codes/linux/flutter/ephemeral/.plugin_symlinks/gtk
+codes/linux/flutter/ephemeral/.plugin_symlinks/file_selector_linux
+codes/linux/flutter/ephemeral/.plugin_symlinks/file_picker
+codes/linux/flutter/ephemeral/.plugin_symlinks/app_links_linux

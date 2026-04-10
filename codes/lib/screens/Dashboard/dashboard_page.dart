@@ -2,6 +2,8 @@ import 'dart:math' as math;
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 
 import '../../theme/app_colors.dart';
 import '../../widgets/bottom_nav_bar.dart';
@@ -38,6 +40,13 @@ class _DashboardPageState
   bool _showAllWeekly = false; // for weekly legend grid
   bool _isRefreshing = false;
   bool _donutExpanded = false;
+  String? _incomeRecommendation;
+  String? _trendsRecommendation;
+  String? _savingsRecommendation;
+  String? _categoryRecommendation;
+  String? _recError;
+
+  bool _recLoading = false;
 
   // Accent palette
   static const _violet = Color(
@@ -179,27 +188,48 @@ class _DashboardPageState
       );
     }
   }
-  Color _hexToColor(String value) {
-  value = value.replaceAll('#', '');
 
-  // CASE 1: database stored a decimal int (long number)
-  final isDecimal =
-      RegExp(r'^[0-9]+$').hasMatch(value) && value.length > 8;
+  Color _hexToColor(
+    String value,
+  ) {
+    value = value.replaceAll(
+      '#',
+      '',
+    );
 
-  if (isDecimal) {
-    final dec = int.parse(value);
-    return Color(dec);
+    // CASE 1: database stored a decimal int (long number)
+    final isDecimal =
+        RegExp(
+          r'^[0-9]+$',
+        ).hasMatch(
+          value,
+        ) &&
+        value.length >
+            8;
+
+    if (isDecimal) {
+      final dec = int.parse(
+        value,
+      );
+      return Color(
+        dec,
+      );
+    }
+
+    // CASE 2: 6-char hex → add FF alpha
+    if (value.length ==
+        6) {
+      value = 'FF$value';
+    }
+
+    // CASE 3: Normal hex ARGB
+    return Color(
+      int.parse(
+        value,
+        radix: 16,
+      ),
+    );
   }
-
-  // CASE 2: 6-char hex → add FF alpha
-  if (value.length == 6) {
-    value = 'FF$value';
-  }
-
-  // CASE 3: Normal hex ARGB
-  return Color(int.parse(value, radix: 16));
-}
-
 
   Future<
     void
@@ -310,6 +340,9 @@ class _DashboardPageState
         );
         return; // user was redirected to /login
       }
+      await _loadRecommendations(
+        profileId,
+      );
 
       // 1) balance
       final prof = await _sb
@@ -518,12 +551,20 @@ class _DashboardPageState
                   (r['name']
                       as String),
           };
-      final catColorById = <String, Color>{
-          for (final r in catRows)
-            r['category_id'] as String: _hexToColor(
-              (r['icon_color'] ?? '').toString(),
-            ),
-        };
+      final catColorById =
+          <
+            String,
+            Color
+          >{
+            for (final r
+                in catRows)
+              r['category_id']
+                  as String: _hexToColor(
+                (r['icon_color'] ??
+                        '')
+                    .toString(),
+              ),
+          };
 
       int bucketIndex(
         DateTime d,
@@ -2363,6 +2404,85 @@ class _DashboardPageState
     }
   }
 
+  Future<
+    void
+  >
+  _loadRecommendations(
+    String profileId,
+  ) async {
+    setState(
+      () {
+        _recLoading = true;
+        _recError = null;
+      },
+    );
+
+    try {
+      final baseUrl = 'http://127.0.0.1:8000'; // change later if needed
+
+      Future<
+        String?
+      >
+      fetchRecommendation(
+        String section,
+      ) async {
+        final uri = Uri.parse(
+          '$baseUrl/dashboard/recommendations?profile_id=$profileId&section=$section',
+        );
+
+        final response = await http.get(
+          uri,
+        );
+
+        if (response.statusCode ==
+            200) {
+          final data = jsonDecode(
+            response.body,
+          );
+          return data['recommendation']
+              as String?;
+        } else {
+          return null;
+        }
+      }
+
+      final income = await fetchRecommendation(
+        'income_overview',
+      );
+      final trends = await fetchRecommendation(
+        'financial_trends',
+      );
+      final savings = await fetchRecommendation(
+        'savings_over_time',
+      );
+      final category = await fetchRecommendation(
+        'category_breakdown',
+      );
+
+      if (!mounted) return;
+
+      setState(
+        () {
+          _incomeRecommendation = income;
+          _trendsRecommendation = trends;
+          _savingsRecommendation = savings;
+          _categoryRecommendation = category;
+          _recLoading = false;
+        },
+      );
+    } catch (
+      e
+    ) {
+      if (!mounted) return;
+      setState(
+        () {
+          _recLoading = false;
+          _recError = e.toString();
+        },
+      );
+    }
+  }
+
   // ================== UI ==================
   @override
   Widget build(
@@ -2415,17 +2535,18 @@ class _DashboardPageState
           '/profile',
         ),
 
-// ✅ THIS IS THE ONLY NEW PART
-  onTapAdd: () {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (_) =>  LogTransactionOptionsSheet(),
-    );
-  },
-
-
+        // ✅ THIS IS THE ONLY NEW PART
+        onTapAdd: () {
+          showModalBottomSheet(
+            context: context,
+            backgroundColor: Colors.transparent,
+            isScrollControlled: true,
+            builder:
+                (
+                  _,
+                ) => LogTransactionOptionsSheet(),
+          );
+        },
       ),
     );
   }
@@ -2681,6 +2802,9 @@ class _DashboardPageState
                   _LegendRow(
                     items: incomeLegends,
                   ),
+                  _RecommendationBox(
+                    text: _incomeRecommendation,
+                  ),
                 ],
               ),
             ),
@@ -2749,6 +2873,9 @@ class _DashboardPageState
                   _LegendRow(
                     items: monthlyLegends,
                   ),
+                  _RecommendationBox(
+                    text: _trendsRecommendation,
+                  ),
                 ],
               ),
             ),
@@ -2789,6 +2916,9 @@ class _DashboardPageState
                   showPoints: true,
                 ),
               ),
+            ),
+            _RecommendationBox(
+              text: _savingsRecommendation,
             ),
             const SizedBox(
               height: 16,
@@ -2872,6 +3002,9 @@ class _DashboardPageState
                                   ),
                                 ),
                               ),
+                            _RecommendationBox(
+                              text: _categoryRecommendation,
+                            ),
                           ],
                         ],
                       )
@@ -2990,6 +3123,9 @@ class _DashboardPageState
                                 ),
                               ),
                             ),
+                          _RecommendationBox(
+                            text: _categoryRecommendation,
+                          ),
                         ],
                       ),
                   ],
@@ -3087,6 +3223,85 @@ class _DashboardPageState
               ],
             ),
           ),
+    );
+  }
+}
+
+class _RecommendationBox
+    extends
+        StatelessWidget {
+  final String? text;
+  const _RecommendationBox({
+    required this.text,
+  });
+
+  @override
+  Widget build(
+    BuildContext context,
+  ) {
+    if (text ==
+            null ||
+        text!.trim().isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.only(
+          top: 12,
+        ),
+        child: Text(
+          'We need more data to generate insights for you.',
+          style: TextStyle(
+            color: AppColors.textGrey,
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(
+        top: 12,
+      ),
+      padding: const EdgeInsets.all(
+        12,
+      ),
+      decoration: BoxDecoration(
+        color: AppColors.card.withOpacity(
+          0.55,
+        ),
+        borderRadius: BorderRadius.circular(
+          14,
+        ),
+        border: Border.all(
+          color: Colors.white.withOpacity(
+            0.06,
+          ),
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            Icons.auto_awesome,
+            color: AppColors.accent,
+            size: 18,
+          ),
+          const SizedBox(
+            width: 8,
+          ),
+          Expanded(
+            child: Text(
+              text!,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                height: 1.4,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

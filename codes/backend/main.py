@@ -24,6 +24,7 @@ from pydantic import BaseModel, Field
 from goldmodel.gold_lstm_service import load_gold_lstm, predict_next_week_all_karats
 from receipt_llm import parse_receipt_with_llm
 from categories_model.receipt_model import predict_category, update_with_feedback
+from recommendations import generate_dashboard_recommendation
 
 from supabase import create_client
 
@@ -1156,6 +1157,7 @@ async def check_key(request: Request, call_next):
         "/gold/history",  # note: this is allowed but not defined yet
         "/receipt/category/predict",
         "/receipt/category/feedback",
+        "/dashboard/recommendations",
     }
 
     if path in public_paths:
@@ -1581,12 +1583,26 @@ def chat(body: ChatIn):
             status_code=500,
             content={"error": str(e), "type": e.__class__.__name__},
         )
+print("Loaded tools:", [t["function"]["name"] for t in OPENAI_TOOLS])
 
-
+@app.get("/dashboard/recommendations")
+def dashboard_recommendations(profile_id: str, section: str, period: str = "monthly"):
+    try:
+        result = generate_dashboard_recommendation(
+            profile_id=profile_id,
+            section=section,
+            period=period,
+            months=9,
+        )
+        return result
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+    
 if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run("main:app", host="127.0.0.1", port=PORT, reload=True)
 
 
-print("Loaded tools:", [t["function"]["name"] for t in OPENAI_TOOLS])
+

@@ -82,8 +82,8 @@ const List<_Category> _categories = [
         "A budget is a simple plan for your money. You decide ahead of time how much to save and how much to spend, so you are never caught off guard. Think of it as a map that guides every coin you have! 🗺️",
       ),
       _Question(
-        "How do I make my own budget?",
-        "Write down how much money you have. Then split it — some for saving, some for spending, some towards your goal. In Surra, logging every transaction helps you stick to that plan and see in real time how you are doing. ✏️",
+        "How do i track my own budget?",
+        "You can track your budget through both the Dashboard and Profile pages in Surra. The Profile page shows your current balance, total earnings, and total expenses. The Dashboard gives you deeper insights — including category breakdown, savings over time, and the ability to view your finances across different periods. By checking both regularly, you can clearly see how you are managing your money. 📊",
       ),
       _Question(
         "Why do I need a budget if I don't have much money?",
@@ -116,7 +116,11 @@ const List<_Category> _categories = [
         "Can I have more than one goal?",
         "Yes! You can create multiple saving goals on the Saving page — one for each thing you are working towards. Just make sure you are adding to each one regularly so all your goals keep moving forward. ⭐",
       ),
-    ],
+      _Question(
+        "How do I achieve a saving goal?",
+        "Start by creating a goal on the Saving page with a name, target amount, and target date. Then assign part of your saving amount to that goal so you can move closer to it step by step. If your plan changes, you can always unassign that amount and keep it available or assign it to another goal. This helps you stay flexible while still making progress toward your goal! 🎯",
+      ),
+          ],
   ),
   _Category(
     label: "Tips & Tricks",
@@ -146,6 +150,10 @@ const List<_Category> _categories = [
     icon: Icons.apps_rounded,
     color: Color(0xFF34C98A),
     questions: [
+      _Question(
+          "What is Surra?",
+          "Surra is a samrt money management app that helps you track your expenses and earnings, understand your spending, and build better saving habits. You can view your financial progress on the Dashboard page, create saving goals, and manage your money in a simple and friendly way! 💜",
+        ),
       _Question(
         "What does the Dashboard show me?",
         "The dashboard is your full money summary! At the top you can see your current balance. Below that is the Earning Overview — a chart that shows how much of your earning is left after expenses, along with your total expenses, and earnings for the selected period. Then there is Financial Trends, a bar chart comparing your expenses, and earnings over time. Finally, the Savings Over Time line chart shows how your monthly savings have changed. Switch between Weekly, Monthly, and Yearly views anytime! 📊",

@@ -315,13 +315,7 @@ class _SurraAppState
       );
     }
 
-    final bool isLoggedIn =
-        _user !=
-        null;
-    final String initialRoute = isLoggedIn
-        ? '/childProfile'
-        // : '/welcome';
-        : '/startpage';
+final bool isLoggedIn = _user != null;
 
     return MaterialApp(
       debugShowCheckedModeBanner: false,
@@ -338,7 +332,7 @@ class _SurraAppState
         useMaterial3: true,
         fontFamily: 'Poppins',
       ),
-      initialRoute: initialRoute,
+      home: isLoggedIn ? const RoleRedirectPage() : const StartPage(),
       routes: {
         // '/welcome':
         //     (
@@ -409,6 +403,70 @@ class _SurraAppState
               context,
             ) => const ChildProfilePage(),
       },
+    );
+  }
+}
+class RoleRedirectPage extends StatefulWidget {
+  const RoleRedirectPage({super.key});
+
+  @override
+  State<RoleRedirectPage> createState() => _RoleRedirectPageState();
+}
+
+class _RoleRedirectPageState extends State<RoleRedirectPage> {
+  final _supabase = Supabase.instance.client;
+
+  @override
+  void initState() {
+    super.initState();
+    _redirect();
+  }
+
+  Future<void> _redirect() async {
+    try {
+      final user = _supabase.auth.currentUser;
+
+      if (user == null) {
+        if (!mounted) return;
+        Navigator.pushReplacementNamed(context, '/startpage');
+        return;
+      }
+
+      final row = await _supabase
+          .from('User_Profile')
+          .select('user_type')
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+      final userType = row?['user_type']?.toString().toLowerCase();
+
+      if (!mounted) return;
+
+      if (userType == 'child') {
+        Navigator.pushReplacementNamed(context, '/childProfile');
+      } else if (userType == 'adult') {
+        Navigator.pushReplacementNamed(context, '/dashboard');
+      } else if (userType == 'guardian') {
+        Navigator.pushReplacementNamed(context, '/dashboard');
+      } else {
+        Navigator.pushReplacementNamed(context, '/dashboard');
+      }
+    } catch (e) {
+      debugPrint('Role redirect failed: $e');
+      if (!mounted) return;
+      Navigator.pushReplacementNamed(context, '/dashboard');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      backgroundColor: Color(0xFF1D1B32),
+      body: Center(
+        child: CircularProgressIndicator(
+          color: Color(0xFF7959F5),
+        ),
+      ),
     );
   }
 }

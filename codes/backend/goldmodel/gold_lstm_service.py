@@ -1,6 +1,6 @@
 import os
 import joblib
-import requests
+import httpx
 import pandas as pd
 import numpy as np
 import tensorflow as tf
@@ -8,14 +8,13 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from dotenv import load_dotenv
 
-# Load backend/.env
 load_dotenv(dotenv_path=Path(__file__).resolve().parents[1] / ".env")
 
 API_KEY = os.getenv("METALPRICE_API_KEY", "")
 TROY_OUNCE_TO_GRAM = 31.1034768
 CARAT_MULTIPLIERS = {"24K": 1.0, "21K": 21 / 24, "18K": 18 / 24}
 
-BASE_DIR = Path(__file__).resolve().parents[1]  # backend/
+BASE_DIR = Path(__file__).resolve().parents[1]
 MODEL_DIR = BASE_DIR / "goldmodel"
 
 _model = None
@@ -40,39 +39,39 @@ def fetch_latest_24k() -> float:
     if not API_KEY:
         raise ValueError("METALPRICE_API_KEY missing in backend/.env")
 
-    r = requests.get(
-        "https://api.metalpriceapi.com/v1/latest",
-        params={"api_key": API_KEY, "base": "USD", "currencies": "XAU,SAR"},
-        timeout=30,
-    )
+    with httpx.Client(timeout=30) as client:
+        r = client.get(
+            "https://api.metalpriceapi.com/v1/latest",
+            params={"api_key": API_KEY, "base": "USD", "currencies": "XAU,SAR"},
+        )
+
     r.raise_for_status()
     data = r.json()
     if not data.get("success"):
         raise ValueError(data)
+
     return sar_per_gram_from_rates(data["rates"])
 
 
 def fetch_last_n_days_df(n_days: int) -> pd.DataFrame:
-    """
-    Daily points up to yesterday (UTC). We'll replace last point with live price.
-    """
     if not API_KEY:
         raise ValueError("METALPRICE_API_KEY missing in backend/.env")
 
-    end_day = (datetime.now(timezone.utc).date() - timedelta(days=1))
+    end_day = datetime.now(timezone.utc).date() - timedelta(days=1)
     start_day = end_day - timedelta(days=n_days - 1)
 
-    r = requests.get(
-        "https://api.metalpriceapi.com/v1/timeframe",
-        params={
-            "api_key": API_KEY,
-            "start_date": start_day.isoformat(),
-            "end_date": end_day.isoformat(),
-            "base": "USD",
-            "currencies": "XAU,SAR",
-        },
-        timeout=30,
-    )
+    with httpx.Client(timeout=30) as client:
+        r = client.get(
+            "https://api.metalpriceapi.com/v1/timeframe",
+            params={
+                "api_key": API_KEY,
+                "start_date": start_day.isoformat(),
+                "end_date": end_day.isoformat(),
+                "base": "USD",
+                "currencies": "XAU,SAR",
+            },
+        )
+
     r.raise_for_status()
     data = r.json()
     if not data.get("success"):
@@ -82,20 +81,18 @@ def fetch_last_n_days_df(n_days: int) -> pd.DataFrame:
         {"date": d, "sar_per_gram": sar_per_gram_from_rates(rate)}
         for d, rate in data["rates"].items()
     ]
+
     df = pd.DataFrame(rows)
     df["date"] = pd.to_datetime(df["date"])
     df = df.sort_values("date").reset_index(drop=True)
 
     if len(df) < n_days:
-        raise ValueError(f"Expected {n_days} daily points, got {len(df)}. Missing dates in API response.")
+        raise ValueError(f"Expected {n_days} daily points, got {len(df)}.")
+
     return df
 
 
 def mc_dropout_predict_distribution_24k(seq, n_samples: int = 300):
-    """
-    MC dropout distribution.
-    We return mean/std and 25–75 interval (to match your new UI range).
-    """
     load_gold_lstm()
 
     preds = []
@@ -117,13 +114,8 @@ def mc_dropout_predict_distribution_24k(seq, n_samples: int = 300):
 
 
 def confidence_from_cv(std_sar: float, mean_sar: float):
-    """
-    Simple CV-based confidence.
-    Adjust thresholds as you like.
-    """
     cv = float(std_sar / max(abs(mean_sar), 1e-6))
 
-    # fallback thresholds (you can tune)
     p33 = 0.006
     p66 = 0.015
 
@@ -141,21 +133,25 @@ def confidence_from_cv(std_sar: float, mean_sar: float):
 
 
 def predict_next_week_all_karats(n_samples: int = 300):
-    """
-    Output format (no past here):
-      prices[karat] = {
-        current,
-        predicted_tplus7_interval:{lo,hi,mean,std,percentiles,samples},
-        confidence:{score_0_100, level, cv, method}
-      }
-    """
     load_gold_lstm()
 
-    df_hist = fetch_last_n_days_df(_SEQ_LEN)
+    try:
+     df_hist = fetch_last_n_days_df(_SEQ_LEN)
+    except Exception as e:
+        print("⚠️ timeframe API failed → fallback to synthetic data", e)
 
-    current_24k = fetch_latest_24k()
+        current = fetch_latest_24k()
 
-    # replace last daily point with live
+        df_hist = pd.DataFrame({
+            "sar_per_gram": [current] * _SEQ_LEN
+        })
+    
+    try:
+        current_24k = fetch_latest_24k()
+    except Exception as e:
+        print("⚠️ latest API failed → using last known value", e)
+        current_24k = df_hist["sar_per_gram"].iloc[-1]
+
     df_hist.loc[df_hist.index[-1], "sar_per_gram"] = current_24k
 
     series = df_hist["sar_per_gram"].values.reshape(-1, 1)
@@ -197,4 +193,3 @@ def predict_next_week_all_karats(n_samples: int = 300):
         }
 
     return result
-

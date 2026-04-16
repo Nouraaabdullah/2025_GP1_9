@@ -1019,6 +1019,7 @@ def build_messages(body: ChatIn) -> List[Dict[str, str]]:
                 "- Do NOT describe which tools you are using, which record_ids you selected, or how many records exist.\n"
                 "- Do NOT ask the user to confirm the months; infer them from the data unless the user explicitly asks for a different month.\n"
                 "- Always write amounts with 'SAR' after the value.\n"
+                "- Do NOT use markdown formatting (no **, no *, no bullet symbols).\n"
                 "- Never include disclaimers or apologies.\n\n"
                 "3. Interpret tool results intelligently\n"
                 "After receiving a tool response:\n"
@@ -1342,10 +1343,8 @@ def save_gold_to_db(result: dict):
         else:
             # INSERT new row for today requires NOT NULL past_price
             if past_7d is None:
-                raise HTTPException(
-                    500,
-                    f"Cannot insert today's gold row for {karat}K because past_price (exactly 7 days ago) is missing in DB."
-                )
+                print(f" No past_price for {karat}K → using current as fallback")
+                past_7d = current_price
 
             payload = {
                 "karat": karat,
@@ -1373,7 +1372,7 @@ async def gold_refresh_loop(interval_seconds: int = 600, samples: int = 60):
     """
     while True:
         try:
-            result = predict_next_week_all_karats(n_samples=samples)
+            result =  predict_next_week_all_karats(n_samples=samples)
             save_gold_to_db(result)
             print(f"[gold_refresh_loop] refreshed successfully at {dt.now(timezone.utc).isoformat()}")
         except Exception as e:
@@ -1400,24 +1399,20 @@ def gold_refresh(samples: int = 60):
     rows = save_gold_to_db(result)
     return {"ok": True, "affected_rows": len(rows)}
 
-
 @app.get("/gold/latest")
 def gold_latest():
     rows = sbr(
-    "Gold",
-    params={
-        "select": "gold_data_id,created_at",
-        "karat": f"eq.{karat}",
-        "created_at": f"gte.{start_iso}",
-        "and": f"(created_at.lt.{end_iso})",
-        "limit": "1",
-    },
-)
-
+        "Gold",
+        {
+            "select": "karat,current_price,predicted_price,predicted_low,predicted_high,confidence_level,created_at",
+            "order": "created_at.desc",
+            "limit": "200",
+        },
+    )
 
     latest_by_karat = {}
     for r in rows:
-        k = r["karat"]
+        k = int(r["karat"])
         if k not in latest_by_karat:
             latest_by_karat[k] = r
         if len(latest_by_karat) >= 3:
@@ -1428,16 +1423,15 @@ def gold_latest():
 
     def build_block(r):
         kar = int(r["karat"])
-    return {
-        "past_7_days": get_price_exactly_7_days_ago_from_db(kar),
-        "current": float(r["current_price"]),
-        "predicted_tplus7_interval": {
-            "lo": float(r["predicted_low"]),
-            "hi": float(r["predicted_high"]),
-        },
-        "confidence": {"level": r.get("confidence_level")},
-    }
-
+        return {
+            "past_7_days": get_price_exactly_7_days_ago_from_db(kar),
+            "current": float(r["current_price"]),
+            "predicted_tplus7_interval": {
+                "lo": float(r["predicted_low"]) if r.get("predicted_low") is not None else None,
+                "hi": float(r["predicted_high"]) if r.get("predicted_high") is not None else None,
+            },
+            "confidence": {"level": r.get("confidence_level")},
+        }
 
     prices = {}
     for karat in [24, 21, 18]:
@@ -1502,24 +1496,51 @@ def get_latest_gold_from_db():
         }
     }
 
+def detect_intent(text: str) -> str:
+    r = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {
+                "role": "system",
+                "content": (
+                    "Classify the user message into ONE of these categories:\n"
+                    "1. data → asking for factual financial data (balance, expenses, categories)\n"
+                    "2. action → asking if they can buy something or simulate a purchase\n"
+                    "3. advice → asking for recommendations, suggestions, or guidance\n\n"
+                    "Return ONLY one word: data, action, or advice."
+                ),
+            },
+            {"role": "user", "content": text},
+        ],
+    )
+
+    return r.choices[0].message.content.strip().lower()
 
 
 
 
+      
 @app.post("/chat")
 def chat(body: ChatIn):
     try:
-        model = FT_MODEL_ID
+        
+        intent = detect_intent(body.text)
+
+        
+        if intent == "advice":
+            model = "gpt-4o-mini"
+        else:
+            model = FT_MODEL_ID
+
+       
+        print(" Intent detected:", intent)
+        print(" Model selected:", model)
+
+        
         base_messages = build_messages(body)
 
-        # --- GOLD CONTEXT INJECTION ---
-      
-
-
-
-
-        print(f"📦 /chat using model: {model}")
-        print(f"📜 history turns: {len(body.history)}")
+        print(f" /chat using model: {model}")
+        print(f" history turns: {len(body.history)}")
 
         r = client.chat.completions.create(
             model=model,

@@ -24,8 +24,7 @@ from pydantic import BaseModel, Field
 from goldmodel.gold_lstm_service import load_gold_lstm, predict_next_week_all_karats
 from receipt_llm import parse_receipt_with_llm
 from categories_model.receipt_model import predict_category, update_with_feedback
-from recommendations import generate_dashboard_recommendation
-
+from recommendations import generate_daily_dashboard_recommendation
 from supabase import create_client
 
 # Force load backend/.env (next to main.py)
@@ -1586,18 +1585,21 @@ def chat(body: ChatIn):
 print("Loaded tools:", [t["function"]["name"] for t in OPENAI_TOOLS])
 
 @app.get("/dashboard/recommendations")
-def dashboard_recommendations(profile_id: str, section: str, period: str = "monthly"):
+def dashboard_recommendations(profile_id: str):
     try:
-        result = generate_dashboard_recommendation(
+        result = generate_daily_dashboard_recommendation(
             profile_id=profile_id,
-            section=section,
-            period=period,
             months=9,
         )
         return result
-    except Exception as e:
+    except HTTPException:
+        raise
+    except Exception:
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=503,
+            detail="We’re having trouble refreshing your insight right now. Please try again later."
+        )
     
 if __name__ == "__main__":
     import uvicorn

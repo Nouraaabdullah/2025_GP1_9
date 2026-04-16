@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/bottom_nav_bar.dart';
 import 'package:surra_application/screens/Log/log_transaction_options_sheet.dart';
@@ -40,13 +40,9 @@ class _DashboardPageState
   bool _showAllWeekly = false; // for weekly legend grid
   bool _isRefreshing = false;
   bool _donutExpanded = false;
-  String? _incomeRecommendation;
-  String? _trendsRecommendation;
-  String? _savingsRecommendation;
-  String? _categoryRecommendation;
-  String? _recError;
-
-  bool _recLoading = false;
+  String? _dailyRecommendation;
+  String? _recommendationError;
+  bool _recommendationLoading = false;
 
   // Accent palette
   static const _violet = Color(
@@ -159,6 +155,8 @@ class _DashboardPageState
   void initState() {
     super.initState();
     _loadAll();
+
+    _loadDailyRecommendation();
   }
 
   Future<
@@ -340,9 +338,6 @@ class _DashboardPageState
         );
         return; // user was redirected to /login
       }
-      await _loadRecommendations(
-        profileId,
-      );
 
       // 1) balance
       final prof = await _sb
@@ -2407,79 +2402,158 @@ class _DashboardPageState
   Future<
     void
   >
-  _loadRecommendations(
-    String profileId,
-  ) async {
-    setState(
-      () {
-        _recLoading = true;
-        _recError = null;
-      },
+  _loadDailyRecommendation() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(
+      'daily_recommendation_text',
+    );
+    await prefs.remove(
+      'daily_recommendation_date',
+    );
+    final today = DateTime.now()
+        .toIso8601String()
+        .split(
+          'T',
+        )
+        .first;
+
+    final profileId = await getProfileId(
+      context,
+    );
+    if (profileId ==
+        null) {
+      if (mounted) {
+        setState(
+          () {
+            _recommendationLoading = false;
+            _recommendationError = 'We couldn’t load your insight right now.';
+          },
+        );
+      }
+      return;
+    }
+
+    final textKey = 'daily_recommendation_text_$profileId';
+    final dateKey = 'daily_recommendation_date_$profileId';
+
+    final cachedText = prefs.getString(
+      textKey,
+    );
+    final cachedDate = prefs.getString(
+      dateKey,
     );
 
+    if (cachedText !=
+            null &&
+        cachedText.isNotEmpty &&
+        mounted) {
+      setState(
+        () {
+          _dailyRecommendation = cachedText;
+        },
+      );
+    }
+
+    if (cachedDate ==
+            today &&
+        cachedText !=
+            null &&
+        cachedText.isNotEmpty) {
+      return;
+    }
+
     try {
-      final baseUrl = 'http://127.0.0.1:8000'; // change later if needed
-
-      Future<
-        String?
-      >
-      fetchRecommendation(
-        String section,
-      ) async {
-        final uri = Uri.parse(
-          '$baseUrl/dashboard/recommendations?profile_id=$profileId&section=$section',
+      if (mounted) {
+        setState(
+          () {
+            _recommendationLoading = true;
+            _recommendationError = null;
+          },
         );
-
-        final response = await http.get(
-          uri,
-        );
-
-        if (response.statusCode ==
-            200) {
-          final data = jsonDecode(
-            response.body,
-          );
-          return data['recommendation']
-              as String?;
-        } else {
-          return null;
-        }
       }
 
-      final income = await fetchRecommendation(
-        'income_overview',
-      );
-      final trends = await fetchRecommendation(
-        'financial_trends',
-      );
-      final savings = await fetchRecommendation(
-        'savings_over_time',
-      );
-      final category = await fetchRecommendation(
-        'category_breakdown',
+      final baseUrl = 'http://127.0.0.1:8000'; // change later when deploying
+      final uri = Uri.parse(
+        '$baseUrl/dashboard/recommendations?profile_id=$profileId',
       );
 
-      if (!mounted) return;
-
-      setState(
-        () {
-          _incomeRecommendation = income;
-          _trendsRecommendation = trends;
-          _savingsRecommendation = savings;
-          _categoryRecommendation = category;
-          _recLoading = false;
-        },
+      final response = await http.get(
+        uri,
       );
+
+      if (response.statusCode ==
+          200) {
+        final data = jsonDecode(
+          response.body,
+        );
+        final recommendation =
+            (data['recommendation'] ??
+                    '')
+                .toString()
+                .trim();
+        final generatedOn =
+            (data['generated_on'] ??
+                    today)
+                .toString()
+                .split(
+                  'T',
+                )
+                .first;
+
+        if (recommendation.isNotEmpty) {
+          await prefs.setString(
+            textKey,
+            recommendation,
+          );
+          await prefs.setString(
+            dateKey,
+            generatedOn,
+          );
+
+          if (mounted) {
+            setState(
+              () {
+                _dailyRecommendation = recommendation;
+                _recommendationError = null;
+              },
+            );
+          }
+        } else {
+          if (mounted) {
+            setState(
+              () {
+                _recommendationError = 'We couldn’t refresh your insight right now. Please try again later.';
+              },
+            );
+          }
+        }
+      } else {
+        if (mounted) {
+          setState(
+            () {
+              _recommendationError = 'We couldn’t refresh your insight right now. Please check your connection and try again later.';
+            },
+          );
+        }
+      }
     } catch (
-      e
+      _
     ) {
-      if (!mounted) return;
-      setState(
-        () {
-          _recLoading = false;
-          _recError = e.toString();
-        },
-      );
+      if (mounted) {
+        setState(
+          () {
+            _recommendationError = 'We couldn’t refresh your insight right now. Please check your connection and try again later.';
+          },
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(
+          () {
+            _recommendationLoading = false;
+          },
+        );
+      }
     }
   }
 
@@ -2749,6 +2823,14 @@ class _DashboardPageState
             const SizedBox(
               height: 18,
             ),
+            _DailyRecommendationCard(
+              recommendation: _dailyRecommendation,
+              errorText: _recommendationError,
+              isLoading: _recommendationLoading,
+            ),
+            const SizedBox(
+              height: 18,
+            ),
 
             _HeaderPanel(
               periodIndex: _periodIndex,
@@ -2801,9 +2883,6 @@ class _DashboardPageState
                   ),
                   _LegendRow(
                     items: incomeLegends,
-                  ),
-                  _RecommendationBox(
-                    text: _incomeRecommendation,
                   ),
                 ],
               ),
@@ -2873,9 +2952,6 @@ class _DashboardPageState
                   _LegendRow(
                     items: monthlyLegends,
                   ),
-                  _RecommendationBox(
-                    text: _trendsRecommendation,
-                  ),
                 ],
               ),
             ),
@@ -2917,9 +2993,7 @@ class _DashboardPageState
                 ),
               ),
             ),
-            _RecommendationBox(
-              text: _savingsRecommendation,
-            ),
+
             const SizedBox(
               height: 16,
             ),
@@ -3002,9 +3076,6 @@ class _DashboardPageState
                                   ),
                                 ),
                               ),
-                            _RecommendationBox(
-                              text: _categoryRecommendation,
-                            ),
                           ],
                         ],
                       )
@@ -3123,9 +3194,6 @@ class _DashboardPageState
                                 ),
                               ),
                             ),
-                          _RecommendationBox(
-                            text: _categoryRecommendation,
-                          ),
                         ],
                       ),
                   ],
@@ -3227,54 +3295,54 @@ class _DashboardPageState
   }
 }
 
-class _RecommendationBox
+class _DailyRecommendationCard
     extends
         StatelessWidget {
-  final String? text;
-  const _RecommendationBox({
-    required this.text,
+  final String? recommendation;
+  final String? errorText;
+  final bool isLoading;
+
+  const _DailyRecommendationCard({
+    required this.recommendation,
+    required this.errorText,
+    required this.isLoading,
   });
 
   @override
   Widget build(
     BuildContext context,
   ) {
-    if (text ==
-            null ||
-        text!.trim().isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.only(
-          top: 12,
-        ),
-        child: Text(
-          'We need more data to generate insights for you.',
-          style: TextStyle(
-            color: AppColors.textGrey,
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      );
+    String text;
+
+    if (errorText !=
+            null &&
+        errorText!.isNotEmpty) {
+      text = errorText!;
+    } else if (recommendation !=
+            null &&
+        recommendation!.isNotEmpty) {
+      text = recommendation!;
+    } else if (isLoading) {
+      text = 'Loading your personalized insight...';
+    } else {
+      text = 'Your personalized insight will appear here.';
     }
 
     return Container(
       width: double.infinity,
-      margin: const EdgeInsets.only(
-        top: 12,
-      ),
       padding: const EdgeInsets.all(
-        12,
+        14,
       ),
       decoration: BoxDecoration(
         color: AppColors.card.withOpacity(
           0.55,
         ),
         borderRadius: BorderRadius.circular(
-          14,
+          18,
         ),
         border: Border.all(
           color: Colors.white.withOpacity(
-            0.06,
+            0.08,
           ),
         ),
       ),
@@ -3284,17 +3352,17 @@ class _RecommendationBox
           Icon(
             Icons.auto_awesome,
             color: AppColors.accent,
-            size: 18,
+            size: 20,
           ),
           const SizedBox(
-            width: 8,
+            width: 10,
           ),
           Expanded(
             child: Text(
-              text!,
+              text,
               style: const TextStyle(
                 color: Colors.white,
-                fontSize: 12,
+                fontSize: 13,
                 fontWeight: FontWeight.w600,
                 height: 1.4,
               ),

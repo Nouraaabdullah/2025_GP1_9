@@ -10,7 +10,9 @@ import 'dart:ui';
 import 'package:surra_application/services/gold_service.dart';
 import 'package:surra_application/screens/Log/log_transaction_options_sheet.dart';
 import 'dart:convert';
-import 'package:surra_application/screens/profile/guardian_child_statistics_page.dart';
+import 'package:surra_application/screens/profile/add_child_page.dart';
+import 'package:surra_application/screens/notifications/notification_bell.dart';
+import 'package:surra_application/screens/notifications/notification_services.dart';
 
 class ProfileMainPage
     extends
@@ -139,11 +141,10 @@ class _ProfileMainPageState
         'Error refreshing data: $e',
       );
     } finally {
-      if (mounted) {
+      if (mounted)
         setState(
           () => _isRefreshing = false,
         );
-      }
     }
   }
 
@@ -341,6 +342,53 @@ class _ProfileMainPageState
     }
   }
 
+Future<void> _checkBudgetNotifications(
+  List<_CategoryDash> categories,
+) async {
+  final notificationService = NotificationService();
+
+  for (final category in categories) {
+    if (category.percent == null) continue;
+
+    final percent = category.percent!;
+
+    if (percent >= 100) {
+      final title = '${category.name} budget exceeded';
+
+      final exists = await notificationService.notificationExistsToday(
+        title: title,
+        type: 'budget',
+      );
+
+      if (!exists) {
+        await notificationService.createNotification(
+          title: title,
+          body: 'You have exceeded your ${category.name} budget.',
+          type: 'budget',
+          route: null,
+        );
+      }
+    } else if (percent >= 80) {
+      final title = '${category.name} budget alert';
+
+      final exists = await notificationService.notificationExistsToday(
+        title: title,
+        type: 'budget',
+      );
+
+      if (!exists) {
+        await notificationService.createNotification(
+          title: title,
+          body:
+              'You have used ${percent.toStringAsFixed(0)}% of your ${category.name} budget.',
+          type: 'budget',
+          route: null,
+        );
+      }
+    }
+  }
+}
+
   Future<
     void
   >
@@ -357,6 +405,7 @@ class _ProfileMainPageState
     ).day;
 
     try {
+      // ----- FIXED INCOMES -----
       final incomes = await _sb
           .from(
             'Fixed_Income',
@@ -394,6 +443,7 @@ class _ProfileMainPageState
               null)
             continue;
 
+          // clamp payday to last day of this month (handles 31 in short months)
           final effectiveDay = payday.clamp(
             1,
             lastDay,
@@ -414,6 +464,7 @@ class _ProfileMainPageState
         }
       }
 
+      // ----- FIXED EXPENSES -----
       final expenses = await _sb
           .from(
             'Fixed_Expense',
@@ -481,6 +532,7 @@ class _ProfileMainPageState
         return;
       }
 
+      // ----- UPDATE BALANCE -----
       final prof = await _sb
           .from(
             'User_Profile',
@@ -526,6 +578,7 @@ class _ProfileMainPageState
             profileId,
           );
 
+      // mark applied
       for (final id in incomeIdsToMark) {
         await _sb
             .from(
@@ -891,12 +944,12 @@ class _ProfileMainPageState
           .order(
             'name',
           );
-
       final children =
           <
             _ChildSummary
           >[];
 
+      // get guardian user_id from User_Profile
       final guardianProfile = await _sb
           .from(
             'User_Profile',
@@ -919,7 +972,7 @@ class _ProfileMainPageState
               'Child_Guardian',
             )
             .select(
-              'child_id, user_name, icon',
+              'child_id, user_name',
             )
             .eq(
               'guardian_id',
@@ -931,7 +984,6 @@ class _ProfileMainPageState
           for (final row in childRows) {
             final childId = row['child_id']?.toString();
             final username = row['user_name']?.toString();
-            final icon = row['icon']?.toString();
 
             if (childId !=
                     null &&
@@ -942,19 +994,15 @@ class _ProfileMainPageState
                 _ChildSummary(
                   childId: childId,
                   username: username,
-                  icon:
-                      (icon !=
-                              null &&
-                          icon.trim().isNotEmpty)
-                      ? icon
-                      : '🧒',
                 ),
               );
             }
           }
         }
+        
       }
 
+      // ----- NEW: build totalByCat from Category_Summary when a monthly record exists -----
       final Map<
         String,
         double
@@ -997,6 +1045,8 @@ class _ProfileMainPageState
           }
         }
       } else {
+        // Fallback: if no Monthly_Financial_Record yet for this month,
+        // compute from Transaction like before so UI doesn't break
         final trxThisMonth = await _sb
             .from(
               'Transaction',
@@ -1094,7 +1144,7 @@ class _ProfileMainPageState
           );
         }
       }
-
+      // Sort by most spending -> least
       items.sort(
         (
           a,
@@ -1103,7 +1153,7 @@ class _ProfileMainPageState
           a.amount,
         ),
       );
-
+   await _checkBudgetNotifications(items);
       return _DashboardData(
         fullName: fullName,
         currentBalance: currentBalance,
@@ -1219,6 +1269,7 @@ class _ProfileMainPageState
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
+                                // ---------- TOP CONTENT WITH PADDING (UNCHANGED) ----------
                                 Padding(
                                   padding: const EdgeInsets.symmetric(
                                     horizontal: 20,
@@ -1242,51 +1293,53 @@ class _ProfileMainPageState
                                             ),
                                           ),
                                           Row(
-                                            children: [
-                                              if (_isRefreshing)
-                                                const Padding(
-                                                  padding: EdgeInsets.only(
-                                                    right: 8,
-                                                  ),
-                                                  child: SizedBox(
-                                                    width: 16,
-                                                    height: 16,
-                                                    child: CircularProgressIndicator(
-                                                      strokeWidth: 2,
-                                                      color: Colors.white,
-                                                    ),
-                                                  ),
-                                                ),
-                                              IconButton(
-                                                icon: const Icon(
-                                                  Icons.edit,
-                                                  color: Colors.white,
-                                                ),
-                                                onPressed: () =>
-                                                    Navigator.push(
-                                                      context,
-                                                      MaterialPageRoute(
-                                                        builder:
-                                                            (
-                                                              context,
-                                                            ) => const EditProfilePage(),
-                                                      ),
-                                                    ).then(
-                                                      (
-                                                        _,
-                                                      ) => _refreshData(),
-                                                    ),
-                                              ),
-                                              IconButton(
-                                                icon: const Icon(
-                                                  Icons.logout,
-                                                  color: Colors.white,
-                                                ),
-                                                onPressed: _logout,
-                                                tooltip: 'Logout',
-                                              ),
-                                            ],
-                                          ),
+  children: [
+    if (_isRefreshing)
+      const Padding(
+        padding: EdgeInsets.only(
+          right: 8,
+        ),
+        child: SizedBox(
+          width: 16,
+          height: 16,
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            color: Colors.white,
+          ),
+        ),
+      ),
+    const NotificationBell(),
+    const SizedBox(width: 6),
+    IconButton(
+      icon: const Icon(
+        Icons.edit,
+        color: Colors.white,
+      ),
+      onPressed: () =>
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder:
+                  (
+                    context,
+                  ) => const EditProfilePage(),
+            ),
+          ).then(
+            (
+              _,
+            ) => _refreshData(),
+          ),
+    ),
+    IconButton(
+      icon: const Icon(
+        Icons.logout,
+        color: Colors.white,
+      ),
+      onPressed: _logout,
+      tooltip: 'Logout',
+    ),
+  ],
+),
                                         ],
                                       ),
                                       const SizedBox(
@@ -1351,6 +1404,8 @@ class _ProfileMainPageState
                                     ],
                                   ),
                                 ),
+
+                                // ---------- BIG CATEGORIES SECTION (UPDATED) ----------
                                 Container(
                                   width: double.infinity,
                                   padding: const EdgeInsets.fromLTRB(
@@ -1360,7 +1415,7 @@ class _ProfileMainPageState
                                     24,
                                   ),
                                   decoration: const BoxDecoration(
-                                    color: AppColors.bg,
+                                    color: AppColors.bg, // solid dark, no transparency
                                     borderRadius: BorderRadius.only(
                                       topLeft: Radius.circular(
                                         40,
@@ -1502,6 +1557,9 @@ class _ProfileMainPageState
                                 const SizedBox(
                                   height: 22,
                                 ),
+
+                                // Replace the entire "Gold Trends" section in your ProfileMainPage build method with this:
+                                // ===================== GOLD TRENDS (PASTE THIS WHOLE SECTION) =====================
                                 Padding(
                                   padding: const EdgeInsets.fromLTRB(
                                     20,
@@ -1548,6 +1606,7 @@ class _ProfileMainPageState
                                                 ];
                                                 final k = karats[i];
 
+                                                // ---------- Loading ----------
                                                 if (_goldDbLoading) {
                                                   return _GoldTrendCard(
                                                     karat: k,
@@ -1564,6 +1623,7 @@ class _ProfileMainPageState
                                                   );
                                                 }
 
+                                                // ---------- Error / Empty ----------
                                                 if (_goldDbError !=
                                                         null ||
                                                     _goldDb ==
@@ -1583,6 +1643,7 @@ class _ProfileMainPageState
                                                   );
                                                 }
 
+                                                // helpers
                                                 double
                                                 _num(
                                                   dynamic v,
@@ -1626,14 +1687,13 @@ class _ProfileMainPageState
                                                         v,
                                                       );
                                                       if (decoded
-                                                          is Map) {
+                                                          is Map)
                                                         return Map<
                                                           String,
                                                           dynamic
                                                         >.from(
                                                           decoded,
                                                         );
-                                                      }
                                                     } catch (
                                                       _
                                                     ) {}
@@ -1660,6 +1720,7 @@ class _ProfileMainPageState
                                                   return 'low';
                                                 }
 
+                                                // ---------- Read from DB object ----------
                                                 final prices =
                                                     (_goldDb?['prices']
                                                         as Map<
@@ -1670,10 +1731,10 @@ class _ProfileMainPageState
                                                 final dbKey = k.replaceAll(
                                                   'K',
                                                   '',
-                                                );
+                                                ); // "18K" -> "18"
                                                 final rawObj =
                                                     prices[dbKey] ??
-                                                    prices[k];
+                                                    prices[k]; // fallback لو كان فيه K
 
                                                 if (rawObj ==
                                                     null) {
@@ -1692,6 +1753,7 @@ class _ProfileMainPageState
                                                   );
                                                 }
 
+                                                // rawObj ممكن يكون Map أو String(json) — نخليه Map مضمون
                                                 final goldRow =
                                                     _asMap(
                                                       rawObj,
@@ -1701,6 +1763,12 @@ class _ProfileMainPageState
                                                       dynamic
                                                     >{};
 
+                                                // ✅ IMPORTANT:
+                                                // هذا السكشن يدعم شكلين:
+                                                // (A) شكل DB المفروض عندك: past_price/current_price/predicted_low/predicted_high/confidence_level
+                                                // (B) شكل model القديم: past/current/predicted_tplus7_interval/confidence
+
+                                                // --- A: DB fields ---
                                                 final bool hasDbFields =
                                                     goldRow.containsKey(
                                                       'past_price',
@@ -1753,6 +1821,7 @@ class _ProfileMainPageState
                                                         goldRow['confidence'],
                                                       );
 
+                                                // --- Range Text ---
                                                 final String nextWeekRange =
                                                     (lowPrice ==
                                                             0 &&
@@ -1761,6 +1830,7 @@ class _ProfileMainPageState
                                                     ? '—'
                                                     : '${lowPrice.toStringAsFixed(0)}–${highPrice.toStringAsFixed(0)} SAR';
 
+                                                // --- Badge % (today vs last week) ---
                                                 String _fmtSignedPct(
                                                   double v,
                                                 ) {
@@ -1773,6 +1843,7 @@ class _ProfileMainPageState
                                                       : '$s%';
                                                 }
 
+                                                // Predicted % range vs today's price
                                                 String badgePct;
                                                 if (currentPrice ==
                                                         0 ||
@@ -1793,6 +1864,7 @@ class _ProfileMainPageState
                                                           currentPrice) *
                                                       100.0;
 
+                                                  // Ensure ordering (just in case)
                                                   final lo =
                                                       pctLo <=
                                                           pctHi
@@ -1804,6 +1876,7 @@ class _ProfileMainPageState
                                                       ? pctHi
                                                       : pctLo;
 
+                                                  // If the range collapses to ~same integer, show single value
                                                   if (lo.round() ==
                                                       hi.round()) {
                                                     badgePct = _fmtSignedPct(
@@ -1813,12 +1886,13 @@ class _ProfileMainPageState
                                                     badgePct = '${_fmtSignedPct(lo)}–${_fmtSignedPct(hi)}';
                                                   }
                                                 }
-
+                                                // --- Change (SAR/g) ---
                                                 final double changeValue =
                                                     currentPrice -
                                                     pastPrice;
                                                 final String changeText = '${changeValue >= 0 ? '+' : ''}${changeValue.toStringAsFixed(0)} SAR/g';
 
+                                                // --- Confidence UI ---
                                                 Color confColor;
                                                 String confLabel;
 
@@ -1858,6 +1932,8 @@ class _ProfileMainPageState
                                     ],
                                   ),
                                 ),
+
+                                // =================== END GOLD TRENDS ===================
                                 const SizedBox(
                                   height: 14,
                                 ),
@@ -1880,6 +1956,8 @@ class _ProfileMainPageState
           '/savings',
         ),
         onTapProfile: () {},
+
+        // ✅ ADD THIS
         onTapAdd: () {
           showModalBottomSheet(
             context: context,
@@ -1898,10 +1976,6 @@ class _ProfileMainPageState
   Widget _buildChildrenSummarySection(
     _DashboardData data,
   ) {
-    if (data.children.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1932,7 +2006,9 @@ class _ProfileMainPageState
             height: 112,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
-              itemCount: data.children.length,
+              itemCount:
+                  data.children.length +
+                  1,
               separatorBuilder:
                   (
                     _,
@@ -1945,23 +2021,31 @@ class _ProfileMainPageState
                     context,
                     index,
                   ) {
+                    if (index ==
+                        data.children.length) {
+                      return _AddChildButton(
+                        onTap: () async {
+                          final result = await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder:
+                                  (
+                                    _,
+                                  ) => const AddChildPage(),
+                            ),
+                          );
+
+                          if (result ==
+                              true) {
+                            _refreshData();
+                          }
+                        },
+                      );
+                    }
+
                     final child = data.children[index];
                     return _ChildAvatarCard(
                       username: child.username,
-                      icon: child.icon,
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder:
-                                (
-                                  _,
-                                ) => GuardianChildStatisticsPage(
-                                  childProfileId: child.childId,
-                                ),
-                          ),
-                        );
-                      },
                     );
                   },
             ),
@@ -2344,6 +2428,8 @@ class _ProfileMainPageState
   }
 }
 
+// ===== Data Classes =====
+
 class _TransactionItem {
   final String title;
   final double amount;
@@ -2411,14 +2497,14 @@ class _CategoryDash {
 class _ChildSummary {
   final String childId;
   final String username;
-  final String icon;
 
   const _ChildSummary({
     required this.childId,
     required this.username,
-    required this.icon,
   });
 }
+
+// ===== Category Cards =====
 
 class _CategoryCard
     extends
@@ -2437,11 +2523,13 @@ class _CategoryCard
   Color _hexToColor(
     String value,
   ) {
+    // Remove leading #
     value = value.replaceAll(
       '#',
       '',
     );
 
+    // If it's only digits and longer than 8 chars, treat as decimal Color.value
     final isDecimal =
         RegExp(
           r'^[0-9]+$',
@@ -2453,15 +2541,16 @@ class _CategoryCard
     if (isDecimal) {
       final dec = int.parse(
         value,
-      );
+      ); // decimal
       return Color(
         dec,
-      );
+      ); // directly use ARGB int
     }
 
+    // Otherwise treat as hex string (old users)
     if (value.length ==
         6) {
-      value = 'FF$value';
+      value = 'FF$value'; // add full alpha
     }
     return Color(
       int.parse(
@@ -2771,7 +2860,7 @@ class _GoldTrendCard
         StatelessWidget {
   final String karat;
   final String headline;
-  final String nextWeekRange;
+  final String nextWeekRange; // big range
   final String todayPrice;
   final String lastWeekPrice;
   final String changeText;
@@ -2803,7 +2892,7 @@ class _GoldTrendCard
     const double textStartX =
         pad +
         coin +
-        12;
+        12; // 18 + 44 + 12 = 74
 
     return SizedBox(
       width: cardW,
@@ -2814,6 +2903,7 @@ class _GoldTrendCard
         ),
         child: Stack(
           children: [
+            // ✅ Background gradient
             Container(
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
@@ -2827,17 +2917,19 @@ class _GoldTrendCard
                   colors: [
                     Color(
                       0xFFEA875E,
-                    ),
+                    ), // stronger orange (Figma)
                     Color(
                       0xFFAB49F9,
-                    ),
+                    ), // purple
                     Color(
                       0xFFE9489D,
-                    ),
+                    ), // pink
                   ],
                 ),
               ),
             ),
+
+            // ✅ Soft blobs
             Positioned(
               left: 175,
               top: -55,
@@ -2907,6 +2999,8 @@ class _GoldTrendCard
                 ),
               ),
             ),
+
+            // ✅ Coin (left)
             Positioned(
               left: pad,
               top: pad,
@@ -2957,6 +3051,8 @@ class _GoldTrendCard
                 ),
               ),
             ),
+
+            // ✅ Headline
             Positioned(
               left: textStartX,
               top: 16,
@@ -2974,14 +3070,17 @@ class _GoldTrendCard
                 ),
               ),
             ),
+
+            // ✅ Badge
             Positioned(
               right: pad,
               top: 16,
               child: SizedBox(
-                width: 86,
+                width: 86, // controls how "centered" it feels; tweak 80–100
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
+                    // % badge
                     Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 12,
@@ -3007,9 +3106,12 @@ class _GoldTrendCard
                         ),
                       ),
                     ),
+
                     const SizedBox(
                       height: 8,
                     ),
+
+                    // ✅ Confidence label (NEW)
                     const Text(
                       "Confidence",
                       textAlign: TextAlign.center,
@@ -3023,9 +3125,12 @@ class _GoldTrendCard
                         height: 1.0,
                       ),
                     ),
+
                     const SizedBox(
                       height: 6,
                     ),
+
+                    // dot + level centered
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       mainAxisSize: MainAxisSize.min,
@@ -3063,6 +3168,8 @@ class _GoldTrendCard
                 ),
               ),
             ),
+
+            // ✅ Big range
             Positioned(
               left: textStartX,
               top: 45,
@@ -3080,6 +3187,8 @@ class _GoldTrendCard
                 ),
               ),
             ),
+
+            // ✅ Bottom info box (no overflow)
             Positioned(
               left: pad,
               right: pad,
@@ -3180,7 +3289,7 @@ class _GoldTrendCard
                     ),
                     Container(
                       height: 0.8,
-                      color: const Color(
+                      color: Color(
                         0x66FFFFFF,
                       ),
                     ),
@@ -3240,12 +3349,69 @@ class _ChildAvatarCard
     extends
         StatelessWidget {
   final String username;
-  final String icon;
-  final VoidCallback onTap;
 
   const _ChildAvatarCard({
     required this.username,
-    required this.icon,
+  });
+
+  @override
+  Widget build(
+    BuildContext context,
+  ) {
+    return SizedBox(
+      width: 82,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            width: 64,
+            height: 64,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: const Color(
+                0xFFFFD6E7,
+              ),
+              border: Border.all(
+                color: const Color(
+                  0xFFF4B6D2,
+                ),
+                width: 3,
+              ),
+            ),
+            alignment: Alignment.center,
+            child: const Text(
+              '🧒',
+              style: TextStyle(
+                fontSize: 28,
+              ),
+            ),
+          ),
+          const SizedBox(
+            height: 10,
+          ),
+          Text(
+            username,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AddChildButton
+    extends
+        StatelessWidget {
+  final VoidCallback onTap;
+
+  const _AddChildButton({
     required this.onTap,
   });
 
@@ -3288,24 +3454,19 @@ class _ChildAvatarCard
                   ),
                 ],
               ),
-              alignment: Alignment.center,
-              child: Text(
-                icon,
-                style: const TextStyle(
-                  fontSize: 28,
-                ),
+              child: const Icon(
+                Icons.add,
+                color: Colors.white,
+                size: 34,
               ),
             ),
           ),
           const SizedBox(
             height: 10,
           ),
-          Text(
-            username,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
+          const Text(
+            'Add',
+            style: TextStyle(
               color: Colors.white,
               fontSize: 13,
               fontWeight: FontWeight.w500,

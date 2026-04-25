@@ -2362,30 +2362,6 @@ class _GuardianChildStatisticsPageState
             fontWeight: FontWeight.w600,
           ),
         ),
-        actions: [
-          IconButton(
-            tooltip: 'Delete child',
-            onPressed: _deletingChild
-                ? null
-                : _confirmDeleteChild,
-            icon: _deletingChild
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
-                    ),
-                  )
-                : const Icon(
-                    Icons.delete_outline,
-                    color: Colors.redAccent,
-                  ),
-          ),
-          const SizedBox(
-            width: 6,
-          ),
-        ],
       ),
       body: _loading
           ? const Center(

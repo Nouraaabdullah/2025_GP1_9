@@ -13,6 +13,7 @@ import 'dart:convert';
 import 'package:surra_application/screens/profile/add_child_page.dart';
 import 'package:surra_application/screens/notifications/notification_bell.dart';
 import 'package:surra_application/screens/notifications/notification_services.dart';
+import 'package:surra_application/screens/profile/guardian_child_statistics_page.dart';
 
 class ProfileMainPage
     extends
@@ -42,6 +43,8 @@ class _ProfileMainPageState
 
   bool _isIncomeExpanded = false;
   bool _isExpenseExpanded = false;
+  bool _isEditingChildren = false;
+  bool _deletingChild = false;
   Map<
     String,
     dynamic
@@ -342,52 +345,61 @@ class _ProfileMainPageState
     }
   }
 
-Future<void> _checkBudgetNotifications(
-  List<_CategoryDash> categories,
-) async {
-  final notificationService = NotificationService();
+  Future<
+    void
+  >
+  _checkBudgetNotifications(
+    List<
+      _CategoryDash
+    >
+    categories,
+  ) async {
+    final notificationService = NotificationService();
 
-  for (final category in categories) {
-    if (category.percent == null) continue;
+    for (final category in categories) {
+      if (category.percent ==
+          null)
+        continue;
 
-    final percent = category.percent!;
+      final percent = category.percent!;
 
-    if (percent >= 100) {
-      final title = '${category.name} budget exceeded';
+      if (percent >=
+          100) {
+        final title = '${category.name} budget exceeded';
 
-      final exists = await notificationService.notificationExistsToday(
-        title: title,
-        type: 'budget',
-      );
-
-      if (!exists) {
-        await notificationService.createNotification(
+        final exists = await notificationService.notificationExistsToday(
           title: title,
-          body: 'You have exceeded your ${category.name} budget.',
           type: 'budget',
-          route: null,
         );
-      }
-    } else if (percent >= 80) {
-      final title = '${category.name} budget alert';
 
-      final exists = await notificationService.notificationExistsToday(
-        title: title,
-        type: 'budget',
-      );
+        if (!exists) {
+          await notificationService.createNotification(
+            title: title,
+            body: 'You have exceeded your ${category.name} budget.',
+            type: 'budget',
+            route: null,
+          );
+        }
+      } else if (percent >=
+          80) {
+        final title = '${category.name} budget alert';
 
-      if (!exists) {
-        await notificationService.createNotification(
+        final exists = await notificationService.notificationExistsToday(
           title: title,
-          body:
-              'You have used ${percent.toStringAsFixed(0)}% of your ${category.name} budget.',
           type: 'budget',
-          route: null,
         );
+
+        if (!exists) {
+          await notificationService.createNotification(
+            title: title,
+            body: 'You have used ${percent.toStringAsFixed(0)}% of your ${category.name} budget.',
+            type: 'budget',
+            route: null,
+          );
+        }
       }
     }
   }
-}
 
   Future<
     void
@@ -972,7 +984,7 @@ Future<void> _checkBudgetNotifications(
               'Child_Guardian',
             )
             .select(
-              'child_id, user_name',
+              'child_id, user_name, icon',
             )
             .eq(
               'guardian_id',
@@ -994,12 +1006,12 @@ Future<void> _checkBudgetNotifications(
                 _ChildSummary(
                   childId: childId,
                   username: username,
+                  icon: row['icon']?.toString(),
                 ),
               );
             }
           }
         }
-        
       }
 
       // ----- NEW: build totalByCat from Category_Summary when a monthly record exists -----
@@ -1153,7 +1165,9 @@ Future<void> _checkBudgetNotifications(
           a.amount,
         ),
       );
-   await _checkBudgetNotifications(items);
+      await _checkBudgetNotifications(
+        items,
+      );
       return _DashboardData(
         fullName: fullName,
         currentBalance: currentBalance,
@@ -1191,6 +1205,266 @@ Future<void> _checkBudgetNotifications(
   ) => v.toStringAsFixed(
     2,
   );
+  Future<
+    void
+  >
+  _confirmDeleteChildFromMain(
+    _ChildSummary child,
+  ) async {
+    final shouldDelete =
+        await showDialog<
+          bool
+        >(
+          context: context,
+          builder:
+              (
+                context,
+              ) {
+                return AlertDialog(
+                  backgroundColor: AppColors.card,
+                  title: const Text(
+                    'Delete child account?',
+                    style: TextStyle(
+                      color: Colors.white,
+                    ),
+                  ),
+                  content: Text(
+                    'Are you sure you want to delete ${child.username}\'s account? This action cannot be undone.',
+                    style: const TextStyle(
+                      color: Colors.white70,
+                    ),
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(
+                        context,
+                        false,
+                      ),
+                      child: const Text(
+                        'Cancel',
+                        style: TextStyle(
+                          color: Colors.white70,
+                        ),
+                      ),
+                    ),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.redAccent,
+                        foregroundColor: Colors.white,
+                      ),
+                      onPressed: () => Navigator.pop(
+                        context,
+                        true,
+                      ),
+                      child: const Text(
+                        'OK',
+                      ),
+                    ),
+                  ],
+                );
+              },
+        );
+
+    if (shouldDelete ==
+        true) {
+      await _deleteChildAccountFromMain(
+        child.childId,
+      );
+    }
+  }
+
+  Future<
+    void
+  >
+  _deleteChildAccountFromMain(
+    String childProfileId,
+  ) async {
+    if (_deletingChild) return;
+
+    setState(
+      () {
+        _deletingChild = true;
+      },
+    );
+
+    try {
+      final profileId = childProfileId;
+
+      final monthlyRows = await _sb
+          .from(
+            'Monthly_Financial_Record',
+          )
+          .select(
+            'record_id',
+          )
+          .eq(
+            'profile_id',
+            profileId,
+          );
+
+      final categoryRows = await _sb
+          .from(
+            'Category',
+          )
+          .select(
+            'category_id',
+          )
+          .eq(
+            'profile_id',
+            profileId,
+          );
+
+      final recordIds =
+          <
+            String
+          >[
+            for (final r
+                in monthlyRows)
+              if (r['record_id'] !=
+                  null)
+                r['record_id']
+                    as String,
+          ];
+
+      final categoryIds =
+          <
+            String
+          >[
+            for (final r
+                in categoryRows)
+              if (r['category_id'] !=
+                  null)
+                r['category_id']
+                    as String,
+          ];
+
+      if (recordIds.isNotEmpty) {
+        await _sb
+            .from(
+              'Category_Summary',
+            )
+            .delete()
+            .inFilter(
+              'record_id',
+              recordIds,
+            );
+      }
+
+      await _sb
+          .from(
+            'Transaction',
+          )
+          .delete()
+          .eq(
+            'profile_id',
+            profileId,
+          );
+      await _sb
+          .from(
+            'Fixed_Income',
+          )
+          .delete()
+          .eq(
+            'profile_id',
+            profileId,
+          );
+      await _sb
+          .from(
+            'Fixed_Expense',
+          )
+          .delete()
+          .eq(
+            'profile_id',
+            profileId,
+          );
+
+      if (categoryIds.isNotEmpty) {
+        await _sb
+            .from(
+              'Category',
+            )
+            .delete()
+            .inFilter(
+              'category_id',
+              categoryIds,
+            );
+      }
+
+      if (recordIds.isNotEmpty) {
+        await _sb
+            .from(
+              'Monthly_Financial_Record',
+            )
+            .delete()
+            .inFilter(
+              'record_id',
+              recordIds,
+            );
+      }
+
+      await _sb
+          .from(
+            'Child_Guardian',
+          )
+          .delete()
+          .eq(
+            'child_id',
+            profileId,
+          );
+
+      await _sb
+          .from(
+            'User_Profile',
+          )
+          .delete()
+          .eq(
+            'profile_id',
+            profileId,
+          );
+
+      if (!mounted) return;
+
+      setState(
+        () {
+          _isEditingChildren = false;
+        },
+      );
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Child account deleted successfully.',
+          ),
+        ),
+      );
+
+      await _refreshData();
+    } catch (
+      e
+    ) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Failed to delete child account: $e',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(
+          () {
+            _deletingChild = false;
+          },
+        );
+      }
+    }
+  }
 
   @override
   Widget build(
@@ -1293,53 +1567,55 @@ Future<void> _checkBudgetNotifications(
                                             ),
                                           ),
                                           Row(
-  children: [
-    if (_isRefreshing)
-      const Padding(
-        padding: EdgeInsets.only(
-          right: 8,
-        ),
-        child: SizedBox(
-          width: 16,
-          height: 16,
-          child: CircularProgressIndicator(
-            strokeWidth: 2,
-            color: Colors.white,
-          ),
-        ),
-      ),
-    const NotificationBell(),
-    const SizedBox(width: 6),
-    IconButton(
-      icon: const Icon(
-        Icons.edit,
-        color: Colors.white,
-      ),
-      onPressed: () =>
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder:
-                  (
-                    context,
-                  ) => const EditProfilePage(),
-            ),
-          ).then(
-            (
-              _,
-            ) => _refreshData(),
-          ),
-    ),
-    IconButton(
-      icon: const Icon(
-        Icons.logout,
-        color: Colors.white,
-      ),
-      onPressed: _logout,
-      tooltip: 'Logout',
-    ),
-  ],
-),
+                                            children: [
+                                              if (_isRefreshing)
+                                                const Padding(
+                                                  padding: EdgeInsets.only(
+                                                    right: 8,
+                                                  ),
+                                                  child: SizedBox(
+                                                    width: 16,
+                                                    height: 16,
+                                                    child: CircularProgressIndicator(
+                                                      strokeWidth: 2,
+                                                      color: Colors.white,
+                                                    ),
+                                                  ),
+                                                ),
+                                              const NotificationBell(),
+                                              const SizedBox(
+                                                width: 6,
+                                              ),
+                                              IconButton(
+                                                icon: const Icon(
+                                                  Icons.edit,
+                                                  color: Colors.white,
+                                                ),
+                                                onPressed: () =>
+                                                    Navigator.push(
+                                                      context,
+                                                      MaterialPageRoute(
+                                                        builder:
+                                                            (
+                                                              context,
+                                                            ) => const EditProfilePage(),
+                                                      ),
+                                                    ).then(
+                                                      (
+                                                        _,
+                                                      ) => _refreshData(),
+                                                    ),
+                                              ),
+                                              IconButton(
+                                                icon: const Icon(
+                                                  Icons.logout,
+                                                  color: Colors.white,
+                                                ),
+                                                onPressed: _logout,
+                                                tooltip: 'Logout',
+                                              ),
+                                            ],
+                                          ),
                                         ],
                                       ),
                                       const SizedBox(
@@ -1979,16 +2255,41 @@ Future<void> _checkBudgetNotifications(
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          "Children's Summary",
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: 16,
-            fontWeight: FontWeight.w500,
-          ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              "Children's Summary",
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            if (data.children.isNotEmpty)
+              IconButton(
+                tooltip: _isEditingChildren
+                    ? 'Done'
+                    : 'Edit children',
+                icon: Icon(
+                  _isEditingChildren
+                      ? Icons.close
+                      : Icons.edit_outlined,
+                  color: Colors.white,
+                  size: 20,
+                ),
+                onPressed: () {
+                  setState(
+                    () {
+                      _isEditingChildren = !_isEditingChildren;
+                    },
+                  );
+                },
+              ),
+          ],
         ),
         const SizedBox(
-          height: 14,
+          height: 8,
         ),
         Container(
           width: double.infinity,
@@ -2025,6 +2326,12 @@ Future<void> _checkBudgetNotifications(
                         data.children.length) {
                       return _AddChildButton(
                         onTap: () async {
+                          setState(
+                            () {
+                              _isEditingChildren = false;
+                            },
+                          );
+
                           final result = await Navigator.push(
                             context,
                             MaterialPageRoute(
@@ -2044,8 +2351,34 @@ Future<void> _checkBudgetNotifications(
                     }
 
                     final child = data.children[index];
+
                     return _ChildAvatarCard(
                       username: child.username,
+                      icon: child.icon,
+                      isEditing: _isEditingChildren,
+                      onDelete: () => _confirmDeleteChildFromMain(
+                        child,
+                      ),
+                      onTap: () async {
+                        if (_isEditingChildren) return;
+
+                        final result = await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder:
+                                (
+                                  _,
+                                ) => GuardianChildStatisticsPage(
+                                  childProfileId: child.childId,
+                                ),
+                          ),
+                        );
+
+                        if (result ==
+                            true) {
+                          _refreshData();
+                        }
+                      },
                     );
                   },
             ),
@@ -2497,10 +2830,12 @@ class _CategoryDash {
 class _ChildSummary {
   final String childId;
   final String username;
+  final String? icon;
 
   const _ChildSummary({
     required this.childId,
     required this.username,
+    this.icon,
   });
 }
 
@@ -3349,58 +3684,109 @@ class _ChildAvatarCard
     extends
         StatelessWidget {
   final String username;
+  final String? icon;
+  final bool isEditing;
+  final VoidCallback onTap;
+  final VoidCallback onDelete;
 
   const _ChildAvatarCard({
     required this.username,
+    required this.icon,
+    required this.isEditing,
+    required this.onTap,
+    required this.onDelete,
   });
 
   @override
   Widget build(
     BuildContext context,
   ) {
-    return SizedBox(
-      width: 82,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            width: 64,
-            height: 64,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: const Color(
-                0xFFFFD6E7,
-              ),
-              border: Border.all(
-                color: const Color(
-                  0xFFF4B6D2,
+    final cleanIcon = icon?.trim();
+
+    return GestureDetector(
+      onTap: onTap,
+      child: SizedBox(
+        width: 82,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Container(
+                  width: 64,
+                  height: 64,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: const Color(
+                      0xFF2C2C54,
+                    ), // ✅ old dark theme color
+                    border: Border.all(
+                      color: AppColors.accent, // or your original border color
+                      width: 2,
+                    ),
+                  ),
+                  child: Center(
+                    child:
+                        (icon !=
+                                null &&
+                            icon!.trim().isNotEmpty)
+                        ? Text(
+                            icon!,
+                            style: const TextStyle(
+                              fontSize: 28,
+                            ),
+                          )
+                        : const Icon(
+                            Icons.person_outline, // ✅ default icon restored
+                            color: Colors.white70,
+                            size: 28,
+                          ),
+                  ),
                 ),
-                width: 3,
+                if (isEditing)
+                  Positioned(
+                    top: -6,
+                    right: -6,
+                    child: GestureDetector(
+                      onTap: onDelete,
+                      child: Container(
+                        width: 24,
+                        height: 24,
+                        decoration: BoxDecoration(
+                          color: Colors.redAccent,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: Colors.white,
+                            width: 1.5,
+                          ),
+                        ),
+                        child: const Icon(
+                          Icons.close,
+                          color: Colors.white,
+                          size: 16,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(
+              height: 8,
+            ),
+            Text(
+              username,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
               ),
             ),
-            alignment: Alignment.center,
-            child: const Text(
-              '🧒',
-              style: TextStyle(
-                fontSize: 28,
-              ),
-            ),
-          ),
-          const SizedBox(
-            height: 10,
-          ),
-          Text(
-            username,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

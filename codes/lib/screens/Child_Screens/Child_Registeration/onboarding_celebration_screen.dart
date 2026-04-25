@@ -241,7 +241,7 @@ class _OnboardingCelebrationScreenState
                   ),
 
                   KidPrimaryButton(
-                    label: 'Go to My Dashboard 🚀',
+                    label: 'Go to My Profile🚀',
                     onTap: () {
                       Navigator.pushReplacement(
                         context,

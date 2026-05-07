@@ -1,0 +1,323 @@
+[
+  {
+    "type": "function",
+    "function": {
+      "name": "get_balance",
+      "description": "Get the user's current overall balance in SAR. Use this to report the balance only. Do NOT use this alone to decide if a purchase is affordable; prefer simulate_purchase for purchase/affordability questions.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "profile_id": { "type": "string" }
+        },
+        "required": ["profile_id"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_payday",
+      "description": "Return next payday monthly income (from Fixed_Income).",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "profile_id": {
+            "type": "string"
+          }
+        
+        },
+        "required": []
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_fixed_incomes",
+      "description": "List fixed incomes with monthly_income, payday, is_transacted.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "profile_id": {
+            "type": "string"
+          }
+        },
+        "required": []
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_fixed_expenses",
+      "description": "List fixed expenses with amount, due_date, is_transacted.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "profile_id": {
+            "type": "string"
+          }
+        },
+        "required": []
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_current_record",
+      "description": "Return the current month's Monthly_Financial_Record (record_id, period_start/end).",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "profile_id": {
+            "type": "string"
+          }
+        },
+        "required": []
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_category_summary",
+      "description": "Return per-category spending for a given monthly record. Uses Category_Summary.total_expense and Category.monthly_limit to compute spent, limit, remaining, and utilization percentage.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "profile_id": { "type": "string" },
+          "record_id": {
+            "type": "string",
+            "description": "Optional; if missing, backend uses the current period record."
+          },
+          "category_id": {
+            "type": "string",
+            "description": "Optional; filter to a single category."
+          },
+          "user_id": {
+            "type": "string",
+            "description": "Optional; accepted for compatibility but ignored by the backend."
+          }
+        },
+        "required": ["profile_id"]
+      }
+    }
+  },  
+  {
+    "type": "function",
+    "function": {
+      "name": "get_top_spending",
+      "description": "Top-N categories by total_expense for current month.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "profile_id": {
+            "type": "string"
+          },
+          "n": {
+            "type": "integer",
+            "default": 3,
+            "minimum": 1,
+            "maximum": 10
+          }
+        },
+        "required": []
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_weekly_summary",
+      "description": "Daily expense/income totals for the current week using Transaction.date.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "profile_id": {
+            "type": "string"
+          }
+        },
+        "required": []
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_goals",
+      "description": "Return goals with progress, remaining, and percent_complete ALREADY computed in the backend. The assistant must ALWAYS use these exact values and must NEVER recalculate percentages or progress from raw numbers.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "profile_id": {
+            "type": "string"
+          }
+        },
+        "required": []
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "simulate_purchase",
+      "description": "Use this whenever the user asks if they can afford a purchase, wants to buy something, or wants to understand the impact of a price on their budget. It uses current balance, fixed monthly income, and fixed monthly expenses to project the impact of the price, and can also check the effect on a specific category.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "profile_id": {
+            "type": "string"
+          },
+          "price": {
+            "type": "number",
+            "description": "Price of the item the user wants to buy, in SAR."
+          },
+          "category_id": {
+            "type": "string",
+            "description": "Optional; if provided, simulate the impact on that spending category as well."
+          }
+        },
+        "required": ["price"]
+      }
+    }
+  },  
+  {
+    "type": "function",
+    "function": {
+      "name": "suggest_savings_plan",
+      "description": "Analyze income, expenses, balance (and optionally goal/horizon) to suggest a safe monthly saving amount, required buffer, and a recommended focus (e.g., Emergency Fund).",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "profile_id": {
+            "type": "string"
+          },
+          "preferred_goal": {
+            "type": "string",
+            "description": "Optional user-stated goal such as 'Emergency Fund', 'Vacation', 'Home Deposit'."
+          },
+          "horizon_months": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 60,
+            "description": "Optional planning horizon to tailor monthly target."
+          }
+        },
+        "required": []
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_record_history",
+      "description": "List monthly financial records for this profile (record_id, period_start, period_end, totals), ordered from most recent to oldest. Use this to find the correct record_id when the user asks about last month or previous months.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "profile_id": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Maximum number of records to return (most recent first).",
+            "minimum": 1,
+            "maximum": 24,
+            "default": 12
+          }
+        },
+        "required": []
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "compare_category_last_month",
+      "description": "Compare spending in a single category between the current month and the previous calendar month for this profile. Category spending is read from Category_Summary.total_expense for the matching Monthly_Financial_Record.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "profile_id": {
+            "type": "string"
+          },
+          "category_id": {
+            "type": "string",
+            "description": "Category identifier or name (e.g., 'gym'); the backend resolves it to the correct Category.category_id."
+          }
+        },
+        "required": ["profile_id", "category_id"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_goal_transfers",
+      "description": "Return transfer rows for a goal. Accepts either UUID or goal name.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "profile_id": { "type": "string" },
+          "goal_id": {
+            "type": "string",
+            "description": "UUID or goal name. Backend resolves automatically."
+          }
+        },
+        "required": ["profile_id", "goal_id"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_goal_details",
+      "description": "Return details for one goal. The user may refer to the goal by name (goal_name) or by UUID (goal_id). If goal_name is provided, the backend resolves it to UUID.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "profile_id": {
+            "type": "string"
+          },
+          "goal_name": {
+            "type": "string",
+            "description": "Human-readable goal name such as 'goaly'. Preferred input."
+          },
+          "goal_id": {
+            "type": "string",
+            "description": "UUID of the goal. Optional. The assistant should NOT generate UUIDs."
+          }
+        },
+        "required": ["profile_id"]
+      }
+    }
+  }
+  ,
+{
+  "type": "function",
+  "function": {
+    "name": "get_gold_prediction",
+    "description": "Get today's gold price and tomorrow's predicted gold price in SAR per gram for different karats (24K, 21K, 18K), including confidence and uncertainty. Use this whenever the user asks about gold prices, gold trends, or whether gold is going up or down.",
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "required": []
+    }
+  }
+}
+,
+{
+  "type": "function",
+  "function": {
+    "name": "get_gold_today_from_db",
+    "description": "Get today's gold prices per gram in SAR from the database. This is the ONLY source for current gold prices.",
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "required": []
+    }
+  }
+}
+
+]

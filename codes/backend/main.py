@@ -47,7 +47,7 @@ client = OpenAI(api_key=OPENAI_API_KEY)
 
 
 def _load_tools():
-    path = os.path.join(os.path.dirname(__file__), "../../datasets/tools_data.json")
+    path = os.path.join(os.path.dirname(__file__), "datasets/tools_data.json")
     with open(path, "r", encoding="utf-8") as f:
         raw = json.load(f)
 
@@ -1625,7 +1625,7 @@ def dashboard_recommendations(profile_id: str):
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run("main:app", host="127.0.0.1", port=PORT, reload=True)
+    uvicorn.run("main:app", host="0.0.0.0", port=PORT, reload=True)
 
 
 

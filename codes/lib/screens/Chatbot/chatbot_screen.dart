@@ -2,59 +2,120 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
-class ChatBotScreen extends StatefulWidget {
+class ChatBotScreen
+    extends
+        StatefulWidget {
   final String profileId; // required
   final String? userId; // optional
 
-  const ChatBotScreen({super.key, required this.profileId, this.userId});
+  const ChatBotScreen({
+    super.key,
+    required this.profileId,
+    this.userId,
+  });
 
   @override
-  State<ChatBotScreen> createState() => _ChatBotScreenState();
+  State<
+    ChatBotScreen
+  >
+  createState() => _ChatBotScreenState();
 }
 
-class _ChatBotScreenState extends State<ChatBotScreen> {
+class _ChatBotScreenState
+    extends
+        State<
+          ChatBotScreen
+        > {
   final TextEditingController _controller = TextEditingController();
   final FocusNode _inputFocusNode = FocusNode();
-  final List<Map<String, dynamic>> _messages = [];
+  final List<
+    Map<
+      String,
+      dynamic
+    >
+  >
+  _messages = [];
   final ScrollController _scrollController = ScrollController();
 
   // Backend URL (FastAPI default from your code)
-static const String _backendBaseUrl = 'http://10.0.2.2:8080';
-
+  static const String _backendBaseUrl = 'https://2025gp19-production.up.railway.app';
 
   // Your backend API key
   static const String _backendApiKey = 'localdev-123';
 
   // Suggested questions (balance removed, new question added)
-  final List<String> _suggestedQuestions = const [
+  final List<
+    String
+  >
+  _suggestedQuestions = const [
     "What is my top spending category?",
     "The effects of item purchase",
   ];
 
   // --------- Build history payload ----------
-  List<Map<String, String>> _buildHistoryPayload() {
-    final List<Map<String, String>> history = [];
+  List<
+    Map<
+      String,
+      String
+    >
+  >
+  _buildHistoryPayload() {
+    final List<
+      Map<
+        String,
+        String
+      >
+    >
+    history = [];
     for (final msg in _messages) {
-      final sender = msg['sender'] as String?;
-      final text = (msg['text'] ?? '').toString();
+      final sender =
+          msg['sender']
+              as String?;
+      final text =
+          (msg['text'] ??
+                  '')
+              .toString();
 
       if (text.trim().isEmpty) continue;
 
-      if (sender == 'user') {
-        history.add({"role": "user", "content": text});
-      } else if (sender == 'bot') {
-        history.add({"role": "assistant", "content": text});
+      if (sender ==
+          'user') {
+        history.add(
+          {
+            "role": "user",
+            "content": text,
+          },
+        );
+      } else if (sender ==
+          'bot') {
+        history.add(
+          {
+            "role": "assistant",
+            "content": text,
+          },
+        );
       }
     }
     return history;
   }
 
   // --------- Call backend ----------
-  Future<String> _callBackend(
+  Future<
+    String
+  >
+  _callBackend(
     String userText,
-    List<Map<String, String>> history,
+    List<
+      Map<
+        String,
+        String
+      >
+    >
+    history,
   ) async {
-    final uri = Uri.parse('$_backendBaseUrl/chat');
+    final uri = Uri.parse(
+      '$_backendBaseUrl/chat',
+    );
     final body = {
       "text": userText,
       "profile_id": widget.profileId,
@@ -68,81 +129,147 @@ static const String _backendBaseUrl = 'http://10.0.2.2:8080';
         "Content-Type": "application/json",
         "x-api-key": _backendApiKey,
       },
-      body: jsonEncode(body),
+      body: jsonEncode(
+        body,
+      ),
     );
 
-    if (response.statusCode != 200) {
-      throw Exception("Backend error ${response.statusCode}: ${response.body}");
+    if (response.statusCode !=
+        200) {
+      throw Exception(
+        "Backend error ${response.statusCode}: ${response.body}",
+      );
     }
-    final decoded = jsonDecode(response.body);
-    return decoded["answer"]?.toString() ?? "No answer found.";
+    final decoded = jsonDecode(
+      response.body,
+    );
+    return decoded["answer"]?.toString() ??
+        "No answer found.";
   }
 
   // --------- Send message ----------
-  Future<void> _sendMessage(String text) async {
+  Future<
+    void
+  >
+  _sendMessage(
+    String text,
+  ) async {
     if (text.trim().isEmpty) return;
     final userText = text.trim();
 
     final history = _buildHistoryPayload();
 
-    setState(() {
-      _messages.add({"sender": "user", "text": userText});
-      _messages.add({"sender": "bot", "text": "Thinking..."});
-    });
+    setState(
+      () {
+        _messages.add(
+          {
+            "sender": "user",
+            "text": userText,
+          },
+        );
+        _messages.add(
+          {
+            "sender": "bot",
+            "text": "Thinking...",
+          },
+        );
+      },
+    );
     _controller.clear();
     _scrollToBottom();
 
-    final int botIndex = _messages.length - 1;
+    final int botIndex =
+        _messages.length -
+        1;
 
     try {
-      final botReply = await _callBackend(userText, history);
-      setState(() {
-        _messages[botIndex] = {"sender": "bot", "text": botReply};
-      });
-    } catch (e) {
-      setState(() {
-        _messages[botIndex] = {"sender": "bot", "text": "Connection error: $e"};
-      });
+      final botReply = await _callBackend(
+        userText,
+        history,
+      );
+      setState(
+        () {
+          _messages[botIndex] = {
+            "sender": "bot",
+            "text": botReply,
+          };
+        },
+      );
+    } catch (
+      e
+    ) {
+      setState(
+        () {
+          _messages[botIndex] = {
+            "sender": "bot",
+            "text": "Connection error: $e",
+          };
+        },
+      );
     }
 
     _scrollToBottom();
   }
 
   void _scrollToBottom() {
-    Future.delayed(const Duration(milliseconds: 100), () {
-      if (_scrollController.hasClients) {
-        _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOut,
-        );
-      }
-    });
+    Future.delayed(
+      const Duration(
+        milliseconds: 100,
+      ),
+      () {
+        if (_scrollController.hasClients) {
+          _scrollController.animateTo(
+            _scrollController.position.maxScrollExtent,
+            duration: const Duration(
+              milliseconds: 300,
+            ),
+            curve: Curves.easeOut,
+          );
+        }
+      },
+    );
   }
 
   // Handle tapping on suggested questions
-  void _onSuggestedTap(String q) {
-    if (q == "The effects of item purchase") {
+  void _onSuggestedTap(
+    String q,
+  ) {
+    if (q ==
+        "The effects of item purchase") {
       const prefix = "Can I buy an item worth ";
-      setState(() {
-        _controller.text = prefix;
-        _controller.selection = TextSelection.fromPosition(
-          TextPosition(offset: _controller.text.length),
-        );
-      });
-      FocusScope.of(context).requestFocus(_inputFocusNode);
+      setState(
+        () {
+          _controller.text = prefix;
+          _controller.selection = TextSelection.fromPosition(
+            TextPosition(
+              offset: _controller.text.length,
+            ),
+          );
+        },
+      );
+      FocusScope.of(
+        context,
+      ).requestFocus(
+        _inputFocusNode,
+      );
     } else {
-      _sendMessage(q);
+      _sendMessage(
+        q,
+      );
     }
   }
 
   // --------- UI ----------
   @override
-  Widget build(BuildContext context) {
+  Widget build(
+    BuildContext context,
+  ) {
     final bool isEmpty = _messages.isEmpty;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF14122B),
+      backgroundColor: const Color(
+        0xFF14122B,
+      ),
       resizeToAvoidBottomInset: true,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
@@ -152,7 +279,9 @@ static const String _backendBaseUrl = 'http://10.0.2.2:8080';
             Icons.arrow_back_ios_new_rounded,
             color: Colors.white,
           ),
-          onPressed: () => Navigator.pop(context),
+          onPressed: () => Navigator.pop(
+            context,
+          ),
         ),
         title: const Text(
           "Surra",
@@ -172,7 +301,11 @@ static const String _backendBaseUrl = 'http://10.0.2.2:8080';
         bottom: false, // allow it to touch the absolute bottom
         child: Column(
           children: [
-            Expanded(child: isEmpty ? _buildWelcomeScreen() : _buildChatView()),
+            Expanded(
+              child: isEmpty
+                  ? _buildWelcomeScreen()
+                  : _buildChatView(),
+            ),
 
             if (isEmpty)
               Padding(
@@ -180,8 +313,7 @@ static const String _backendBaseUrl = 'http://10.0.2.2:8080';
                   left: 16,
                   right: 16,
                   top: 8,
-                  bottom:
-                      18, // <-- This adds space between questions & input bar
+                  bottom: 18, // <-- This adds space between questions & input bar
                 ),
                 child: _buildSuggestedQuestionsRow(),
               ),
@@ -206,7 +338,9 @@ static const String _backendBaseUrl = 'http://10.0.2.2:8080';
               shape: BoxShape.circle,
               boxShadow: [
                 BoxShadow(
-                  color: Color(0xFF7D5EF6),
+                  color: Color(
+                    0xFF7D5EF6,
+                  ),
                   blurRadius: 100,
                   spreadRadius: 30,
                 ),
@@ -225,7 +359,9 @@ static const String _backendBaseUrl = 'http://10.0.2.2:8080';
                   color: Colors.white,
                 ),
               ),
-              SizedBox(height: 12),
+              SizedBox(
+                height: 12,
+              ),
               Text(
                 "Your financial assistant",
                 style: TextStyle(
@@ -248,31 +384,54 @@ static const String _backendBaseUrl = 'http://10.0.2.2:8080';
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         itemCount: _suggestedQuestions.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 12),
-        itemBuilder: (context, index) {
-          final q = _suggestedQuestions[index];
-          return GestureDetector(
-            onTap: () => _onSuggestedTap(q),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-              decoration: BoxDecoration(
-                color: const Color(0xFF252346),
-                borderRadius: BorderRadius.circular(25),
-                border: Border.all(color: Colors.white.withOpacity(0.1)),
-              ),
-              child: Center(
-                child: Text(
+        separatorBuilder:
+            (
+              _,
+              __,
+            ) => const SizedBox(
+              width: 12,
+            ),
+        itemBuilder:
+            (
+              context,
+              index,
+            ) {
+              final q = _suggestedQuestions[index];
+              return GestureDetector(
+                onTap: () => _onSuggestedTap(
                   q,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontFamily: 'Poppins',
+                ),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(
+                      0xFF252346,
+                    ),
+                    borderRadius: BorderRadius.circular(
+                      25,
+                    ),
+                    border: Border.all(
+                      color: Colors.white.withOpacity(
+                        0.1,
+                      ),
+                    ),
+                  ),
+                  child: Center(
+                    child: Text(
+                      q,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontFamily: 'Poppins',
+                      ),
+                    ),
                   ),
                 ),
-              ),
-            ),
-          );
-        },
+              );
+            },
       ),
     );
   }
@@ -280,21 +439,40 @@ static const String _backendBaseUrl = 'http://10.0.2.2:8080';
   Widget _buildChatView() {
     return ListView.builder(
       controller: _scrollController,
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(
+        16,
+      ),
       itemCount: _messages.length,
-      itemBuilder: (context, i) {
-        final msg = _messages[i];
-        final isUser = msg["sender"] == "user";
-        return _buildMessageBubble(msg["text"] ?? "", isUser);
-      },
+      itemBuilder:
+          (
+            context,
+            i,
+          ) {
+            final msg = _messages[i];
+            final isUser =
+                msg["sender"] ==
+                "user";
+            return _buildMessageBubble(
+              msg["text"] ??
+                  "",
+              isUser,
+            );
+          },
     );
   }
 
-  Widget _buildMessageBubble(String text, bool isUser) {
+  Widget _buildMessageBubble(
+    String text,
+    bool isUser,
+  ) {
     return Align(
-      alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
+      alignment: isUser
+          ? Alignment.centerRight
+          : Alignment.centerLeft,
       child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 8),
+        margin: const EdgeInsets.symmetric(
+          vertical: 8,
+        ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -303,10 +481,14 @@ static const String _backendBaseUrl = 'http://10.0.2.2:8080';
               Container(
                 width: 32,
                 height: 32,
-                margin: const EdgeInsets.only(right: 12),
+                margin: const EdgeInsets.only(
+                  right: 12,
+                ),
                 decoration: const BoxDecoration(
                   shape: BoxShape.circle,
-                  color: Color(0xFF252346),
+                  color: Color(
+                    0xFF252346,
+                  ),
                 ),
                 child: const Icon(
                   Icons.smart_toy_outlined,
@@ -321,17 +503,30 @@ static const String _backendBaseUrl = 'http://10.0.2.2:8080';
                   vertical: 14,
                 ),
                 constraints: BoxConstraints(
-                  maxWidth: MediaQuery.of(context).size.width * 0.75,
+                  maxWidth:
+                      MediaQuery.of(
+                        context,
+                      ).size.width *
+                      0.75,
                 ),
                 decoration: BoxDecoration(
                   color: isUser
-                      ? const Color(0xFF3D3763)
-                      : const Color(0xFF252346),
-                  borderRadius: BorderRadius.circular(20),
+                      ? const Color(
+                          0xFF3D3763,
+                        )
+                      : const Color(
+                          0xFF252346,
+                        ),
+                  borderRadius: BorderRadius.circular(
+                    20,
+                  ),
                 ),
                 child: Text(
                   text,
-                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                  ),
                 ),
               ),
             ),
@@ -344,7 +539,11 @@ static const String _backendBaseUrl = 'http://10.0.2.2:8080';
   // Input bar that now touches the bottom
   Widget _buildMessageInput() {
     return Container(
-      decoration: const BoxDecoration(color: Color(0xFF1A1834)),
+      decoration: const BoxDecoration(
+        color: Color(
+          0xFF1A1834,
+        ),
+      ),
       padding: const EdgeInsets.only(
         left: 16,
         right: 16,
@@ -357,34 +556,63 @@ static const String _backendBaseUrl = 'http://10.0.2.2:8080';
             child: TextField(
               controller: _controller,
               focusNode: _inputFocusNode,
-              style: const TextStyle(color: Colors.white, fontSize: 15),
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 15,
+              ),
               decoration: InputDecoration(
                 hintText: "Send a message.",
-                hintStyle: TextStyle(color: Colors.white.withOpacity(0.4)),
+                hintStyle: TextStyle(
+                  color: Colors.white.withOpacity(
+                    0.4,
+                  ),
+                ),
                 filled: true,
-                fillColor: const Color(0xFF252346),
+                fillColor: const Color(
+                  0xFF252346,
+                ),
                 contentPadding: const EdgeInsets.symmetric(
                   horizontal: 20,
                   vertical: 14,
                 ),
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(30),
+                  borderRadius: BorderRadius.circular(
+                    30,
+                  ),
                   borderSide: BorderSide.none,
                 ),
               ),
               textInputAction: TextInputAction.send,
-              onSubmitted: (text) => _sendMessage(text),
+              onSubmitted:
+                  (
+                    text,
+                  ) => _sendMessage(
+                    text,
+                  ),
             ),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(
+            width: 10,
+          ),
           GestureDetector(
-            onTap: () => _sendMessage(_controller.text),
+            onTap: () => _sendMessage(
+              _controller.text,
+            ),
             child: Container(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(
+                12,
+              ),
               decoration: const BoxDecoration(
                 shape: BoxShape.circle,
                 gradient: LinearGradient(
-                  colors: [Color(0xFF7D5EF6), Color(0xFF6C63FF)],
+                  colors: [
+                    Color(
+                      0xFF7D5EF6,
+                    ),
+                    Color(
+                      0xFF6C63FF,
+                    ),
+                  ],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),

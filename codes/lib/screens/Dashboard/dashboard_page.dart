@@ -2472,7 +2472,7 @@ class _DashboardPageState
         );
       }
 
-      final baseUrl = 'http://127.0.0.1:8000'; // change later when deploying
+      final baseUrl = 'https://2025gp19-production.up.railway.app';
       final uri = Uri.parse(
         '$baseUrl/dashboard/recommendations?profile_id=$profileId',
       );

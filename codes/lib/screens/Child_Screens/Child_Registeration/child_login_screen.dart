@@ -5,6 +5,7 @@ import '../../../widgets/kid_widgets.dart';
 import 'child_signup_screen.dart';
 import '../Child_Profile/child_profile.dart';
 import 'package:surra_application/utils/auth_helpers.dart';
+import 'package:bcrypt/bcrypt.dart';
 
 class ChildLoginScreen extends StatefulWidget {
   const ChildLoginScreen({super.key});
@@ -14,75 +15,48 @@ class ChildLoginScreen extends StatefulWidget {
 }
 
 class _ChildLoginScreenState extends State<ChildLoginScreen> {
-  final _emailCtrl = TextEditingController();
-  final _userCtrl = TextEditingController();
-  final _pwCtrl = TextEditingController();
+ final _userCtrl = TextEditingController();
+final _pwCtrl = TextEditingController();
 
-  String? _emailErr, _userErr, _pwErr, _alertMsg;
+String? _userErr, _pwErr, _alertMsg;
   bool _loading = false;
 
   final _sb = Supabase.instance.client;
 
   @override
   void dispose() {
-    _emailCtrl.dispose();
+   
     _userCtrl.dispose();
     _pwCtrl.dispose();
     super.dispose();
   }
 
-  bool _isValidEmail(String v) =>
-      RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(v);
+  
 
   Future<void> _submit() async {
   setState(() {
-    _emailErr = null;
+  
     _userErr = null;
     _pwErr = null;
     _alertMsg = null;
   });
 
-  final email = _emailCtrl.text.trim();
+
   final username = _userCtrl.text.trim();
   final password = _pwCtrl.text;
 
   setState(() => _loading = true);
 
   try {
-    /// 🔥 STEP 1: Get ALL users with this email (NOT maybeSingle)
-    final guardians = await _sb
-        .from('User_Profile')
-        .select('user_id, profile_id')
-        .eq('email', email);
+   final childLink = await _sb
+    .from('Child_Guardian')
+    .select('child_id')
+    .eq('user_name', username)
+    .maybeSingle();
 
-    print("GUARDIANS FOUND: $guardians");
-
-    if (guardians.isEmpty) {
-      throw Exception('Guardian not found');
-    }
-
-    /// ✅ take first one (real guardian)
-    final guardian = guardians.first;
-
-    final guardianUserId = guardian['user_id'];
-
-    if (guardianUserId == null) {
-      throw Exception('Guardian user_id is NULL');
-    }
-
-    /// 🔥 STEP 2: Find child
-    final childLink = await _sb
-        .from('Child_Guardian')
-        .select('child_id')
-        .eq('guardian_id', guardianUserId)
-        .eq('user_name', username)
-        .maybeSingle();
-
-    print("CHILD LINK: $childLink");
-
-    if (childLink == null) {
-      throw Exception('Child not found');
-    }
+if (childLink == null) {
+  throw Exception('Child not found');
+}
 
     final childProfileId = childLink['child_id'];
 
@@ -100,9 +74,16 @@ class _ChildLoginScreenState extends State<ChildLoginScreen> {
     }
 
     /// 🔥 STEP 4: Check password
-    if (childProfile['hashed_password'] != password) {
-      throw Exception('Wrong password');
-    }
+   final storedHash = childProfile['hashed_password'];
+
+final validPassword = BCrypt.checkpw(
+  password,
+  storedHash,
+);
+
+if (!validPassword) {
+  throw Exception('Wrong password');
+}
 
     print("LOGIN SUCCESS ✅");
 
@@ -186,17 +167,7 @@ currentChildProfileId = childProfileId;
                       KidCard(
                         child: Column(
                           children: [
-                            KidInput(
-                              label: "Guardian's Email",
-                              placeholder: 'parent@email.com',
-                              icon: '📧',
-                              controller: _emailCtrl,
-                              keyboardType: TextInputType.emailAddress,
-                              errorText: _emailErr,
-                              onChanged: (_) =>
-                                  setState(() => _emailErr = null),
-                            ),
-                            const SizedBox(height: 14),
+                           
                             KidInput(
                               label: 'Your Username',
                               placeholder: 'Your username',

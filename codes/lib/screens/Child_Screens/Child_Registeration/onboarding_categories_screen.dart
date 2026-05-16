@@ -8,7 +8,6 @@ class OnboardingCategoriesScreen
         StatefulWidget {
   final String childName;
   final String childEmoji;
-  final String guardianEmail;
   final String username;
   final String password;
 
@@ -16,7 +15,6 @@ class OnboardingCategoriesScreen
     super.key,
     required this.childName,
     required this.childEmoji,
-    required this.guardianEmail,
     required this.username,
     required this.password,
   });
@@ -71,7 +69,6 @@ class _OnboardingCategoriesScreenState
             ) => OnboardingBalanceScreen(
               childName: widget.childName,
               childEmoji: widget.childEmoji,
-              guardianEmail: widget.guardianEmail,
               username: widget.username,
               password: widget.password,
               foodLimit: food,

@@ -5,6 +5,7 @@ import 'onboarding_celebration_screen.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 import 'package:bcrypt/bcrypt.dart';
+import 'package:surra_application/utils/auth_helpers.dart';
 
 class OnboardingBalanceScreen
     extends
@@ -124,14 +125,22 @@ class _OnboardingBalanceScreenState
       final supabase = Supabase.instance.client;
       final uuid = const Uuid();
       final relation = await supabase
-      .from('Child_Guardian')
-      .select('child_id')
-      .eq('user_name', widget.username)
-      .single();
+          .from(
+            'Child_Guardian',
+          )
+          .select(
+            'child_id',
+          )
+          .eq(
+            'user_name',
+            widget.username,
+          )
+          .single();
 
-final childProfileId = relation['child_id'] as String;
-
-
+      final childProfileId =
+          relation['child_id']
+              as String;
+      currentChildProfileId = childProfileId;
 
       await supabase
           .from(
@@ -148,10 +157,8 @@ final childProfileId = relation['child_id'] as String;
           );
 
       /// 3) Generate hidden child email for auth
-   
 
       /// 5) Sign in so currentUser exists for auth_helper
-    
 
       /// 6) Update existing child profile row
       await supabase
@@ -160,11 +167,10 @@ final childProfileId = relation['child_id'] as String;
           )
           .update(
             {
-             
-             'hashed_password': BCrypt.hashpw(
-  widget.password,
-  BCrypt.gensalt(),
-),
+              'hashed_password': BCrypt.hashpw(
+                widget.password,
+                BCrypt.gensalt(),
+              ),
               'full_name': widget.childName,
               'current_balance': balance,
               'user_type': 'child',

@@ -11,7 +11,7 @@ class OnboardingNameScreen
 
   const OnboardingNameScreen({
     super.key,
-    
+
     required this.username,
     required this.password,
   });

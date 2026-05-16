@@ -12,7 +12,6 @@ import 'package:surra_application/screens/Log/log_transaction_options_sheet.dart
 import 'dart:convert';
 import 'package:surra_application/screens/profile/add_child_page.dart';
 import 'package:surra_application/screens/notifications/notification_bell.dart';
-import 'package:surra_application/screens/notifications/notification_services.dart';
 import 'package:surra_application/screens/profile/guardian_child_statistics_page.dart';
 
 class ProfileMainPage
@@ -346,61 +345,6 @@ class _ProfileMainPageState
     }
   }
 
-  Future<
-    void
-  >
-  _checkBudgetNotifications(
-    List<
-      _CategoryDash
-    >
-    categories,
-  ) async {
-    final notificationService = NotificationService();
-
-    for (final category in categories) {
-      if (category.percent ==
-          null)
-        continue;
-
-      final percent = category.percent!;
-
-      if (percent >=
-          100) {
-        final title = '${category.name} budget exceeded';
-
-        final exists = await notificationService.notificationExistsToday(
-          title: title,
-          type: 'budget',
-        );
-
-        if (!exists) {
-          await notificationService.createNotification(
-            title: title,
-            body: 'You have exceeded your ${category.name} budget.',
-            type: 'budget',
-            route: null,
-          );
-        }
-      } else if (percent >=
-          80) {
-        final title = '${category.name} budget alert';
-
-        final exists = await notificationService.notificationExistsToday(
-          title: title,
-          type: 'budget',
-        );
-
-        if (!exists) {
-          await notificationService.createNotification(
-            title: title,
-            body: 'You have used ${percent.toStringAsFixed(0)}% of your ${category.name} budget.',
-            type: 'budget',
-            route: null,
-          );
-        }
-      }
-    }
-  }
 
   Future<
     void
@@ -1166,9 +1110,6 @@ class _ProfileMainPageState
           a.amount,
         ),
       );
-      await _checkBudgetNotifications(
-        items,
-      );
       return _DashboardData(
         fullName: fullName,
         currentBalance: currentBalance,
@@ -1835,8 +1776,6 @@ class _ProfileMainPageState
                                   height: 22,
                                 ),
 
-                                // Replace the entire "Gold Trends" section in your ProfileMainPage build method with this:
-                                // ===================== GOLD TRENDS (PASTE THIS WHOLE SECTION) =====================
                                 Padding(
                                   padding: const EdgeInsets.fromLTRB(
                                     20,
@@ -2040,10 +1979,6 @@ class _ProfileMainPageState
                                                       dynamic
                                                     >{};
 
-                                                // ✅ IMPORTANT:
-                                                // هذا السكشن يدعم شكلين:
-                                                // (A) شكل DB المفروض عندك: past_price/current_price/predicted_low/predicted_high/confidence_level
-                                                // (B) شكل model القديم: past/current/predicted_tplus7_interval/confidence
 
                                                 // --- A: DB fields ---
                                                 final bool hasDbFields =

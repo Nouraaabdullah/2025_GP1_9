@@ -315,7 +315,9 @@ class _SurraAppState
       );
     }
 
-final bool isLoggedIn = _user != null;
+    final bool isLoggedIn =
+        _user !=
+        null;
 
     return MaterialApp(
       debugShowCheckedModeBanner: false,
@@ -332,12 +334,14 @@ final bool isLoggedIn = _user != null;
         useMaterial3: true,
         fontFamily: 'Poppins',
       ),
-      home: isLoggedIn ? const RoleRedirectPage() : const StartPage(),
+      home: isLoggedIn
+          ? const RoleRedirectPage()
+          : const WelcomeScreen(),
       routes: {
-        // '/welcome':
-        //     (
-        //       context,
-        //     ) => const WelcomeScreen(),
+        '/welcome':
+            (
+              context,
+            ) => const WelcomeScreen(),
         '/startpage':
             (
               context,
@@ -406,14 +410,26 @@ final bool isLoggedIn = _user != null;
     );
   }
 }
-class RoleRedirectPage extends StatefulWidget {
-  const RoleRedirectPage({super.key});
+
+class RoleRedirectPage
+    extends
+        StatefulWidget {
+  const RoleRedirectPage({
+    super.key,
+  });
 
   @override
-  State<RoleRedirectPage> createState() => _RoleRedirectPageState();
+  State<
+    RoleRedirectPage
+  >
+  createState() => _RoleRedirectPageState();
 }
 
-class _RoleRedirectPageState extends State<RoleRedirectPage> {
+class _RoleRedirectPageState
+    extends
+        State<
+          RoleRedirectPage
+        > {
   final _supabase = Supabase.instance.client;
 
   @override
@@ -422,49 +438,91 @@ class _RoleRedirectPageState extends State<RoleRedirectPage> {
     _redirect();
   }
 
-  Future<void> _redirect() async {
+  Future<
+    void
+  >
+  _redirect() async {
     try {
       final user = _supabase.auth.currentUser;
 
-      if (user == null) {
+      if (user ==
+          null) {
         if (!mounted) return;
-        Navigator.pushReplacementNamed(context, '/startpage');
+        Navigator.pushReplacementNamed(
+          context,
+          '/startpage',
+        );
         return;
       }
 
       final row = await _supabase
-          .from('User_Profile')
-          .select('user_type')
-          .eq('user_id', user.id)
+          .from(
+            'User_Profile',
+          )
+          .select(
+            'user_type',
+          )
+          .eq(
+            'user_id',
+            user.id,
+          )
           .maybeSingle();
 
       final userType = row?['user_type']?.toString().toLowerCase();
 
       if (!mounted) return;
 
-      if (userType == 'child') {
-        Navigator.pushReplacementNamed(context, '/childProfile');
-      } else if (userType == 'adult') {
-        Navigator.pushReplacementNamed(context, '/dashboard');
-      } else if (userType == 'guardian') {
-        Navigator.pushReplacementNamed(context, '/dashboard');
+      if (userType ==
+          'child') {
+        Navigator.pushReplacementNamed(
+          context,
+          '/childProfile',
+        );
+      } else if (userType ==
+          'adult') {
+        Navigator.pushReplacementNamed(
+          context,
+          '/dashboard',
+        );
+      } else if (userType ==
+          'guardian') {
+        Navigator.pushReplacementNamed(
+          context,
+          '/dashboard',
+        );
       } else {
-        Navigator.pushReplacementNamed(context, '/dashboard');
+        Navigator.pushReplacementNamed(
+          context,
+          '/dashboard',
+        );
       }
-    } catch (e) {
-      debugPrint('Role redirect failed: $e');
+    } catch (
+      e
+    ) {
+      debugPrint(
+        'Role redirect failed: $e',
+      );
       if (!mounted) return;
-      Navigator.pushReplacementNamed(context, '/dashboard');
+      Navigator.pushReplacementNamed(
+        context,
+        '/dashboard',
+      );
     }
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(
+    BuildContext context,
+  ) {
     return const Scaffold(
-      backgroundColor: Color(0xFF1D1B32),
+      backgroundColor: Color(
+        0xFF1D1B32,
+      ),
       body: Center(
         child: CircularProgressIndicator(
-          color: Color(0xFF7959F5),
+          color: Color(
+            0xFF7959F5,
+          ),
         ),
       ),
     );

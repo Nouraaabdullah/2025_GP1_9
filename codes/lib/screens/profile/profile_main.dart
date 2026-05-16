@@ -216,6 +216,7 @@ class _ProfileMainPageState
 
       if (shouldLogout ==
           true) {
+        currentChildProfileId = null;
         await _sb.auth.signOut();
         if (mounted) {
           Navigator.pushNamedAndRemoveUntil(

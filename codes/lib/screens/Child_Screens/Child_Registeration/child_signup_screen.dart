@@ -24,174 +24,106 @@ class _ChildSignupScreenState
         State<
           ChildSignupScreen
         > {
-  final _emailCtrl = TextEditingController();
+
   final _userCtrl = TextEditingController();
   final _pwCtrl = TextEditingController();
-  final _cpwCtrl = TextEditingController();
 
-  String? _emailErr, _userErr, _pwErr, _cpwErr, _alertMsg;
+  String? _userErr, _pwErr, _alertMsg;
+
   bool _loading = false;
 
   @override
   void dispose() {
-    _emailCtrl.dispose();
     _userCtrl.dispose();
     _pwCtrl.dispose();
-    _cpwCtrl.dispose();
     super.dispose();
   }
 
-  bool
-  _isValidEmail(
-    String v,
-  ) =>
-      RegExp(
-        r'^[^\s@]+@[^\s@]+\.[^\s@]+$',
-      ).hasMatch(
-        v,
-      );
+ String? _validatePassword(String pw) {
+  if (pw.length < 8) {
+    return 'Password must be at least 8 characters';
+  }
+
+  if (!RegExp(r'[A-Z]').hasMatch(pw)) {
+    return 'Must contain at least 1 uppercase letter';
+  }
+
+  if (!RegExp(r'[a-z]').hasMatch(pw)) {
+    return 'Must contain at least 1 lowercase letter';
+  }
+
+  if (!RegExp(r'[0-9]').hasMatch(pw)) {
+    return 'Must contain at least 1 number';
+  }
+
+  return null;
+}
 
   void _submit() async {
-    setState(
-      () {
-        _emailErr = null;
-        _userErr = null;
-        _pwErr = null;
-        _cpwErr = null;
-        _alertMsg = null;
-      },
-    );
+  setState(() {
+    _userErr = null;
+    _pwErr = null;
+    _alertMsg = null;
+  });
 
-    final email = _emailCtrl.text.trim();
-    final user = _userCtrl.text.trim();
-    final pw = _pwCtrl.text;
-    final cpw = _cpwCtrl.text;
+  final user = _userCtrl.text.trim();
+  final pw = _pwCtrl.text;
 
-    bool valid = true;
+  bool valid = true;
 
-    if (email.isEmpty) {
-      _emailErr = 'Guardian email required';
-      valid = false;
-    }
+  if (user.isEmpty) {
+    _userErr = 'Username required';
+    valid = false;
+  }
 
-    if (user.isEmpty) {
-      _userErr = 'Username required';
-      valid = false;
-    }
+  final pwValidation = _validatePassword(pw);
+  if (pwValidation != null) {
+    _pwErr = pwValidation;
+    valid = false;
+  }
 
-    if (pw.length <
-        6) {
-      _pwErr = 'Minimum 6 characters';
-      valid = false;
-    }
+  if (!valid) {
+    setState(() {});
+    return;
+  }
 
-    if (pw !=
-        cpw) {
-      _cpwErr = 'Passwords do not match';
-      valid = false;
-    }
+  setState(() => _loading = true);
 
-    if (!valid) {
-      setState(
-        () {},
-      );
+  try {
+    final supabase = Supabase.instance.client;
+
+    final relation = await supabase
+        .from('Child_Guardian')
+        .select('child_id')
+        .eq('user_name', user)
+        .maybeSingle();
+
+    if (relation == null) {
+      setState(() {
+        _loading = false;
+        _alertMsg = "Username not found. Ask your guardian to create it first.";
+      });
       return;
     }
 
-    setState(
-      () => _loading = true,
-    );
+    setState(() => _loading = false);
 
-    try {
-      final supabase = Supabase.instance.client;
-
-      /// 1️⃣ Find guardian
-      final guardian = await supabase
-          .from(
-            'User_Profile',
-          )
-          .select(
-            'user_id',
-          )
-          .eq(
-            'email',
-            email,
-          )
-          .eq(
-            'user_type',
-            'guardian',
-          )
-          .maybeSingle();
-
-      if (guardian ==
-          null) {
-        setState(
-          () {
-            _loading = false;
-            _alertMsg = "Guardian email not found.";
-          },
-        );
-        return;
-      }
-
-      final guardianId = guardian['user_id'];
-
-      /// 2️⃣ Verify child username
-      final relation = await supabase
-          .from(
-            'Child_Guardian',
-          )
-          .select()
-          .eq(
-            'guardian_id',
-            guardianId,
-          )
-          .eq(
-            'user_name',
-            user,
-          )
-          .maybeSingle();
-
-      if (relation ==
-          null) {
-        setState(
-          () {
-            _loading = false;
-            _alertMsg = "This username wasn't created by your guardian.";
-          },
-        );
-        return;
-      }
-
-      setState(
-        () => _loading = false,
-      );
-
-      /// 3️⃣ Continue onboarding
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder:
-              (
-                _,
-              ) => OnboardingNameScreen(
-                guardianEmail: email,
-                username: user,
-                password: pw,
-              ),
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => OnboardingNameScreen(
+          username: user,
+          password: pw,
         ),
-      );
-    } catch (
-      e
-    ) {
-      setState(
-        () {
-          _loading = false;
-          _alertMsg = "Error: $e";
-        },
-      );
-    }
+      ),
+    );
+  } catch (e) {
+    setState(() {
+      _loading = false;
+      _alertMsg = "Error: $e";
+    });
   }
+}
 
   @override
   Widget build(
@@ -284,24 +216,9 @@ class _ChildSignupScreenState
                       KidCard(
                         child: Column(
                           children: [
-                            // Guardian email
-                            KidInput(
-                              label: "Guardian's Email",
-                              placeholder: 'parent@email.com',
-                              icon: '📧',
-                              controller: _emailCtrl,
-                              keyboardType: TextInputType.emailAddress,
-                              errorText: _emailErr,
-                              onChanged:
-                                  (
-                                    _,
-                                  ) => setState(
-                                    () => _emailErr = null,
-                                  ),
-                            ),
-                            const SizedBox(
-                              height: 14,
-                            ),
+                         
+                           
+                            
 
                             // Username
                             Column(
@@ -352,20 +269,7 @@ class _ChildSignupScreenState
                             ),
 
                             // Confirm
-                            KidInput(
-                              label: 'Confirm Password',
-                              placeholder: 'Type it again!',
-                              icon: '🔒',
-                              controller: _cpwCtrl,
-                              isPassword: true,
-                              errorText: _cpwErr,
-                              onChanged:
-                                  (
-                                    _,
-                                  ) => setState(
-                                    () => _cpwErr = null,
-                                  ),
-                            ),
+                           
                           ],
                         ),
                       ),

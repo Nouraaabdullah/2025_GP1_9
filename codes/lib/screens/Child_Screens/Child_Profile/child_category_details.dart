@@ -47,6 +47,7 @@ class _ChildCategoryDetailPageState
 
   bool _isEditing = false;
   bool _saving = false;
+  bool _isCustomCategory = false;
 
   late TextEditingController _nameCtrl;
   late TextEditingController _limitCtrl;
@@ -234,6 +235,7 @@ class _ChildCategoryDetailPageState
   @override
   void initState() {
     super.initState();
+    _checkIfCustomCategory();
 
     _nameCtrl = TextEditingController(
       text: widget.category.name,
@@ -422,6 +424,103 @@ class _ChildCategoryDetailPageState
   Future<
     void
   >
+  _deleteCategory() async {
+    if (!_isCustomCategory) {
+      _showSnack(
+        'You can only delete custom categories.',
+      );
+      return;
+    }
+
+    final shouldDelete =
+        await showDialog<
+          bool
+        >(
+          context: context,
+          builder:
+              (
+                context,
+              ) => AlertDialog(
+                title: const Text(
+                  'Delete category?',
+                ),
+                content: const Text(
+                  'Are you sure you want to delete this category?',
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(
+                      context,
+                      false,
+                    ),
+                    child: const Text(
+                      'Cancel',
+                    ),
+                  ),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.redAccent,
+                    ),
+                    onPressed: () => Navigator.pop(
+                      context,
+                      true,
+                    ),
+                    child: const Text(
+                      'Delete',
+                    ),
+                  ),
+                ],
+              ),
+        );
+
+    if (shouldDelete !=
+        true)
+      return;
+
+    setState(
+      () => _saving = true,
+    );
+
+    try {
+      await _sb
+          .from(
+            'Category',
+          )
+          .update(
+            {
+              'is_archived': true,
+            },
+          )
+          .eq(
+            'category_id',
+            widget.category.categoryId,
+          );
+
+      if (!mounted) return;
+
+      Navigator.of(
+        context,
+      ).pop(
+        true,
+      );
+    } catch (
+      e
+    ) {
+      if (!mounted) return;
+
+      setState(
+        () => _saving = false,
+      );
+
+      _showSnack(
+        'Failed to delete category: $e',
+      );
+    }
+  }
+
+  Future<
+    void
+  >
   _saveChanges() async {
     final newName = _nameCtrl.text.trim();
     final text = _limitCtrl.text.trim();
@@ -494,6 +593,34 @@ class _ChildCategoryDetailPageState
         () => _saving = false,
       );
     }
+  }
+
+  Future<
+    void
+  >
+  _checkIfCustomCategory() async {
+    final categoryRow = await _sb
+        .from(
+          'Category',
+        )
+        .select(
+          'type',
+        )
+        .eq(
+          'category_id',
+          widget.category.categoryId,
+        )
+        .maybeSingle();
+
+    if (!mounted) return;
+
+    setState(
+      () {
+        _isCustomCategory =
+            categoryRow?['type']?.toString().toLowerCase() ==
+            'custom';
+      },
+    );
   }
 
   void _showSnack(
@@ -890,6 +1017,15 @@ class _ChildCategoryDetailPageState
                           height: 20,
                         ),
                         _buildSettingsCard(),
+
+                        if (_isEditing &&
+                            _isCustomCategory) ...[
+                          const SizedBox(
+                            height: 20,
+                          ),
+                          _buildDeleteButton(),
+                        ],
+
                         if (_isEditing) ...[
                           const SizedBox(
                             height: 28,
@@ -1770,6 +1906,60 @@ class _ChildCategoryDetailPageState
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildDeleteButton() {
+    return GestureDetector(
+      onTap: _saving
+          ? null
+          : _deleteCategory,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(
+          vertical: 16,
+        ),
+        decoration: BoxDecoration(
+          color: const Color(
+            0xFFFFE4E4,
+          ),
+          borderRadius: BorderRadius.circular(
+            22,
+          ),
+          border: Border.all(
+            color: const Color(
+              0xFFE53E3E,
+            ),
+            width: 1.5,
+          ),
+        ),
+        child: const Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.delete_rounded,
+              color: Color(
+                0xFFE53E3E,
+              ),
+              size: 22,
+            ),
+            SizedBox(
+              width: 8,
+            ),
+            Text(
+              'Delete Category',
+              style: TextStyle(
+                fontFamily: 'Nunito',
+                fontWeight: FontWeight.w900,
+                fontSize: 16,
+                color: Color(
+                  0xFFE53E3E,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -6,13 +6,12 @@ import 'onboarding_categories_screen.dart';
 class OnboardingNameScreen
     extends
         StatefulWidget {
-  final String guardianEmail;
   final String username;
   final String password;
 
   const OnboardingNameScreen({
     super.key,
-    required this.guardianEmail,
+
     required this.username,
     required this.password,
   });
@@ -119,7 +118,6 @@ class _OnboardingNameScreenState
             ) => OnboardingCategoriesScreen(
               childName: name,
               childEmoji: _currentEmoji,
-              guardianEmail: widget.guardianEmail,
               username: widget.username,
               password: widget.password,
             ),

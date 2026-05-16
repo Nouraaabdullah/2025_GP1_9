@@ -4,13 +4,14 @@ import '../../../widgets/kid_widgets.dart';
 import 'onboarding_celebration_screen.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
+import 'package:bcrypt/bcrypt.dart';
+import 'package:surra_application/utils/auth_helpers.dart';
 
 class OnboardingBalanceScreen
     extends
         StatefulWidget {
   final String childName;
   final String childEmoji;
-  final String guardianEmail;
   final String username;
   final String password;
   final double foodLimit;
@@ -21,7 +22,6 @@ class OnboardingBalanceScreen
     super.key,
     required this.childName,
     required this.childEmoji,
-    required this.guardianEmail,
     required this.username,
     required this.password,
     required this.foodLimit,
@@ -124,37 +124,12 @@ class _OnboardingBalanceScreenState
     try {
       final supabase = Supabase.instance.client;
       final uuid = const Uuid();
-
-      /// 1) Find guardian
-      final guardian = await supabase
-          .from(
-            'User_Profile',
-          )
-          .select(
-            'user_id',
-          )
-          .eq(
-            'email',
-            widget.guardianEmail,
-          )
-          .eq(
-            'user_type',
-            'guardian',
-          )
-          .single();
-
-      final guardianId = guardian['user_id'];
-
       final relation = await supabase
           .from(
             'Child_Guardian',
           )
           .select(
             'child_id',
-          )
-          .eq(
-            'guardian_id',
-            guardianId,
           )
           .eq(
             'user_name',
@@ -165,6 +140,7 @@ class _OnboardingBalanceScreenState
       final childProfileId =
           relation['child_id']
               as String;
+      currentChildProfileId = childProfileId;
 
       await supabase
           .from(
@@ -181,27 +157,8 @@ class _OnboardingBalanceScreenState
           );
 
       /// 3) Generate hidden child email for auth
-      final childEmail = '${widget.username.toLowerCase()}_${childProfileId.substring(0, 6)}@child.surra.app';
-
-      /// 4) Create real auth account
-      final authResponse = await supabase.auth.signUp(
-        email: childEmail,
-        password: widget.password,
-      );
-
-      final authUser = authResponse.user;
-      if (authUser ==
-          null) {
-        throw Exception(
-          'Failed to create child auth account.',
-        );
-      }
 
       /// 5) Sign in so currentUser exists for auth_helper
-      await supabase.auth.signInWithPassword(
-        email: childEmail,
-        password: widget.password,
-      );
 
       /// 6) Update existing child profile row
       await supabase
@@ -210,9 +167,10 @@ class _OnboardingBalanceScreenState
           )
           .update(
             {
-              'user_id': authUser.id,
-              'email': childEmail,
-              'hashed_password': widget.password,
+              'hashed_password': BCrypt.hashpw(
+                widget.password,
+                BCrypt.gensalt(),
+              ),
               'full_name': widget.childName,
               'current_balance': balance,
               'user_type': 'child',

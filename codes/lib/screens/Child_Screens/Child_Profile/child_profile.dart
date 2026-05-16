@@ -190,9 +190,11 @@ class _ChildProfilePageState
   }
 
   @override
-  void dispose() {
-    _bounceController.dispose();
-    super.dispose();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _loadChildDashboard(
+      showLoader: false,
+    );
   }
 
   String
@@ -856,6 +858,7 @@ class _ChildProfilePageState
                             Navigator.pop(
                               ctx,
                             );
+                            currentChildProfileId = null;
                             await _sb.auth.signOut();
                             if (mounted) {
                               Navigator.pushNamedAndRemoveUntil(

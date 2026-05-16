@@ -460,7 +460,7 @@ class _RoleRedirectPageState
             'User_Profile',
           )
           .select(
-            'user_type',
+            'user_type, profile_id',
           )
           .eq(
             'user_id',
@@ -474,26 +474,30 @@ class _RoleRedirectPageState
 
       if (userType ==
           'child') {
+        currentChildProfileId = row?['profile_id'];
         Navigator.pushReplacementNamed(
           context,
           '/childProfile',
         );
       } else if (userType ==
           'adult') {
+        currentChildProfileId = null;
         Navigator.pushReplacementNamed(
           context,
-          '/dashboard',
+          '/profile',
         );
       } else if (userType ==
           'guardian') {
+        currentChildProfileId = null;
         Navigator.pushReplacementNamed(
           context,
-          '/dashboard',
+          '/profile',
         );
       } else {
+        currentChildProfileId = null;
         Navigator.pushReplacementNamed(
           context,
-          '/dashboard',
+          '/profile',
         );
       }
     } catch (

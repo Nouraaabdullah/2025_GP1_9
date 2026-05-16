@@ -892,50 +892,47 @@ class _ChildProfilePageState
   void _openCategoryDetail(
     KidCategory cat,
   ) async {
-    final updated =
-        await Navigator.push<
-          KidCategory
-        >(
-          context,
-          PageRouteBuilder(
-            pageBuilder:
-                (
-                  _,
-                  anim,
-                  __,
-                ) => ChildCategoryDetailPage(
-                  category: cat,
-                ),
-            transitionsBuilder:
-                (
-                  _,
-                  anim,
-                  __,
-                  child,
-                ) => SlideTransition(
-                  position:
-                      Tween<
-                            Offset
-                          >(
-                            begin: const Offset(
-                              0,
-                              1,
-                            ),
-                            end: Offset.zero,
-                          )
-                          .animate(
-                            CurvedAnimation(
-                              parent: anim,
-                              curve: Curves.easeOutCubic,
-                            ),
-                          ),
-                  child: child,
-                ),
-            transitionDuration: const Duration(
-              milliseconds: 380,
+    final updated = await Navigator.push(
+      context,
+      PageRouteBuilder(
+        pageBuilder:
+            (
+              _,
+              anim,
+              __,
+            ) => ChildCategoryDetailPage(
+              category: cat,
             ),
-          ),
-        );
+        transitionsBuilder:
+            (
+              _,
+              anim,
+              __,
+              child,
+            ) => SlideTransition(
+              position:
+                  Tween<
+                        Offset
+                      >(
+                        begin: const Offset(
+                          0,
+                          1,
+                        ),
+                        end: Offset.zero,
+                      )
+                      .animate(
+                        CurvedAnimation(
+                          parent: anim,
+                          curve: Curves.easeOutCubic,
+                        ),
+                      ),
+              child: child,
+            ),
+        transitionDuration: const Duration(
+          milliseconds: 380,
+        ),
+      ),
+    );
 
     if (updated !=
         null) {

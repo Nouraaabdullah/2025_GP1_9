@@ -1,3 +1,5 @@
+// codes/lib/screens/Notifications/notifications_page.dart
+
 import 'package:flutter/material.dart';
 import 'notification_model.dart';
 import 'notification_services.dart';
@@ -94,21 +96,20 @@ void _listenForNotifications() {
     )
     ..subscribe();
 }
+
   Future<void> _onTap(NotificationModel n) async {
-    if (!n.isRead) {
-      await _service.markAsRead(n.id);
-      setState(() {
-        final idx = _notifications.indexWhere((x) => x.id == n.id);
-        if (idx != -1) {
-          _notifications[idx] = n.copyWith(isRead: true);
-        }
-      });
-    }
+  if (!n.isRead) {
+    await _service.markAsRead(n.id);
 
-    if (!mounted || n.route == null || n.route!.isEmpty) return;
+    setState(() {
+      final idx = _notifications.indexWhere((x) => x.id == n.id);
 
-    Navigator.pushNamed(context, n.route!);
+      if (idx != -1) {
+        _notifications[idx] = n.copyWith(isRead: true);
+      }
+    });
   }
+}
 
   Future<void> _markAllRead() async {
     await _service.markAllAsRead();
@@ -719,33 +720,44 @@ class _NotificationCard extends StatelessWidget {
 
   Color _accentColor(String type) {
     switch (type) {
-      case 'budget':
+      case 'budget_alert':
+      case 'child_budget_alert':
         return const Color(0xFF6C5CE7);
-      case 'goal':
+
+      case 'goal_completed':
+      case 'goal_reminder':
         return const Color(0xFF00B894);
-      case 'insight':
-        return const Color(0xFFFDCB6E);
-      case 'warning':
+
+      case 'negative_balance':
+      case 'child_negative_balance':
         return const Color(0xFFFF7675);
+
       default:
         return const Color(0xFF74B9FF);
     }
   }
 
-  IconData _iconFor(String type) {
-    switch (type) {
-      case 'budget':
-        return Icons.account_balance_wallet_outlined;
-      case 'goal':
-        return Icons.flag_outlined;
-      case 'insight':
-        return Icons.lightbulb_outline;
-      case 'warning':
-        return Icons.warning_amber_outlined;
-      default:
-        return Icons.notifications_outlined;
+
+    IconData _iconFor(String type) {
+      switch (type) {
+        case 'budget_alert':
+        case 'child_budget_alert':
+          return Icons.account_balance_wallet_outlined;
+
+        case 'goal_completed':
+          return Icons.flag_outlined;
+
+        case 'goal_reminder':
+          return Icons.event_note_outlined;
+
+        case 'negative_balance':
+        case 'child_negative_balance':
+          return Icons.warning_amber_outlined;
+
+        default:
+          return Icons.notifications_outlined;
+      }
     }
-  }
 
   String _timeAgo(DateTime dt) {
     final diff = DateTime.now().difference(dt);

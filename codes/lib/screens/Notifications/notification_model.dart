@@ -1,3 +1,4 @@
+//codes/lib/screens/Notifications/notification_model.dart
 class NotificationModel {
   final String id;
   final String title;
@@ -5,7 +6,6 @@ class NotificationModel {
   final String type;
   final bool isRead;
   final DateTime createdAt;
-  final String? route;
   final String profileId;
 
   NotificationModel({
@@ -16,7 +16,6 @@ class NotificationModel {
     required this.isRead,
     required this.createdAt,
     required this.profileId,
-    this.route,
   });
 
   factory NotificationModel.fromMap(Map<String, dynamic> map) {
@@ -28,7 +27,6 @@ class NotificationModel {
       isRead: map['is_read'] ?? false,
       createdAt: DateTime.parse(map['created_at']),
       profileId: map['profile_id'].toString(),
-      route: map['route'],
     );
   }
 
@@ -41,7 +39,6 @@ class NotificationModel {
       isRead: isRead ?? this.isRead,
       createdAt: createdAt,
       profileId: profileId,
-      route: route,
     );
   }
 }

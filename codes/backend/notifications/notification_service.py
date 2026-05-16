@@ -1,3 +1,4 @@
+'''2025_GP1_9/codes/backend/notifications/notification_service.py'''
 import os
 from typing import Optional
 from supabase import create_client, Client
@@ -19,14 +20,12 @@ class NotificationService:
         title: str,
         body: str,
         notification_type: str,
-        route: Optional[str] = None,
     ):
         payload = {
             "profile_id": profile_id,
             "title": title,
             "body": body,
             "type": notification_type,
-            "route": route,
             "is_read": False,
         }
 
@@ -43,33 +42,41 @@ class NotificationService:
         return NotificationService.create_notification(
             profile_id=profile_id,
             title="Budget Alert",
-            body=f"You exceeded your {category_name} budget. Spent: {spent:.2f} SAR, Limit: {limit:.2f} SAR.",
+            body=f"You exceeded your {category_name} budget.",
             notification_type="budget_alert",
-            route="/budget",
         )
 
     @staticmethod
-    def create_goal_reached(
+    def create_goal_completed(
         profile_id: str,
         goal_name: str,
     ):
         return NotificationService.create_notification(
             profile_id=profile_id,
-            title="Goal Reached",
-            body=f"Congratulations! You reached your goal: {goal_name}.",
-            notification_type="goal_reached",
-            route="/goals",
+            title="Goal Completed",
+            body=f"Congratulations! You completed your goal: {goal_name}.",
+            notification_type="goal_completed",
         )
 
     @staticmethod
-    def create_reminder_notification(
+    def create_goal_reminder(
         profile_id: str,
-        reminder_title: str,
+        goal_name: str,
     ):
         return NotificationService.create_notification(
             profile_id=profile_id,
-            title="Reminder",
-            body=f"Don't forget: {reminder_title}",
-            notification_type="reminder",
-            route="/reminders",
+            title="Goal Reminder",
+            body=f"Reminder: your goal {goal_name} is due tomorrow.",
+            notification_type="goal_reminder",
+        )
+
+    @staticmethod
+    def create_negative_balance_alert(
+        profile_id: str,
+    ):
+        return NotificationService.create_notification(
+            profile_id=profile_id,
+            title="Negative Balance Alert",
+            body="Your balance is negative.",
+            notification_type="negative_balance",
         )

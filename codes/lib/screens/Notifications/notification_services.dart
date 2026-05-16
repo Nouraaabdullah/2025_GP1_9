@@ -1,3 +1,4 @@
+// codes/lib/screens/Notifications/notification_services.dart
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'notification_model.dart';
@@ -36,6 +37,9 @@ class NotificationService {
       'goal_reminder',
       'budget_alert',
       'goal_completed',
+      'negative_balance',
+      'child_budget_alert',
+      'child_negative_balance',
     ])
     .order('created_at', ascending: false);
 
@@ -62,6 +66,9 @@ class NotificationService {
       'goal_reminder',
       'budget_alert',
       'goal_completed',
+      'negative_balance',
+      'child_budget_alert',
+      'child_negative_balance',
     ]);
 
       return (response as List).length;
@@ -101,7 +108,6 @@ class NotificationService {
     required String title,
     required String body,
     required String type,
-    String? route,
   }) async {
     try {
       final profileId = await _getProfileId();
@@ -113,7 +119,6 @@ class NotificationService {
         'type': type,
         'is_read': false,
         'created_at': DateTime.now().toIso8601String(),
-        'route': route,
         'profile_id': profileId,
       });
     } catch (e) {

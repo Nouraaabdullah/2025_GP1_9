@@ -522,7 +522,7 @@ class _PurpleBubble
               textAlign: TextAlign.center,
               style: const TextStyle(
                 fontFamily: AppTextStyles.nunito,
-                color: AppColors.kText,
+                color: Colors.white,
                 fontWeight: FontWeight.w900,
                 fontSize: 12,
               ),

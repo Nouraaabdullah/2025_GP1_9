@@ -510,28 +510,28 @@ class _SavingsPageState extends State<SavingsPage>
         icon: Icons.emoji_events_rounded,
         ringColor: AppColors.kYellow,
         title: 'What an Achievement!',
-        message: 'Goal status has been updated to Achieved.',
+        message: 'You have achieved your Goal.',
       );
     } else if (s == 'completed') {
       return _showStatusDialog(
         icon: Icons.check_circle_rounded,
         ringColor: AppColors.kBlue,
-        title: 'Goal Completed!',
-        message: 'Goal status has been updated to Completed.',
+        title: 'Good Job!',
+        message: 'You have completed your Goal.',
       );
     } else if (s == 'incompleted' || s == 'incomplete') {
       return _showStatusDialog(
         icon: Icons.error_outline_rounded,
         ringColor: AppColors.kPink,
         title: 'Target Day is Due!',
-        message: 'Goal status has been updated to Incomplete.',
+        message: 'Your Goal is incomplete.',
       );
     } else if (s == 'active') {
       return _showStatusDialog(
         icon: Icons.flash_on_rounded,
         ringColor: AppColors.kPurple,
         title: 'Active Again!',
-        message: 'Goal status has been updated to Active.',
+        message: 'Your Goal is now active again.',
       );
     }
     return Future.value();

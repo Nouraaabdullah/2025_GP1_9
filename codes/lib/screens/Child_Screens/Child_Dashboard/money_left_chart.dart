@@ -11,7 +11,6 @@ class MoneyLeftSemicircleGauge
   final String label;
   final double? expenses;
   final double? earnings;
-  final double? income;
 
   const MoneyLeftSemicircleGauge({
     super.key,
@@ -19,7 +18,6 @@ class MoneyLeftSemicircleGauge
     required this.label,
     this.expenses,
     this.earnings,
-    this.income,
   });
 
   @override
@@ -49,7 +47,6 @@ class _MoneyLeftSemicircleGaugeState
 
   static const _cExpenses = AppColors.kPurple;
   static const _cEarnings = AppColors.kBlue;
-  static const _cIncome = AppColors.kTextSoft;
   static final _cTrack = AppColors.kPurple.withOpacity(
     0.15,
   );
@@ -140,66 +137,19 @@ class _MoneyLeftSemicircleGaugeState
               0,
               double.infinity,
             );
-    final inc =
-        (widget.income ??
-                0)
-            .clamp(
-              0,
-              double.infinity,
-            );
     final base =
-        ern +
-        inc;
+        ern;
 
     double sweepExp = 0;
     double sweepErn = 0;
-    double sweepInc = 0;
 
-    if (base >
-        0) {
-      final used = exp.clamp(
-        0,
-        base,
-      );
-      sweepExp =
-          180.0 *
-          (used /
-              base);
-      final remain =
-          180.0 -
-          sweepExp;
-
-      final denom =
-          ern +
-          inc;
-      final erShare =
-          denom <=
-              0
-          ? 0.5
-          : (ern /
-                denom);
-      final incShare =
-          1 -
-          erShare;
-
-      sweepErn =
-          remain *
-          erShare;
-      sweepInc =
-          remain *
-          incShare;
-    } else {
-      final p = widget.percent.clamp(
-        0,
-        1,
-      );
-      sweepErn =
-          180.0 *
-          p;
-      sweepInc =
-          180.0 -
-          sweepErn;
-    }
+if (base > 0) {
+  final used = exp.clamp(0, base);
+  sweepExp = 180.0 * (used / base);
+  sweepErn = 180.0 - sweepExp;
+} else {
+  sweepErn = 180.0;
+}
 
     return Center(
       child: GestureDetector(
@@ -275,14 +225,10 @@ class _MoneyLeftSemicircleGaugeState
 
               final expVal = exp;
               final ernVal = ern;
-              final incVal = inc;
               final baseVal =
-                  ernVal +
-                  incVal;
-
+                  ernVal;
               double expSweep = 0;
               double ernSweep = 0;
-              double incSweep = 0;
 
               if (baseVal >
                   0) {
@@ -293,45 +239,15 @@ class _MoneyLeftSemicircleGaugeState
                           baseVal,
                         ) /
                         baseVal);
-                final remain =
-                    math.pi -
-                    expSweep;
-                final denom =
-                    ernVal +
-                    incVal;
-                final erShare =
-                    denom <=
-                        0
-                    ? 0.5
-                    : (ernVal /
-                          denom);
-                ernSweep =
-                    remain *
-                    erShare;
-                incSweep =
-                    remain *
-                    (1 -
-                        erShare);
+                ernSweep = math.pi - expSweep;
               } else {
-                final p = widget.percent.clamp(
-                  0,
-                  1,
-                );
-                ernSweep =
-                    math.pi *
-                    p;
-                incSweep =
-                    math.pi -
-                    ernSweep;
+                ernSweep = math.pi;
               }
 
               final startExp = math.pi;
               final startErn =
                   startExp +
                   expSweep;
-              final startInc =
-                  startErn +
-                  ernSweep;
               final absAngle =
                   semi +
                   math.pi;
@@ -353,13 +269,6 @@ class _MoneyLeftSemicircleGaugeState
               )) {
                 title = 'Earnings';
                 value = '${ernVal.toStringAsFixed(0)} SAR';
-              } else if (_angleWithin(
-                absAngle,
-                startInc,
-                incSweep,
-              )) {
-                title = 'Income';
-                value = '${incVal.toStringAsFixed(0)} SAR';
               } else {
                 return;
               }
@@ -446,21 +355,7 @@ class _MoneyLeftSemicircleGaugeState
                     deflate: _deflate,
                   ),
                 ),
-              if (sweepInc >
-                  0)
-                CustomPaint(
-                  size: _size,
-                  painter: _ArcPainter(
-                    color: _cIncome,
-                    startDeg:
-                        180 +
-                        sweepExp +
-                        sweepErn,
-                    sweepDeg: sweepInc,
-                    stroke: _stroke,
-                    deflate: _deflate,
-                  ),
-                ),
+ 
               Positioned.fill(
                 child: Align(
                   alignment: const Alignment(
@@ -472,7 +367,7 @@ class _MoneyLeftSemicircleGaugeState
                     textAlign: TextAlign.center,
                     style: const TextStyle(
                       fontFamily: AppTextStyles.nunito,
-                      color: Colors.white,
+                      color: AppColors.kText,
                       fontSize: 16,
                       fontWeight: FontWeight.w900,
                     ),
@@ -627,7 +522,7 @@ class _PurpleBubble
               textAlign: TextAlign.center,
               style: const TextStyle(
                 fontFamily: AppTextStyles.nunito,
-                color: Colors.white,
+                color: AppColors.kText,
                 fontWeight: FontWeight.w900,
                 fontSize: 12,
               ),

@@ -125,7 +125,7 @@ class _ChildLogTransactionManuallyPageState
     final List recs = await _sb
         .from('Monthly_Financial_Record')
         .select(
-          'record_id,total_expense,total_income,monthly_saving,period_start,period_end',
+          'record_id,total_expense,total_income,total_earning,monthly_saving,period_start,period_end',
         )
         .eq('profile_id', profileId)
         .gte('period_start', _fmt(first))
@@ -142,6 +142,7 @@ class _ChildLogTransactionManuallyPageState
           'period_end': _fmt(last),
           'total_expense': 0,
           'total_income': 0,
+          'total_earning': 0,
           'monthly_saving': 0,
           'profile_id': profileId,
         })
@@ -187,6 +188,26 @@ class _ChildLogTransactionManuallyPageState
         .update({'current_balance': next})
         .eq('profile_id', profileId);
   }
+
+  Future<void> _bumpMonthEarnings({
+  required String profileId,
+  required DateTime date,
+  required num amount,
+}) async {
+  final month = await _getOrCreateCurrentMonthRecord(profileId, date);
+  final recordId = month['record_id'] as String;
+
+  final num currEarning = (month['total_earning'] is num)
+      ? month['total_earning'] as num
+      : num.tryParse('${month['total_earning']}') ?? 0;
+
+  final num nextEarning = currEarning + amount;
+
+  await _sb
+      .from('Monthly_Financial_Record')
+      .update({'total_earning': nextEarning})
+      .eq('record_id', recordId);
+}
 
   Future<void> _bumpMonthTotalsAndCategorySummary({
     required String profileId,
@@ -880,7 +901,13 @@ Future<void> _showSuccessDialog(String message) async {
       final catName = _selectedCategory!;
       categoryId = await _getCategoryIdByName(catName);
       payload['category_id'] = categoryId;
-    }
+    } if (typeDb == 'Earning') {
+        await _bumpMonthEarnings(
+          profileId: profileId,
+          date: _selectedDate,
+          amount: amount,
+        );
+      }
 
     await _sb.from('Transaction').insert(payload);
     await _updateBalance(amount: amount, isEarning: typeDb == 'Earning');

@@ -1371,16 +1371,23 @@ class _ProfileMainPageState
           _isEditingChildren = false;
         },
       );
-
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Child account deleted successfully.',
-          ),
-        ),
-      );
+ScaffoldMessenger.of(context).showSnackBar(
+  SnackBar(
+    backgroundColor: const Color(0xFF8A5CFF),
+    behavior: SnackBarBehavior.floating,
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(16),
+    ),
+    margin: const EdgeInsets.all(16),
+    content: const Text(
+      'Child account deleted successfully.',
+      style: TextStyle(
+        color: Colors.white,
+        fontWeight: FontWeight.w600,
+      ),
+    ),
+  ),
+);
 
       await _refreshData();
     } catch (
@@ -1391,12 +1398,27 @@ class _ProfileMainPageState
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Failed to delete child account: $e',
-          ),
-        ),
+       SnackBar(
+  backgroundColor: const Color(0xFF8A5CFF),
+  behavior: SnackBarBehavior.floating,
+  shape: RoundedRectangleBorder(
+    borderRadius: BorderRadius.circular(16),
+  ),
+  margin: const EdgeInsets.all(16),
+  content: Text(
+    'Failed to delete child account: $e',
+    style: const TextStyle(
+      color: Colors.white,
+      fontWeight: FontWeight.w600,
+    ),
+  ),
+),
       );
+
+
+
+
+
     } finally {
       if (mounted) {
         setState(

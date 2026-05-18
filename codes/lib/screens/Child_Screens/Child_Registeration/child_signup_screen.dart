@@ -31,6 +31,11 @@ class _ChildSignupScreenState
   String? _userErr, _pwErr, _alertMsg;
 
   bool _loading = false;
+        bool hasMinLength = false;
+bool hasUpper = false;
+bool hasLower = false;
+bool hasNumber = false;
+bool hasSpecial = false;
 
   @override
   void dispose() {
@@ -38,22 +43,24 @@ class _ChildSignupScreenState
     _pwCtrl.dispose();
     super.dispose();
   }
+void validatePassword(String password) {
+  setState(() {
+    hasMinLength = password.length >= 8;
+    hasUpper = RegExp(r'[A-Z]').hasMatch(password);
+    hasLower = RegExp(r'[a-z]').hasMatch(password);
+    hasNumber = RegExp(r'[0-9]').hasMatch(password);
+    hasSpecial = RegExp(r'[^A-Za-z0-9]').hasMatch(password);
+    _pwErr = null;
+  });
+}
 
- String? _validatePassword(String pw) {
-  if (pw.length < 8) {
-    return 'Password must be at least 8 characters';
+String? _validatePassword(String pw) {
+  if (pw.isEmpty) {
+    return 'Password is required.';
   }
 
-  if (!RegExp(r'[A-Z]').hasMatch(pw)) {
-    return 'Must contain at least 1 uppercase letter';
-  }
-
-  if (!RegExp(r'[a-z]').hasMatch(pw)) {
-    return 'Must contain at least 1 lowercase letter';
-  }
-
-  if (!RegExp(r'[0-9]').hasMatch(pw)) {
-    return 'Must contain at least 1 number';
+  if (!(hasMinLength && hasUpper && hasLower && hasNumber && hasSpecial)) {
+    return 'Your password does not meet all requirements.';
   }
 
   return null;
@@ -230,12 +237,7 @@ class _ChildSignupScreenState
                                   icon: '🏷️',
                                   controller: _userCtrl,
                                   errorText: _userErr,
-                                  onChanged:
-                                      (
-                                        _,
-                                      ) => setState(
-                                        () => _userErr = null,
-                                      ),
+                                onChanged: (_) => setState(() => _userErr = null),
                                 ),
                                 const SizedBox(
                                   height: 8,
@@ -245,6 +247,8 @@ class _ChildSignupScreenState
                                 ),
                               ],
                             ),
+                           
+
                             const SizedBox(
                               height: 14,
                             ),
@@ -257,13 +261,23 @@ class _ChildSignupScreenState
                               controller: _pwCtrl,
                               isPassword: true,
                               errorText: _pwErr,
-                              onChanged:
-                                  (
-                                    _,
-                                  ) => setState(
-                                    () => _pwErr = null,
-                                  ),
+                            onChanged: validatePassword,
                             ),
+                          if (_pwCtrl.text.isNotEmpty) ...[
+  const SizedBox(height: 8),
+  Column(
+    children: [
+      _req('At least 8 characters', hasMinLength),
+      _req('An uppercase letter', hasUpper),
+      _req('A lowercase letter', hasLower),
+      _req('A number', hasNumber),
+      _req('A special character', hasSpecial),
+    ],
+  ),
+],
+
+
+
                             const SizedBox(
                               height: 14,
                             ),
@@ -336,4 +350,34 @@ class _ChildSignupScreenState
       ),
     );
   }
-}
+  Widget _req(String text, bool ok) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 5),
+      child: Row(
+        children: [
+          Icon(
+            ok ? Icons.check_circle : Icons.circle,
+            size: 16,
+            color: ok
+                ? AppColors.kPurple
+                : AppColors.kTextSoft.withOpacity(0.45),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            text,
+            style: TextStyle(
+              fontFamily: AppTextStyles.nunito,
+              color: ok
+                  ? AppColors.kText
+                  : AppColors.kTextSoft.withOpacity(0.65),
+              fontSize: 13.5,
+              fontWeight: ok ? FontWeight.w800 : FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+        }
+  
+

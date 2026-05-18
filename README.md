@@ -3,6 +3,7 @@
 # Surra | صُرّة
 
 You can Find Our Application Demo here: https://youtu.be/metz3ATWeTo
+Github Repository Link: https://github.com/Nouraaabdullah/2025_GP1_9
 
 ### Introduction (Goal)
 
@@ -22,6 +23,64 @@ The goal of the project is to address overspending and limited financial awarene
 
 By integrating artificial intelligence, real-time analytics, and family-oriented budgeting, Surra promotes responsible spending and long-term financial stability across generations.
 
+
+### Installation and Run Instructions
+
+#### Requirements
+- macOS Ventura or later
+- Xcode 15 or later
+- iOS Simulator installed through Xcode
+
+---
+
+#### Running the Application
+
+1. Download and extract the submitted software package.
+
+2. Open the iOS Simulator through Xcode.
+
+3. Open the Surra project folder.
+
+4. Open the project using:
+   - `.xcworkspace` file (preferred), or
+   - `.xcodeproj` file.
+
+5. Select a simulator device such as:
+   - iPhone 17 Pro Simulator
+
+6. Run the application using:
+   - Xcode Run button, or
+   - `Cmd + R`
+
+7. The application will launch automatically inside the iOS Simulator.
+
+8. Ensure the device has an active internet connection to access:
+   - AI chatbot features
+   - dashboard recommendations
+   - gold price services
+   - Supabase database services
+
+---
+
+### Additional Testing Information
+
+#### Adult Test Account
+
+Email:
+maha@gmail.com
+
+Password:
+
+
+---
+
+#### Linked Child Account
+
+Username:
+DemahOmar
+
+Password:
+
 ### Technologies Used
 
 Flutter : Used for developing the cross-platform mobile application.
@@ -39,19 +98,3 @@ Tesseract OCR / Google Vision API : For extracting text from scanned receipts to
 GitHub : For version control and collaborative development.
 
 Jira : For sprint planning, task tracking, and project management.
-
-### Launch Instructions
-
-1- Clone the Repository
-
-2- Install Dependencies
-
-3- Connect to Supabase
-
-  The project is already linked to the existing Supabase database.
-  Ensure the Supabase credentials (supabaseUrl and supabaseAnonKey) are correctly set in the configuration file.
-  
-4- Run the Application
-
-The app will automatically connect to the existing Supabase backend, load user data, and enable features such as authentication, category tracking, goal management, and real-time updates.
-

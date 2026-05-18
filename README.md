@@ -26,6 +26,7 @@ The goal of the project is to address overspending and limited financial awarene
 
 By integrating artificial intelligence, real-time analytics, and family-oriented budgeting, Surra promotes responsible spending and long-term financial stability across generations.
 
+---
 
 ### Installation and Run Instructions
 
@@ -34,7 +35,6 @@ By integrating artificial intelligence, real-time analytics, and family-oriented
 - Xcode 15 or later
 - iOS Simulator installed through Xcode
 
----
 
 #### Running the Application
 

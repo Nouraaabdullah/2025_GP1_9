@@ -3,7 +3,10 @@
 # Surra | صُرّة
 
 You can Find Our Application Demo here: https://youtu.be/metz3ATWeTo
+
 Github Repository Link: https://github.com/Nouraaabdullah/2025_GP1_9
+
+---
 
 ### Introduction (Goal)
 
@@ -80,6 +83,8 @@ Username:
 DemahOmar
 
 Password:
+
+---
 
 ### Technologies Used
 

@@ -1536,8 +1536,24 @@ class _ProfileMainPageState
         context,
       ).showSnackBar(
         SnackBar(
+          backgroundColor: const Color(
+            0xFF8A5CFF,
+          ),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(
+              16,
+            ),
+          ),
+          margin: const EdgeInsets.all(
+            16,
+          ),
           content: Text(
             'Failed to delete child account: $e',
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ),
       );

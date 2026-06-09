@@ -32,6 +32,7 @@ class _ChildLogTransactionManuallyPageState
 
   String? _profileId;
 
+  String? _amountErrorText;
   String? _dateErrorText;
   String? _categoryErrorText;
 
@@ -47,6 +48,48 @@ class _ChildLogTransactionManuallyPageState
   void dispose() {
     _amountCtrl.dispose();
     super.dispose();
+  }
+
+  String? _validatePositiveNumberText(String value) {
+    final text = value.trim();
+
+    if (text.isEmpty) {
+      return 'Enter an amount';
+    }
+
+    final validNumber = RegExp(r'^\d+(\.\d+)?$');
+
+    if (!validNumber.hasMatch(text)) {
+      return 'Use numbers only';
+    }
+
+    final amount = num.tryParse(text);
+
+    if (amount == null || amount <= 0) {
+      return 'Amount must be greater than 0';
+    }
+
+    return null;
+  }
+
+  String? _validateOptionalNonNegativeNumberText(String value) {
+    final text = value.trim();
+
+    if (text.isEmpty) return null;
+
+    final validNumber = RegExp(r'^\d+(\.\d+)?$');
+
+    if (!validNumber.hasMatch(text)) {
+      return 'Use numbers only';
+    }
+
+    final amount = num.tryParse(text);
+
+    if (amount == null || amount < 0) {
+      return 'Limit must be 0 or greater';
+    }
+
+    return null;
   }
 
   Future<void> _bootstrap() async {
@@ -190,24 +233,24 @@ class _ChildLogTransactionManuallyPageState
   }
 
   Future<void> _bumpMonthEarnings({
-  required String profileId,
-  required DateTime date,
-  required num amount,
-}) async {
-  final month = await _getOrCreateCurrentMonthRecord(profileId, date);
-  final recordId = month['record_id'] as String;
+    required String profileId,
+    required DateTime date,
+    required num amount,
+  }) async {
+    final month = await _getOrCreateCurrentMonthRecord(profileId, date);
+    final recordId = month['record_id'] as String;
 
-  final num currEarning = (month['total_earning'] is num)
-      ? month['total_earning'] as num
-      : num.tryParse('${month['total_earning']}') ?? 0;
+    final num currEarning = (month['total_earning'] is num)
+        ? month['total_earning'] as num
+        : num.tryParse('${month['total_earning']}') ?? 0;
 
-  final num nextEarning = currEarning + amount;
+    final num nextEarning = currEarning + amount;
 
-  await _sb
-      .from('Monthly_Financial_Record')
-      .update({'total_earning': nextEarning})
-      .eq('record_id', recordId);
-}
+    await _sb
+        .from('Monthly_Financial_Record')
+        .update({'total_earning': nextEarning})
+        .eq('record_id', recordId);
+  }
 
   Future<void> _bumpMonthTotalsAndCategorySummary({
     required String profileId,
@@ -287,8 +330,7 @@ class _ChildLogTransactionManuallyPageState
   Color _hexToColor(String value) {
     value = value.replaceAll('#', '');
 
-    final isDecimal =
-        RegExp(r'^[0-9]+$').hasMatch(value) && value.length > 8;
+    final isDecimal = RegExp(r'^[0-9]+$').hasMatch(value) && value.length > 8;
 
     if (isDecimal) {
       final dec = int.parse(value);
@@ -301,11 +343,13 @@ class _ChildLogTransactionManuallyPageState
 
   Future<DateTime?> _pickDateDialog(DateTime initial) async {
     final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
     final picked = await showDatePicker(
       context: context,
-      initialDate: initial,
+      initialDate: initial.isAfter(today) ? today : initial,
       firstDate: DateTime(now.year - 3),
-      lastDate: DateTime(now.year + 3),
+      lastDate: today,
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
@@ -342,106 +386,106 @@ class _ChildLogTransactionManuallyPageState
     );
   }
 
-Future<void> _showSuccessDialog(String message) async {
-  await showDialog<void>(
-    context: context,
-    barrierDismissible: true,
-    builder: (ctx) => Dialog(
-      backgroundColor: Colors.transparent,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(40),
-      ),
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(32),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.kPurple.withOpacity(0.15),
-              blurRadius: 30,
-              offset: const Offset(0, 8),
-            ),
-          ],
+  Future<void> _showSuccessDialog(String message) async {
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(40),
         ),
-        padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: AppColors.kGreenSoft,
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.kGreen.withOpacity(0.4),
-                    blurRadius: 18,
-                    spreadRadius: 2,
-                  ),
-                ],
-                border: Border.all(color: AppColors.kGreen, width: 3),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(32),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.kPurple.withOpacity(0.15),
+                blurRadius: 30,
+                offset: const Offset(0, 8),
               ),
-              child: const Center(
-                child: Icon(
-                  Icons.check_circle_outline,
-                  color: AppColors.kGreen,
-                  size: 42,
+            ],
+          ),
+          padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: AppColors.kGreenSoft,
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.kGreen.withOpacity(0.4),
+                      blurRadius: 18,
+                      spreadRadius: 2,
+                    ),
+                  ],
+                  border: Border.all(color: AppColors.kGreen, width: 3),
                 ),
-              ),
-            ),
-            const SizedBox(height: 24),
-            const Text(
-              'Done!',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: AppColors.kText,
-                fontSize: 22,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: AppColors.kTextSoft,
-                fontSize: 14,
-                height: 1.5,
-              ),
-            ),
-            const SizedBox(height: 28),
-            SizedBox(
-              width: 120,
-              height: 44,
-              child: ElevatedButton(
-                onPressed: () => Navigator.of(ctx).pop(),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.kPurple,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  elevation: 16,
-                  shadowColor: AppColors.kPurple.withOpacity(0.5),
-                ),
-                child: const Text(
-                  'OK',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
+                child: const Center(
+                  child: Icon(
+                    Icons.check_circle_outline,
+                    color: AppColors.kGreen,
+                    size: 42,
                   ),
                 ),
               ),
-            ),
-            const SizedBox(height: 8),
-          ],
+              const SizedBox(height: 24),
+              const Text(
+                'Done!',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: AppColors.kText,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: AppColors.kTextSoft,
+                  fontSize: 14,
+                  height: 1.5,
+                ),
+              ),
+              const SizedBox(height: 28),
+              SizedBox(
+                width: 120,
+                height: 44,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.kPurple,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    elevation: 16,
+                    shadowColor: AppColors.kPurple.withOpacity(0.5),
+                  ),
+                  child: const Text(
+                    'OK',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
         ),
       ),
-    ),
-  );
-}
+    );
+  }
 
   Future<void> _showWarningDialog(String message) async {
     await _showKidDialog(
@@ -475,7 +519,8 @@ Future<void> _showSuccessDialog(String message) async {
     String? categoryName,
     required String dateText,
   }) async {
-    final newBalance = isExpense ? currentBalance - amount : currentBalance + amount;
+    final newBalance =
+        isExpense ? currentBalance - amount : currentBalance + amount;
 
     bool confirmed = false;
 
@@ -493,8 +538,14 @@ Future<void> _showSuccessDialog(String message) async {
             ),
           ),
           const SizedBox(height: 12),
-          _ConfirmLine(label: 'Current balance', value: '${currentBalance.toStringAsFixed(2)} SAR'),
-          _ConfirmLine(label: 'New balance', value: '${newBalance.toStringAsFixed(2)} SAR'),
+          _ConfirmLine(
+            label: 'Current balance',
+            value: '${currentBalance.toStringAsFixed(2)} SAR',
+          ),
+          _ConfirmLine(
+            label: 'New balance',
+            value: '${newBalance.toStringAsFixed(2)} SAR',
+          ),
           _ConfirmLine(label: 'Date', value: dateText),
           _ConfirmLine(
             label: 'Amount',
@@ -572,6 +623,7 @@ Future<void> _showSuccessDialog(String message) async {
     String? createdCategoryName;
 
     String? nameErrorText;
+    String? limitErrorText;
     String? colorErrorText;
     String? iconErrorText;
 
@@ -600,7 +652,6 @@ Future<void> _showSuccessDialog(String message) async {
                         ),
                       ),
                       const SizedBox(height: 14),
-
                       _KidDialogTextField(
                         controller: nameCtrl,
                         label: 'Name',
@@ -618,7 +669,6 @@ Future<void> _showSuccessDialog(String message) async {
                           ),
                         ),
                       ],
-
                       const SizedBox(height: 12),
                       _KidDialogTextField(
                         controller: limitCtrl,
@@ -627,7 +677,18 @@ Future<void> _showSuccessDialog(String message) async {
                         keyboardType:
                             const TextInputType.numberWithOptions(decimal: true),
                       ),
-
+                      if (limitErrorText != null) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          limitErrorText!,
+                          style: const TextStyle(
+                            fontFamily: AppTextStyles.nunito,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w900,
+                            color: AppColors.kErrorText,
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 14),
                       const Text(
                         'Color',
@@ -655,7 +716,8 @@ Future<void> _showSuccessDialog(String message) async {
                                 color: c,
                                 shape: BoxShape.circle,
                                 border: Border.all(
-                                  color: selected ? AppColors.kText : Colors.white,
+                                  color:
+                                      selected ? AppColors.kText : Colors.white,
                                   width: selected ? 3 : 2,
                                 ),
                               ),
@@ -675,7 +737,6 @@ Future<void> _showSuccessDialog(String message) async {
                           ),
                         ),
                       ],
-
                       const SizedBox(height: 14),
                       const Text(
                         'Icon',
@@ -733,14 +794,14 @@ Future<void> _showSuccessDialog(String message) async {
                           ),
                         ),
                       ],
-
                       const SizedBox(height: 16),
                       Row(
                         children: [
                           Expanded(
                             child: KidGhostButton(
                               label: 'Cancel',
-                              onTap: () => Navigator.of(ctx, rootNavigator: true).pop(),
+                              onTap: () => Navigator.of(ctx, rootNavigator: true)
+                                  .pop(),
                             ),
                           ),
                           const SizedBox(width: 10),
@@ -749,29 +810,37 @@ Future<void> _showSuccessDialog(String message) async {
                               label: 'Create',
                               onTap: () async {
                                 final rawName = nameCtrl.text.trim();
+                                final lt = limitCtrl.text.trim();
+
                                 if (rawName.isEmpty) {
-                                  setDialog(() => nameErrorText = 'Enter a name');
+                                  setDialog(
+                                    () => nameErrorText = 'Enter a name',
+                                  );
                                   return;
                                 }
 
-                                final lt = limitCtrl.text.trim();
-                                if (lt.isNotEmpty) {
-                                  final parsed = num.tryParse(lt);
-                                  if (parsed == null || parsed < 0) {
-                                    setDialog(() => nameErrorText = null);
-                                    await _showWarningDialog('Please enter a valid monthly limit.');
-                                    return;
-                                  }
+                                final limitError =
+                                    _validateOptionalNonNegativeNumberText(lt);
+
+                                if (limitError != null) {
+                                  setDialog(() {
+                                    nameErrorText = null;
+                                    limitErrorText = limitError;
+                                  });
+                                  return;
                                 }
 
                                 setDialog(() {
                                   nameErrorText = null;
+                                  limitErrorText = null;
                                   colorErrorText = null;
                                   iconErrorText = null;
                                 });
 
                                 if (chosenIcon == null) {
-                                  setDialog(() => iconErrorText = 'Pick an icon');
+                                  setDialog(
+                                    () => iconErrorText = 'Pick an icon',
+                                  );
                                   return;
                                 }
 
@@ -787,7 +856,9 @@ Future<void> _showSuccessDialog(String message) async {
                                   final takenColors = <String>{
                                     for (final r in rows)
                                       _hexToColor(
-                                        ((r as Map<String, dynamic>)['icon_color'] ?? '')
+                                        ((r as Map<String, dynamic>)[
+                                                    'icon_color'] ??
+                                                '')
                                             .toString(),
                                       ).value.toRadixString(16).toUpperCase(),
                                   };
@@ -795,13 +866,15 @@ Future<void> _showSuccessDialog(String message) async {
                                   final takenNames = <String>{
                                     for (final r in rows)
                                       _normalizeName(
-                                        ((r as Map<String, dynamic>)['name'] ?? '')
+                                        ((r as Map<String, dynamic>)['name'] ??
+                                                '')
                                             .toString(),
                                       ),
                                   };
 
-                                  final chosenHex =
-                                      chosenColor.value.toRadixString(16).toUpperCase();
+                                  final chosenHex = chosenColor.value
+                                      .toRadixString(16)
+                                      .toUpperCase();
                                   final normalized = _normalizeName(rawName);
 
                                   if (takenColors.contains(chosenHex)) {
@@ -814,13 +887,15 @@ Future<void> _showSuccessDialog(String message) async {
 
                                   if (takenNames.contains(normalized)) {
                                     setDialog(() {
-                                      nameErrorText = 'A category with this name already exists';
+                                      nameErrorText =
+                                          'A category with this name already exists';
                                     });
                                     return;
                                   }
                                 } catch (_) {
                                   setDialog(() {
-                                    nameErrorText = 'Could not validate. Please try again.';
+                                    nameErrorText =
+                                        'Could not validate. Please try again.';
                                   });
                                   return;
                                 }
@@ -833,7 +908,8 @@ Future<void> _showSuccessDialog(String message) async {
                                   'type': 'Custom',
                                   'monthly_limit': limit,
                                   'icon': chosenIcon.toString().split('.').last,
-                                  'icon_color': chosenColor.value.toRadixString(16),
+                                  'icon_color':
+                                      chosenColor.value.toRadixString(16),
                                   'is_archived': false,
                                   'profile_id': profileId,
                                 };
@@ -844,7 +920,8 @@ Future<void> _showSuccessDialog(String message) async {
                                     .select('category_id,name')
                                     .single();
 
-                                createdCategoryName = inserted['name'] as String;
+                                createdCategoryName =
+                                    inserted['name'] as String;
 
                                 if (context.mounted) {
                                   Navigator.of(ctx, rootNavigator: true).pop();
@@ -901,13 +978,15 @@ Future<void> _showSuccessDialog(String message) async {
       final catName = _selectedCategory!;
       categoryId = await _getCategoryIdByName(catName);
       payload['category_id'] = categoryId;
-    } if (typeDb == 'Earning') {
-        await _bumpMonthEarnings(
-          profileId: profileId,
-          date: _selectedDate,
-          amount: amount,
-        );
-      }
+    }
+
+    if (typeDb == 'Earning') {
+      await _bumpMonthEarnings(
+        profileId: profileId,
+        date: _selectedDate,
+        amount: amount,
+      );
+    }
 
     await _sb.from('Transaction').insert(payload);
     await _updateBalance(amount: amount, isEarning: typeDb == 'Earning');
@@ -958,11 +1037,30 @@ Future<void> _showSuccessDialog(String message) async {
   }
 
   Future<void> _submit() async {
+    final amountError = _validatePositiveNumberText(_amountCtrl.text);
+
+    if (amountError != null) {
+      setState(() {
+        _amountErrorText = amountError;
+      });
+      return;
+    } else {
+      if (_amountErrorText != null) {
+        setState(() {
+          _amountErrorText = null;
+        });
+      }
+    }
+
     if (_formKey.currentState?.validate() != true) return;
 
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    final picked = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day);
+    final picked = DateTime(
+      _selectedDate.year,
+      _selectedDate.month,
+      _selectedDate.day,
+    );
 
     if (picked.isAfter(today)) {
       if (!mounted) return;
@@ -1031,349 +1129,357 @@ Future<void> _showSuccessDialog(String message) async {
     }
   }
 
-@override
-Widget build(BuildContext context) {
-  final isEarning = _type == 'Earning';
+  @override
+  Widget build(BuildContext context) {
+    final isEarning = _type == 'Earning';
 
-  return Scaffold(
-    body: Stack(
-      children: [
-        Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              stops: [0.0, 0.45, 1.0],
-              colors: [
-                Color(0xFFD4B3F5),
-                Color(0xFFB8D4F8),
-                Color(0xFFF7B8D4),
-              ],
-            ),
-          ),
-        ),
-
-        Container(
-          height: 230,
-          width: double.infinity,
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [Color(0xFF9B6FFF), Color(0xFF6C8FFF)],
-            ),
-            borderRadius: BorderRadius.only(
-              bottomLeft: Radius.circular(40),
-              bottomRight: Radius.circular(40),
-            ),
-          ),
-        ),
-
-        const KidBubbles(),
-
-        SafeArea(
-          bottom: false,
-          child: Align(
-            alignment: Alignment.topCenter,
-            child: GestureDetector(
-              onTap: () => Navigator.pop(context),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: const [
-                  SizedBox(height: 8),
-                  Text(
-                    'Back',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 22,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  SizedBox(height: 6),
-                  Icon(Icons.expand_more, color: Colors.white),
+    return Scaffold(
+      body: Stack(
+        children: [
+          Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                stops: [0.0, 0.45, 1.0],
+                colors: [
+                  Color(0xFFD4B3F5),
+                  Color(0xFFB8D4F8),
+                  Color(0xFFF7B8D4),
                 ],
               ),
             ),
           ),
-        ),
-
-        Positioned(
-          top: 150,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          child: SafeArea(
-            top: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
-              child: SingleChildScrollView(
+          Container(
+            height: 230,
+            width: double.infinity,
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFF9B6FFF), Color(0xFF6C8FFF)],
+              ),
+              borderRadius: BorderRadius.only(
+                bottomLeft: Radius.circular(40),
+                bottomRight: Radius.circular(40),
+              ),
+            ),
+          ),
+          const KidBubbles(),
+          SafeArea(
+            bottom: false,
+            child: Align(
+              alignment: Alignment.topCenter,
+              child: GestureDetector(
+                onTap: () => Navigator.pop(context),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const SizedBox(height: 12),
-                    const Text(
-                      'Log Transaction',
-                      textAlign: TextAlign.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: const [
+                    SizedBox(height: 8),
+                    Text(
+                      'Back',
                       style: TextStyle(
-                        fontFamily: AppTextStyles.fredoka,
-                        fontSize: 26,
-                        color: AppColors.kText,
+                        color: Colors.white,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
-                    const SizedBox(height: 16),
-
-                    KidCard(
-                      child: Form(
-                        key: _formKey,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            const Text(
-                              'Type',
-                              style: TextStyle(
-                                fontFamily: AppTextStyles.nunito,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w900,
-                                color: AppColors.kText,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            _KidTypeTabs(
-                              value: _type,
-                              onChanged: (v) {
-                                setState(() {
-                                  _type = v;
-                                  if (v == 'Earning') {
-                                    _selectedCategory = null;
-                                    _categoryErrorText = null;
-                                  }
-                                });
-                              },
-                            ),
-                            const SizedBox(height: 16),
-
-                            if (!isEarning) ...[
-                              Row(
-                                children: [
-                                  const Expanded(
-                                    child: Text(
-                                      'Category',
-                                      style: TextStyle(
-                                        fontFamily: AppTextStyles.nunito,
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w900,
-                                        color: AppColors.kText,
-                                      ),
-                                    ),
-                                  ),
-GestureDetector(
-  onTap: () async {
-    try {
-      final created = await _createCategoryDialog();
-      await _loadCategories();
-      setState(() {
-        _selectedCategory = created;
-        _categoryErrorText = null;
-      });
-    } catch (_) {}
-  },
-  child: Container(
-    width: 42,
-    height: 42,
-    decoration: const BoxDecoration(
-      color: AppColors.kPurple,
-      shape: BoxShape.circle,
-    ),
-    child: const Icon(
-      Icons.add_rounded,
-      color: Colors.white,
-      size: 24,
-    ),
-  ),
-),
-                                ],
-                              ),
-                              const SizedBox(height: 8),
-
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 12),
-                                decoration: BoxDecoration(
-                                  color: AppColors.kInputBg,
-                                  borderRadius: BorderRadius.circular(14),
-                                  border: Border.all(
-                                    color: (_categoryErrorText != null)
-                                        ? AppColors.kPink.withOpacity(0.6)
-                                        : AppColors.kPurple.withOpacity(0.2),
-                                    width: 2,
-                                  ),
-                                ),
-                                child: DropdownButtonHideUnderline(
-                                  child: DropdownButton<String>(
-                                    value: _selectedCategory,
-                                    isExpanded: true,
-                                    hint: Text(
-                                      _loadingCats ? 'Loading...' : 'Pick a category',
-                                      style: const TextStyle(
-                                        fontFamily: AppTextStyles.nunito,
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w700,
-                                        color: AppColors.kTextSoft,
-                                      ),
-                                    ),
-                                    items: _categories
-                                        .map(
-                                          (c) => DropdownMenuItem(
-                                            value: c,
-                                            child: Text(
-                                              c,
-                                              style: const TextStyle(
-                                                fontFamily: AppTextStyles.nunito,
-                                                fontSize: 14,
-                                                fontWeight: FontWeight.w800,
-                                                color: AppColors.kText,
-                                              ),
-                                            ),
-                                          ),
-                                        )
-                                        .toList(),
-                                    onChanged: _loadingCats
-                                        ? null
-                                        : (v) => setState(() {
-                                              _selectedCategory = v;
-                                              _categoryErrorText = null;
-                                            }),
-                                  ),
-                                ),
-                              ),
-
-                              if (_loadingCats) ...[
-                                const SizedBox(height: 8),
-                                const Text(
-                                  'Loading categories...',
-                                  style: TextStyle(
-                                    fontFamily: AppTextStyles.nunito,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w900,
-                                    color: AppColors.kTextSoft,
-                                  ),
-                                ),
-                              ],
-
-                              if (_categoryErrorText != null) ...[
-                                const SizedBox(height: 8),
-                                KidAlert(_categoryErrorText!),
-                              ],
-
-                              const SizedBox(height: 16),
-                            ],
-
-                            KidInput(
-                              label: 'Amount',
-                              placeholder: 'Example: 25',
-                              icon: '💰',
-                              controller: _amountCtrl,
-                              keyboardType:
-                                  const TextInputType.numberWithOptions(decimal: true),
-                              errorText: null,
-                              onChanged: (_) {},
-                            ),
-                            const SizedBox(height: 6),
-                            const Text(
-                              'SAR',
-                              textAlign: TextAlign.right,
-                              style: TextStyle(
-                                fontFamily: AppTextStyles.nunito,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w900,
-                                color: AppColors.kTextSoft,
-                              ),
-                            ),
-
-                            const SizedBox(height: 14),
-
-                            const Text(
-                              '📅  Date',
-                              style: TextStyle(
-                                fontFamily: AppTextStyles.nunito,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w900,
-                                color: AppColors.kText,
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            GestureDetector(
-                              onTap: () async {
-                                final picked = await _pickDateDialog(_selectedDate);
-                                if (picked != null) {
-                                  setState(() {
-                                    _selectedDate = picked;
-                                    _datePicked = true;
-                                    _dateErrorText = null;
-                                  });
-                                }
-                              },
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                                decoration: BoxDecoration(
-                                  color: (_dateErrorText != null)
-                                      ? AppColors.kPink.withOpacity(0.08)
-                                      : AppColors.kInputBg,
-                                  borderRadius: BorderRadius.circular(14),
-                                  border: Border.all(
-                                    color: (_dateErrorText != null)
-                                        ? AppColors.kPink.withOpacity(0.6)
-                                        : AppColors.kPurple.withOpacity(0.2),
-                                    width: 2,
-                                  ),
-                                ),
-                                child: Row(
-                                  children: [
-                                    Expanded(
-                                      child: Text(
-                                        _datePicked ? _fmt(_selectedDate) : _fmt(DateTime.now()),
-                                        style: TextStyle(
-                                          fontFamily: AppTextStyles.nunito,
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w800,
-                                          color: _datePicked ? AppColors.kText : AppColors.kTextSoft,
-                                        ),
-                                      ),
-                                    ),
-                                    const Icon(Icons.calendar_month, color: AppColors.kPurple),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            if (_dateErrorText != null) ...[
-                              const SizedBox(height: 8),
-                              KidAlert(_dateErrorText!),
-                            ],
-
-                            const SizedBox(height: 18),
-
-                            KidPrimaryButton(
-                              label: 'Log',
-                              onTap: _submit,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-
-                    const SizedBox(height: 14),
-                    const KidInfoBox(
-                      'Tip: Use Expense for spending and Earning for money you get.',
-                    ),
+                    SizedBox(height: 6),
+                    Icon(Icons.expand_more, color: Colors.white),
                   ],
                 ),
               ),
             ),
           ),
-        ),
-      ],
-    ),
-  );
-}
+          Positioned(
+            top: 150,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const SizedBox(height: 12),
+                      const Text(
+                        'Log Transaction',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontFamily: AppTextStyles.fredoka,
+                          fontSize: 26,
+                          color: AppColors.kText,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      KidCard(
+                        child: Form(
+                          key: _formKey,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              const Text(
+                                'Type',
+                                style: TextStyle(
+                                  fontFamily: AppTextStyles.nunito,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w900,
+                                  color: AppColors.kText,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              _KidTypeTabs(
+                                value: _type,
+                                onChanged: (v) {
+                                  setState(() {
+                                    _type = v;
+                                    if (v == 'Earning') {
+                                      _selectedCategory = null;
+                                      _categoryErrorText = null;
+                                    }
+                                  });
+                                },
+                              ),
+                              const SizedBox(height: 16),
+                              if (!isEarning) ...[
+                                Row(
+                                  children: [
+                                    const Expanded(
+                                      child: Text(
+                                        'Category',
+                                        style: TextStyle(
+                                          fontFamily: AppTextStyles.nunito,
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w900,
+                                          color: AppColors.kText,
+                                        ),
+                                      ),
+                                    ),
+                                    GestureDetector(
+                                      onTap: () async {
+                                        try {
+                                          final created =
+                                              await _createCategoryDialog();
+                                          await _loadCategories();
+                                          setState(() {
+                                            _selectedCategory = created;
+                                            _categoryErrorText = null;
+                                          });
+                                        } catch (_) {}
+                                      },
+                                      child: Container(
+                                        width: 42,
+                                        height: 42,
+                                        decoration: const BoxDecoration(
+                                          color: AppColors.kPurple,
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: const Icon(
+                                          Icons.add_rounded,
+                                          color: Colors.white,
+                                          size: 24,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                Container(
+                                  padding:
+                                      const EdgeInsets.symmetric(horizontal: 12),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.kInputBg,
+                                    borderRadius: BorderRadius.circular(14),
+                                    border: Border.all(
+                                      color: (_categoryErrorText != null)
+                                          ? AppColors.kPink.withOpacity(0.6)
+                                          : AppColors.kPurple.withOpacity(0.2),
+                                      width: 2,
+                                    ),
+                                  ),
+                                  child: DropdownButtonHideUnderline(
+                                    child: DropdownButton<String>(
+                                      value: _selectedCategory,
+                                      isExpanded: true,
+                                      hint: Text(
+                                        _loadingCats
+                                            ? 'Loading...'
+                                            : 'Pick a category',
+                                        style: const TextStyle(
+                                          fontFamily: AppTextStyles.nunito,
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w700,
+                                          color: AppColors.kTextSoft,
+                                        ),
+                                      ),
+                                      items: _categories
+                                          .map(
+                                            (c) => DropdownMenuItem(
+                                              value: c,
+                                              child: Text(
+                                                c,
+                                                style: const TextStyle(
+                                                  fontFamily:
+                                                      AppTextStyles.nunito,
+                                                  fontSize: 14,
+                                                  fontWeight: FontWeight.w800,
+                                                  color: AppColors.kText,
+                                                ),
+                                              ),
+                                            ),
+                                          )
+                                          .toList(),
+                                      onChanged: _loadingCats
+                                          ? null
+                                          : (v) => setState(() {
+                                                _selectedCategory = v;
+                                                _categoryErrorText = null;
+                                              }),
+                                    ),
+                                  ),
+                                ),
+                                if (_loadingCats) ...[
+                                  const SizedBox(height: 8),
+                                  const Text(
+                                    'Loading categories...',
+                                    style: TextStyle(
+                                      fontFamily: AppTextStyles.nunito,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w900,
+                                      color: AppColors.kTextSoft,
+                                    ),
+                                  ),
+                                ],
+                                if (_categoryErrorText != null) ...[
+                                  const SizedBox(height: 8),
+                                  KidAlert(_categoryErrorText!),
+                                ],
+                                const SizedBox(height: 16),
+                              ],
+                              KidInput(
+                                label: 'Amount',
+                                placeholder: 'Example: 25',
+                                icon: '💰',
+                                controller: _amountCtrl,
+                                keyboardType:
+                                    const TextInputType.numberWithOptions(
+                                  decimal: true,
+                                ),
+                                errorText: _amountErrorText,
+                                onChanged: (_) {
+                                  if (_amountErrorText != null) {
+                                    setState(() {
+                                      _amountErrorText = null;
+                                    });
+                                  }
+                                },
+                              ),
+                              const SizedBox(height: 6),
+                              const Text(
+                                'SAR',
+                                textAlign: TextAlign.right,
+                                style: TextStyle(
+                                  fontFamily: AppTextStyles.nunito,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w900,
+                                  color: AppColors.kTextSoft,
+                                ),
+                              ),
+                              const SizedBox(height: 14),
+                              const Text(
+                                '📅  Date',
+                                style: TextStyle(
+                                  fontFamily: AppTextStyles.nunito,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w900,
+                                  color: AppColors.kText,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              GestureDetector(
+                                onTap: () async {
+                                  final picked =
+                                      await _pickDateDialog(_selectedDate);
+                                  if (picked != null) {
+                                    setState(() {
+                                      _selectedDate = picked;
+                                      _datePicked = true;
+                                      _dateErrorText = null;
+                                    });
+                                  }
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 14,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: (_dateErrorText != null)
+                                        ? AppColors.kPink.withOpacity(0.08)
+                                        : AppColors.kInputBg,
+                                    borderRadius: BorderRadius.circular(14),
+                                    border: Border.all(
+                                      color: (_dateErrorText != null)
+                                          ? AppColors.kPink.withOpacity(0.6)
+                                          : AppColors.kPurple.withOpacity(0.2),
+                                      width: 2,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          _datePicked
+                                              ? _fmt(_selectedDate)
+                                              : _fmt(DateTime.now()),
+                                          style: TextStyle(
+                                            fontFamily: AppTextStyles.nunito,
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w800,
+                                            color: _datePicked
+                                                ? AppColors.kText
+                                                : AppColors.kTextSoft,
+                                          ),
+                                        ),
+                                      ),
+                                      const Icon(
+                                        Icons.calendar_month,
+                                        color: AppColors.kPurple,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              if (_dateErrorText != null) ...[
+                                const SizedBox(height: 8),
+                                KidAlert(_dateErrorText!),
+                              ],
+                              const SizedBox(height: 18),
+                              KidPrimaryButton(
+                                label: 'Log',
+                                onTap: _submit,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      const KidInfoBox(
+                        'Tip: Use Expense for spending and Earning for money you get.',
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   String _fmt(DateTime d) {
     return '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
@@ -1383,7 +1489,11 @@ GestureDetector(
 class _KidTypeTabs extends StatelessWidget {
   final String value;
   final ValueChanged<String> onChanged;
-  const _KidTypeTabs({required this.value, required this.onChanged});
+
+  const _KidTypeTabs({
+    required this.value,
+    required this.onChanged,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1433,7 +1543,9 @@ class _KidTypeTabs extends StatelessWidget {
             color: selected ? null : Colors.white.withOpacity(0.35),
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
-              color: selected ? Colors.white.withOpacity(0.0) : Colors.white.withOpacity(0.55),
+              color: selected
+                  ? Colors.white.withOpacity(0.0)
+                  : Colors.white.withOpacity(0.55),
               width: 1.5,
             ),
           ),
@@ -1544,18 +1656,28 @@ class _KidDialogTextField extends StatelessWidget {
             ),
             filled: true,
             fillColor: AppColors.kInputBg,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(14),
-              borderSide: BorderSide(color: AppColors.kPurple.withOpacity(0.2), width: 2),
+              borderSide: BorderSide(
+                color: AppColors.kPurple.withOpacity(0.2),
+                width: 2,
+              ),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(14),
-              borderSide: BorderSide(color: AppColors.kPurple.withOpacity(0.2), width: 2),
+              borderSide: BorderSide(
+                color: AppColors.kPurple.withOpacity(0.2),
+                width: 2,
+              ),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(14),
-              borderSide: const BorderSide(color: AppColors.kPurple, width: 2),
+              borderSide: const BorderSide(
+                color: AppColors.kPurple,
+                width: 2,
+              ),
             ),
           ),
         ),

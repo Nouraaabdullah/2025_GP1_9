@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/kid_widgets.dart';
+import '../Child_Dashboard/dashboard_page.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Data models
@@ -9,14 +10,20 @@ import '../../../widgets/kid_widgets.dart';
 class _Question {
   final String question;
   final String answer;
-  const _Question(this.question, this.answer);
+  const _Question(
+    this.question,
+    this.answer,
+  );
 }
 
 class _Category {
   final String label;
   final IconData icon;
   final Color color;
-  final List<_Question> questions;
+  final List<
+    _Question
+  >
+  questions;
   const _Category({
     required this.label,
     required this.icon,
@@ -28,11 +35,16 @@ class _Category {
 // ─────────────────────────────────────────────────────────────────────────────
 // Content
 // ─────────────────────────────────────────────────────────────────────────────
-const List<_Category> _categories = [
+const List<
+  _Category
+>
+_categories = [
   _Category(
     label: "Saving",
     icon: Icons.savings_rounded,
-    color: Color(0xFF6896FF),
+    color: Color(
+      0xFF6896FF,
+    ),
     questions: [
       _Question(
         "How can I start saving?",
@@ -46,13 +58,14 @@ const List<_Category> _categories = [
         "How do I know if my saving is working?",
         "Head to your Saving page in Surra! You can see all your saving goals, track how much you have saved, and watch your progress bar fill up as you get closer to your goal. Seeing that bar grow is one of the best feelings! 🎉",
       ),
-
     ],
   ),
   _Category(
     label: "Spending",
     icon: Icons.shopping_bag_rounded,
-    color: Color(0xFFF07AB7),
+    color: Color(
+      0xFFF07AB7,
+    ),
     questions: [
       _Question(
         "How do I know if I am spending too much?",
@@ -75,7 +88,9 @@ const List<_Category> _categories = [
   _Category(
     label: "Budgeting",
     icon: Icons.pie_chart_rounded,
-    color: Color(0xFF8B5CF6),
+    color: Color(
+      0xFF8B5CF6,
+    ),
     questions: [
       _Question(
         "What is a budget?",
@@ -98,7 +113,9 @@ const List<_Category> _categories = [
   _Category(
     label: "Goals",
     icon: Icons.flag_rounded,
-    color: Color(0xFFF39A53),
+    color: Color(
+      0xFFF39A53,
+    ),
     questions: [
       _Question(
         "What is a savings goal?",
@@ -120,12 +137,14 @@ const List<_Category> _categories = [
         "How do I achieve a saving goal?",
         "Start by creating a goal on the Saving page with a name, target amount, and target date. Then assign part of your saving amount to that goal so you can move closer to it step by step. If your plan changes, you can always unassign that amount and keep it available or assign it to another goal. This helps you stay flexible while still making progress toward your goal! 🎯",
       ),
-          ],
+    ],
   ),
   _Category(
     label: "Tips & Tricks",
     icon: Icons.lightbulb_rounded,
-    color: Color(0xFFAA86F7),
+    color: Color(
+      0xFFAA86F7,
+    ),
     questions: [
       _Question(
         "What is the best money habit I can build?",
@@ -148,12 +167,14 @@ const List<_Category> _categories = [
   _Category(
     label: "About Surra",
     icon: Icons.apps_rounded,
-    color: Color(0xFF34C98A),
+    color: Color(
+      0xFF34C98A,
+    ),
     questions: [
       _Question(
-          "What is Surra?",
-          "Surra is a samrt money management app that helps you track your expenses and earnings, understand your spending, and build better saving habits. You can view your financial progress on the Dashboard page, create saving goals, and manage your money in a simple and friendly way! 💜",
-        ),
+        "What is Surra?",
+        "Surra is a samrt money management app that helps you track your expenses and earnings, understand your spending, and build better saving habits. You can view your financial progress on the Dashboard page, create saving goals, and manage your money in a simple and friendly way! 💜",
+      ),
       _Question(
         "What does the Dashboard show me?",
         "The dashboard is your full money summary! At the top you can see your current balance. Below that is the Earning Overview — a chart that shows how much of your earning is left after expenses, along with your total expenses, and earnings for the selected period. Then there is Financial Trends, a bar chart comparing your expenses, and earnings over time. Finally, the Savings Over Time line chart shows how your monthly savings have changed. Switch between Weekly, Monthly, and Yearly views anytime! 📊",
@@ -181,7 +202,9 @@ const List<_Category> _categories = [
 // ─────────────────────────────────────────────────────────────────────────────
 // Typing effect widget
 // ─────────────────────────────────────────────────────────────────────────────
-class _TypingText extends StatefulWidget {
+class _TypingText
+    extends
+        StatefulWidget {
   final String text;
   final TextStyle style;
   final VoidCallback? onDone;
@@ -194,10 +217,17 @@ class _TypingText extends StatefulWidget {
   });
 
   @override
-  State<_TypingText> createState() => _TypingTextState();
+  State<
+    _TypingText
+  >
+  createState() => _TypingTextState();
 }
 
-class _TypingTextState extends State<_TypingText> {
+class _TypingTextState
+    extends
+        State<
+          _TypingText
+        > {
   String _displayed = "";
   int _index = 0;
 
@@ -208,68 +238,116 @@ class _TypingTextState extends State<_TypingText> {
   }
 
   @override
-  void didUpdateWidget(_TypingText old) {
-    super.didUpdateWidget(old);
-    if (old.text != widget.text) {
-      setState(() {
-        _displayed = "";
-        _index = 0;
-      });
+  void didUpdateWidget(
+    _TypingText old,
+  ) {
+    super.didUpdateWidget(
+      old,
+    );
+    if (old.text !=
+        widget.text) {
+      setState(
+        () {
+          _displayed = "";
+          _index = 0;
+        },
+      );
       _typeNext();
     }
   }
 
   void _typeNext() {
-    if (!mounted || _index >= widget.text.length) {
-      if (mounted && _index >= widget.text.length) {
+    if (!mounted ||
+        _index >=
+            widget.text.length) {
+      if (mounted &&
+          _index >=
+              widget.text.length) {
         widget.onDone?.call();
       }
       return;
     }
-    Future.delayed(const Duration(milliseconds: 18), () {
-      if (!mounted) return;
-      setState(() {
-        _displayed += widget.text[_index];
-        _index++;
-      });
-      _typeNext();
-    });
+    Future.delayed(
+      const Duration(
+        milliseconds: 18,
+      ),
+      () {
+        if (!mounted) return;
+        setState(
+          () {
+            _displayed += widget.text[_index];
+            _index++;
+          },
+        );
+        _typeNext();
+      },
+    );
   }
 
   @override
-  Widget build(BuildContext context) => Text(_displayed, style: widget.style);
+  Widget
+  build(
+    BuildContext context,
+  ) => Text(
+    _displayed,
+    style: widget.style,
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Screen states
 // ─────────────────────────────────────────────────────────────────────────────
-enum _ViewState { topics, questions, answer }
-
-class ChildFAQScreen extends StatefulWidget {
-  const ChildFAQScreen({super.key});
-
-  @override
-  State<ChildFAQScreen> createState() => _ChildFAQScreenState();
+enum _ViewState {
+  topics,
+  questions,
+  answer,
 }
 
-class _ChildFAQScreenState extends State<ChildFAQScreen>
-    with SingleTickerProviderStateMixin {
+class ChildFAQScreen
+    extends
+        StatefulWidget {
+  const ChildFAQScreen({
+    super.key,
+  });
+
+  @override
+  State<
+    ChildFAQScreen
+  >
+  createState() => _ChildFAQScreenState();
+}
+
+class _ChildFAQScreenState
+    extends
+        State<
+          ChildFAQScreen
+        >
+    with
+        SingleTickerProviderStateMixin {
   _ViewState _view = _ViewState.topics;
   _Category? _selectedCategory;
   _Question? _selectedQuestion;
   bool _typingDone = false;
 
   late final AnimationController _animController;
-  late final Animation<double> _fadeAnim;
+  late final Animation<
+    double
+  >
+  _fadeAnim;
 
   @override
   void initState() {
     super.initState();
     _animController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 220),
+      duration: const Duration(
+        milliseconds: 220,
+      ),
     );
-    _fadeAnim = CurvedAnimation(parent: _animController, curve: Curves.easeIn);
+    _fadeAnim = CurvedAnimation(
+      parent: _animController,
+      curve: Curves.easeIn,
+    );
     _animController.forward();
   }
 
@@ -279,32 +357,54 @@ class _ChildFAQScreenState extends State<ChildFAQScreen>
     super.dispose();
   }
 
-  void _navigateTo(_ViewState view) {
-    _animController.reverse().then((_) {
-      if (!mounted) return;
-      setState(() {
-        _view = view;
-        _typingDone = false;
-      });
-      _animController.forward();
-    });
+  void _navigateTo(
+    _ViewState view,
+  ) {
+    _animController.reverse().then(
+      (
+        _,
+      ) {
+        if (!mounted) return;
+        setState(
+          () {
+            _view = view;
+            _typingDone = false;
+          },
+        );
+        _animController.forward();
+      },
+    );
   }
 
-  void _pickCategory(_Category cat) {
+  void _pickCategory(
+    _Category cat,
+  ) {
     _selectedCategory = cat;
-    _navigateTo(_ViewState.questions);
+    _navigateTo(
+      _ViewState.questions,
+    );
   }
 
-  void _pickQuestion(_Question q) {
+  void _pickQuestion(
+    _Question q,
+  ) {
     _selectedQuestion = q;
-    _navigateTo(_ViewState.answer);
+    _navigateTo(
+      _ViewState.answer,
+    );
   }
 
-  void _goToTopics() => _navigateTo(_ViewState.topics);
-  void _goToQuestions() => _navigateTo(_ViewState.questions);
+  void _goToTopics() => _navigateTo(
+    _ViewState.topics,
+  );
+  void _goToQuestions() => _navigateTo(
+    _ViewState.questions,
+  );
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(
+    BuildContext context,
+  ) {
     return KidScaffold(
       showBack: false,
       child: Stack(
@@ -316,12 +416,22 @@ class _ChildFAQScreenState extends State<ChildFAQScreen>
             left: 14,
             child: KidBackButton(
               onTap: () {
-                if (_view == _ViewState.answer) {
+                if (_view ==
+                    _ViewState.answer) {
                   _goToQuestions();
-                } else if (_view == _ViewState.questions) {
+                } else if (_view ==
+                    _ViewState.questions) {
                   _goToTopics();
-                } else if (Navigator.of(context).canPop()) {
-                  Navigator.of(context).pop();
+                } else {
+                  Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(
+                      builder:
+                          (
+                            _,
+                          ) => const DashboardPage(),
+                    ),
+                  );
                 }
               },
             ),
@@ -330,7 +440,9 @@ class _ChildFAQScreenState extends State<ChildFAQScreen>
           Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const SizedBox(height: 18),
+              const SizedBox(
+                height: 18,
+              ),
               Center(
                 child: Text(
                   "Surra",
@@ -341,25 +453,33 @@ class _ChildFAQScreenState extends State<ChildFAQScreen>
                   ),
                 ),
               ),
-              const SizedBox(height: 2),
+              const SizedBox(
+                height: 2,
+              ),
               Center(
                 child: Text(
                   "FAQs",
                   style: AppTextStyles.nunitoStyle(
                     size: 22,
-                    color: AppColors.kPurpleDark.withOpacity(0.9),
+                    color: AppColors.kPurpleDark.withOpacity(
+                      0.9,
+                    ),
                     weight: FontWeight.w800,
                   ),
                 ),
               ),
-              const SizedBox(height: 10),
+              const SizedBox(
+                height: 10,
+              ),
               Expanded(
                 child: FadeTransition(
                   opacity: _fadeAnim,
                   child: _buildBody(),
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(
+                height: 16,
+              ),
             ],
           ),
         ],
@@ -370,7 +490,9 @@ class _ChildFAQScreenState extends State<ChildFAQScreen>
   // ── Breadcrumb ─────────────────────────────────────────────────────────────
   Widget _buildBreadcrumb() {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
+      padding: const EdgeInsets.symmetric(
+        horizontal: 20,
+      ),
       child: Row(
         children: [
           GestureDetector(
@@ -381,31 +503,55 @@ class _ChildFAQScreenState extends State<ChildFAQScreen>
                 fontFamily: AppTextStyles.nunito,
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
-                color: AppColors.kPurpleDark.withOpacity(0.45),
+                color: AppColors.kPurpleDark.withOpacity(
+                  0.45,
+                ),
               ),
             ),
           ),
-          if (_selectedCategory != null) ...[
-            Icon(Icons.chevron_right_rounded,
-                size: 16, color: AppColors.kPurpleDark.withOpacity(0.35)),
+          if (_selectedCategory !=
+              null) ...[
+            Icon(
+              Icons.chevron_right_rounded,
+              size: 16,
+              color: AppColors.kPurpleDark.withOpacity(
+                0.35,
+              ),
+            ),
             GestureDetector(
-              onTap: _view == _ViewState.answer ? _goToQuestions : null,
+              onTap:
+                  _view ==
+                      _ViewState.answer
+                  ? _goToQuestions
+                  : null,
               child: Text(
                 _selectedCategory!.label,
                 style: TextStyle(
                   fontFamily: AppTextStyles.nunito,
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
-                  color: _view == _ViewState.answer
-                      ? AppColors.kPurpleDark.withOpacity(0.45)
+                  color:
+                      _view ==
+                          _ViewState.answer
+                      ? AppColors.kPurpleDark.withOpacity(
+                          0.45,
+                        )
                       : AppColors.kPurpleDark,
                 ),
               ),
             ),
           ],
-          if (_view == _ViewState.answer && _selectedQuestion != null) ...[
-            Icon(Icons.chevron_right_rounded,
-                size: 16, color: AppColors.kPurpleDark.withOpacity(0.35)),
+          if (_view ==
+                  _ViewState.answer &&
+              _selectedQuestion !=
+                  null) ...[
+            Icon(
+              Icons.chevron_right_rounded,
+              size: 16,
+              color: AppColors.kPurpleDark.withOpacity(
+                0.35,
+              ),
+            ),
             Expanded(
               child: Text(
                 _selectedQuestion!.question,
@@ -443,7 +589,9 @@ class _ChildFAQScreenState extends State<ChildFAQScreen>
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
+          padding: const EdgeInsets.symmetric(
+            horizontal: 20,
+          ),
           child: Text(
             "What would you like to learn about?",
             style: AppTextStyles.nunitoStyle(
@@ -453,10 +601,15 @@ class _ChildFAQScreenState extends State<ChildFAQScreen>
             ),
           ),
         ),
-        const SizedBox(height: 14),
+        const SizedBox(
+          height: 14,
+        ),
         Expanded(
           child: GridView.builder(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 20,
+              vertical: 4,
+            ),
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 2,
               crossAxisSpacing: 12,
@@ -464,29 +617,51 @@ class _ChildFAQScreenState extends State<ChildFAQScreen>
               childAspectRatio: 1.15,
             ),
             itemCount: _categories.length,
-            itemBuilder: (_, i) => _buildTopicCard(_categories[i]),
+            itemBuilder:
+                (
+                  _,
+                  i,
+                ) => _buildTopicCard(
+                  _categories[i],
+                ),
           ),
         ),
       ],
     );
   }
 
-  Widget _buildTopicCard(_Category cat) {
+  Widget _buildTopicCard(
+    _Category cat,
+  ) {
     return GestureDetector(
-      onTap: () => _pickCategory(cat),
+      onTap: () => _pickCategory(
+        cat,
+      ),
       child: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
-            colors: [cat.color, cat.color.withOpacity(0.7)],
+            colors: [
+              cat.color,
+              cat.color.withOpacity(
+                0.7,
+              ),
+            ],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
-          borderRadius: BorderRadius.circular(22),
+          borderRadius: BorderRadius.circular(
+            22,
+          ),
           boxShadow: [
             BoxShadow(
-              color: cat.color.withOpacity(0.35),
+              color: cat.color.withOpacity(
+                0.35,
+              ),
               blurRadius: 14,
-              offset: const Offset(0, 6),
+              offset: const Offset(
+                0,
+                6,
+              ),
             ),
           ],
         ),
@@ -500,7 +675,9 @@ class _ChildFAQScreenState extends State<ChildFAQScreen>
                 width: 70,
                 height: 70,
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.12),
+                  color: Colors.white.withOpacity(
+                    0.12,
+                  ),
                   shape: BoxShape.circle,
                 ),
               ),
@@ -512,14 +689,18 @@ class _ChildFAQScreenState extends State<ChildFAQScreen>
                 width: 55,
                 height: 55,
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.08),
+                  color: Colors.white.withOpacity(
+                    0.08,
+                  ),
                   shape: BoxShape.circle,
                 ),
               ),
             ),
             // Content
             Padding(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(
+                16,
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -528,10 +709,18 @@ class _ChildFAQScreenState extends State<ChildFAQScreen>
                     width: 42,
                     height: 42,
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.25),
-                      borderRadius: BorderRadius.circular(13),
+                      color: Colors.white.withOpacity(
+                        0.25,
+                      ),
+                      borderRadius: BorderRadius.circular(
+                        13,
+                      ),
                     ),
-                    child: Icon(cat.icon, size: 22, color: Colors.white),
+                    child: Icon(
+                      cat.icon,
+                      size: 22,
+                      color: Colors.white,
+                    ),
                   ),
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -545,7 +734,9 @@ class _ChildFAQScreenState extends State<ChildFAQScreen>
                           color: Colors.white,
                         ),
                       ),
-                      const SizedBox(height: 2),
+                      const SizedBox(
+                        height: 2,
+                      ),
                       Row(
                         children: [
                           Text(
@@ -554,13 +745,21 @@ class _ChildFAQScreenState extends State<ChildFAQScreen>
                               fontFamily: 'Nunito',
                               fontSize: 11,
                               fontWeight: FontWeight.w700,
-                              color: Colors.white.withOpacity(0.8),
+                              color: Colors.white.withOpacity(
+                                0.8,
+                              ),
                             ),
                           ),
-                          const SizedBox(width: 3),
-                          Icon(Icons.arrow_forward_rounded,
-                              size: 11,
-                              color: Colors.white.withOpacity(0.8)),
+                          const SizedBox(
+                            width: 3,
+                          ),
+                          Icon(
+                            Icons.arrow_forward_rounded,
+                            size: 11,
+                            color: Colors.white.withOpacity(
+                              0.8,
+                            ),
+                          ),
                         ],
                       ),
                     ],
@@ -582,20 +781,37 @@ class _ChildFAQScreenState extends State<ChildFAQScreen>
       children: [
         // Colored header banner
         Container(
-          margin: const EdgeInsets.symmetric(horizontal: 20),
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+          margin: const EdgeInsets.symmetric(
+            horizontal: 20,
+          ),
+          padding: const EdgeInsets.symmetric(
+            horizontal: 18,
+            vertical: 14,
+          ),
           decoration: BoxDecoration(
             gradient: LinearGradient(
-              colors: [cat.color, cat.color.withOpacity(0.7)],
+              colors: [
+                cat.color,
+                cat.color.withOpacity(
+                  0.7,
+                ),
+              ],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: BorderRadius.circular(
+              18,
+            ),
             boxShadow: [
               BoxShadow(
-                color: cat.color.withOpacity(0.3),
+                color: cat.color.withOpacity(
+                  0.3,
+                ),
                 blurRadius: 12,
-                offset: const Offset(0, 5),
+                offset: const Offset(
+                  0,
+                  5,
+                ),
               ),
             ],
           ),
@@ -605,12 +821,22 @@ class _ChildFAQScreenState extends State<ChildFAQScreen>
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.25),
-                  borderRadius: BorderRadius.circular(12),
+                  color: Colors.white.withOpacity(
+                    0.25,
+                  ),
+                  borderRadius: BorderRadius.circular(
+                    12,
+                  ),
                 ),
-                child: Icon(cat.icon, size: 20, color: Colors.white),
+                child: Icon(
+                  cat.icon,
+                  size: 20,
+                  color: Colors.white,
+                ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(
+                width: 12,
+              ),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -629,7 +855,9 @@ class _ChildFAQScreenState extends State<ChildFAQScreen>
                       fontFamily: 'Nunito',
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: Colors.white.withOpacity(0.85),
+                      color: Colors.white.withOpacity(
+                        0.85,
+                      ),
                     ),
                   ),
                 ],
@@ -637,32 +865,65 @@ class _ChildFAQScreenState extends State<ChildFAQScreen>
             ],
           ),
         ),
-        const SizedBox(height: 14),
+        const SizedBox(
+          height: 14,
+        ),
         Expanded(
           child: ListView.separated(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 20,
+              vertical: 4,
+            ),
             itemCount: cat.questions.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 10),
-            itemBuilder: (_, i) =>
-                _buildQuestionTile(cat, cat.questions[i], i),
+            separatorBuilder:
+                (
+                  _,
+                  __,
+                ) => const SizedBox(
+                  height: 10,
+                ),
+            itemBuilder:
+                (
+                  _,
+                  i,
+                ) => _buildQuestionTile(
+                  cat,
+                  cat.questions[i],
+                  i,
+                ),
           ),
         ),
       ],
     );
   }
 
-  Widget _buildQuestionTile(_Category cat, _Question q, int index) {
+  Widget _buildQuestionTile(
+    _Category cat,
+    _Question q,
+    int index,
+  ) {
     return GestureDetector(
-      onTap: () => _pickQuestion(q),
+      onTap: () => _pickQuestion(
+        q,
+      ),
       child: Container(
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.9),
-          borderRadius: BorderRadius.circular(16),
+          color: Colors.white.withOpacity(
+            0.9,
+          ),
+          borderRadius: BorderRadius.circular(
+            16,
+          ),
           boxShadow: [
             BoxShadow(
-              color: cat.color.withOpacity(0.1),
+              color: cat.color.withOpacity(
+                0.1,
+              ),
               blurRadius: 10,
-              offset: const Offset(0, 4),
+              offset: const Offset(
+                0,
+                4,
+              ),
             ),
           ],
         ),
@@ -675,18 +936,26 @@ class _ChildFAQScreenState extends State<ChildFAQScreen>
               decoration: BoxDecoration(
                 color: cat.color,
                 borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(16),
-                  bottomLeft: Radius.circular(16),
+                  topLeft: Radius.circular(
+                    16,
+                  ),
+                  bottomLeft: Radius.circular(
+                    16,
+                  ),
                 ),
               ),
             ),
-            const SizedBox(width: 14),
+            const SizedBox(
+              width: 14,
+            ),
             // Number badge
             Container(
               width: 26,
               height: 26,
               decoration: BoxDecoration(
-                color: cat.color.withOpacity(0.15),
+                color: cat.color.withOpacity(
+                  0.15,
+                ),
                 shape: BoxShape.circle,
               ),
               child: Center(
@@ -701,10 +970,14 @@ class _ChildFAQScreenState extends State<ChildFAQScreen>
                 ),
               ),
             ),
-            const SizedBox(width: 10),
+            const SizedBox(
+              width: 10,
+            ),
             Expanded(
               child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 14),
+                padding: const EdgeInsets.symmetric(
+                  vertical: 14,
+                ),
                 child: Text(
                   q.question,
                   style: TextStyle(
@@ -718,12 +991,16 @@ class _ChildFAQScreenState extends State<ChildFAQScreen>
               ),
             ),
             Padding(
-              padding: const EdgeInsets.only(right: 14),
+              padding: const EdgeInsets.only(
+                right: 14,
+              ),
               child: Container(
                 width: 28,
                 height: 28,
                 decoration: BoxDecoration(
-                  color: cat.color.withOpacity(0.1),
+                  color: cat.color.withOpacity(
+                    0.1,
+                  ),
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
@@ -749,9 +1026,11 @@ class _ChildFAQScreenState extends State<ChildFAQScreen>
         // ── Chat messages area ──
         Expanded(
           child: ListView(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 12,
+            ),
             children: [
-
               // ── User message (question) ──
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
@@ -760,24 +1039,44 @@ class _ChildFAQScreenState extends State<ChildFAQScreen>
                   Flexible(
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 12),
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
-                          colors: [cat.color, cat.color.withOpacity(0.75)],
+                          colors: [
+                            cat.color,
+                            cat.color.withOpacity(
+                              0.75,
+                            ),
+                          ],
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                         ),
                         borderRadius: const BorderRadius.only(
-                          topLeft: Radius.circular(20),
-                          topRight: Radius.circular(20),
-                          bottomLeft: Radius.circular(20),
-                          bottomRight: Radius.circular(4),
+                          topLeft: Radius.circular(
+                            20,
+                          ),
+                          topRight: Radius.circular(
+                            20,
+                          ),
+                          bottomLeft: Radius.circular(
+                            20,
+                          ),
+                          bottomRight: Radius.circular(
+                            4,
+                          ),
                         ),
                         boxShadow: [
                           BoxShadow(
-                            color: cat.color.withOpacity(0.3),
+                            color: cat.color.withOpacity(
+                              0.3,
+                            ),
                             blurRadius: 10,
-                            offset: const Offset(0, 4),
+                            offset: const Offset(
+                              0,
+                              4,
+                            ),
                           ),
                         ],
                       ),
@@ -793,24 +1092,37 @@ class _ChildFAQScreenState extends State<ChildFAQScreen>
                       ),
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(
+                    width: 8,
+                  ),
                   // User avatar
                   Container(
                     width: 32,
                     height: 32,
                     decoration: BoxDecoration(
-                      color: cat.color.withOpacity(0.15),
+                      color: cat.color.withOpacity(
+                        0.15,
+                      ),
                       shape: BoxShape.circle,
                       border: Border.all(
-                          color: cat.color.withOpacity(0.3), width: 1.5),
+                        color: cat.color.withOpacity(
+                          0.3,
+                        ),
+                        width: 1.5,
+                      ),
                     ),
-                    child: Icon(Icons.person_rounded,
-                        size: 18, color: cat.color),
+                    child: Icon(
+                      Icons.person_rounded,
+                      size: 18,
+                      color: cat.color,
+                    ),
                   ),
                 ],
               ),
 
-              const SizedBox(height: 20),
+              const SizedBox(
+                height: 20,
+              ),
 
               // ── Bot typing indicator then answer ──
               Row(
@@ -823,23 +1135,38 @@ class _ChildFAQScreenState extends State<ChildFAQScreen>
                     height: 36,
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
-                        colors: [cat.color, cat.color.withOpacity(0.65)],
+                        colors: [
+                          cat.color,
+                          cat.color.withOpacity(
+                            0.65,
+                          ),
+                        ],
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
                       ),
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
-                          color: cat.color.withOpacity(0.35),
+                          color: cat.color.withOpacity(
+                            0.35,
+                          ),
                           blurRadius: 8,
-                          offset: const Offset(0, 3),
+                          offset: const Offset(
+                            0,
+                            3,
+                          ),
                         ),
                       ],
                     ),
-                    child: const Icon(Icons.auto_awesome_rounded,
-                        size: 18, color: Colors.white),
+                    child: const Icon(
+                      Icons.auto_awesome_rounded,
+                      size: 18,
+                      color: Colors.white,
+                    ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(
+                    width: 8,
+                  ),
 
                   // Bot bubble
                   Flexible(
@@ -856,32 +1183,53 @@ class _ChildFAQScreenState extends State<ChildFAQScreen>
                             letterSpacing: 0.3,
                           ),
                         ),
-                        const SizedBox(height: 4),
+                        const SizedBox(
+                          height: 4,
+                        ),
                         Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 14),
+                            horizontal: 16,
+                            vertical: 14,
+                          ),
                           decoration: BoxDecoration(
                             color: Colors.white,
                             borderRadius: const BorderRadius.only(
-                              topLeft: Radius.circular(4),
-                              topRight: Radius.circular(20),
-                              bottomLeft: Radius.circular(20),
-                              bottomRight: Radius.circular(20),
+                              topLeft: Radius.circular(
+                                4,
+                              ),
+                              topRight: Radius.circular(
+                                20,
+                              ),
+                              bottomLeft: Radius.circular(
+                                20,
+                              ),
+                              bottomRight: Radius.circular(
+                                20,
+                              ),
                             ),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withOpacity(0.07),
+                                color: Colors.black.withOpacity(
+                                  0.07,
+                                ),
                                 blurRadius: 12,
-                                offset: const Offset(0, 4),
+                                offset: const Offset(
+                                  0,
+                                  4,
+                                ),
                               ),
                             ],
                           ),
                           child: _TypingText(
-                            key: ValueKey(q.question),
+                            key: ValueKey(
+                              q.question,
+                            ),
                             text: q.answer,
                             onDone: () {
                               if (mounted)
-                                setState(() => _typingDone = true);
+                                setState(
+                                  () => _typingDone = true,
+                                );
                             },
                             style: TextStyle(
                               fontFamily: 'Nunito',
@@ -903,12 +1251,21 @@ class _ChildFAQScreenState extends State<ChildFAQScreen>
 
         // ── Bottom action bar ──
         AnimatedOpacity(
-          duration: const Duration(milliseconds: 500),
-          opacity: _typingDone ? 1.0 : 0.0,
+          duration: const Duration(
+            milliseconds: 500,
+          ),
+          opacity: _typingDone
+              ? 1.0
+              : 0.0,
           child: IgnorePointer(
             ignoring: !_typingDone,
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 20),
+              padding: const EdgeInsets.fromLTRB(
+                16,
+                10,
+                16,
+                20,
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -922,33 +1279,54 @@ class _ChildFAQScreenState extends State<ChildFAQScreen>
                       color: AppColors.kTextSoft,
                     ),
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(
+                    height: 10,
+                  ),
                   // More Questions — full width
                   GestureDetector(
                     onTap: _goToQuestions,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 15),
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 15,
+                      ),
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
-                          colors: [cat.color, cat.color.withOpacity(0.75)],
+                          colors: [
+                            cat.color,
+                            cat.color.withOpacity(
+                              0.75,
+                            ),
+                          ],
                           begin: Alignment.centerLeft,
                           end: Alignment.centerRight,
                         ),
-                        borderRadius: BorderRadius.circular(16),
+                        borderRadius: BorderRadius.circular(
+                          16,
+                        ),
                         boxShadow: [
                           BoxShadow(
-                            color: cat.color.withOpacity(0.35),
+                            color: cat.color.withOpacity(
+                              0.35,
+                            ),
                             blurRadius: 12,
-                            offset: const Offset(0, 5),
+                            offset: const Offset(
+                              0,
+                              5,
+                            ),
                           ),
                         ],
                       ),
-                      child:  Row(
+                      child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.chat_bubble_outline_rounded,
-                              size: 16, color: Colors.white),
-                          SizedBox(width: 8),
+                          Icon(
+                            Icons.chat_bubble_outline_rounded,
+                            size: 16,
+                            color: Colors.white,
+                          ),
+                          SizedBox(
+                            width: 8,
+                          ),
                           Text(
                             "More ${cat.label} Questions",
                             style: TextStyle(
@@ -962,48 +1340,63 @@ class _ChildFAQScreenState extends State<ChildFAQScreen>
                       ),
                     ),
                   ),
-                  const SizedBox(height: 8),
-                GestureDetector(
-                  onTap: _goToTopics,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 13),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: cat.color.withOpacity(0.22),
-                        width: 1.5,
+                  const SizedBox(
+                    height: 8,
+                  ),
+                  GestureDetector(
+                    onTap: _goToTopics,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 13,
                       ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.04),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(
+                          16,
                         ),
-                      ],
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.grid_view_rounded,
-                          size: 14,
-                          color: cat.color,
+                        border: Border.all(
+                          color: cat.color.withOpacity(
+                            0.22,
+                          ),
+                          width: 1.5,
                         ),
-                        const SizedBox(width: 6),
-                        Text(
-                          "Back to all topics",
-                          style: TextStyle(
-                            fontFamily: 'Nunito',
-                            fontSize: 14,
-                            fontWeight: FontWeight.w800,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(
+                              0.04,
+                            ),
+                            blurRadius: 10,
+                            offset: const Offset(
+                              0,
+                              4,
+                            ),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.grid_view_rounded,
+                            size: 14,
                             color: cat.color,
                           ),
-                        ),
-                      ],
+                          const SizedBox(
+                            width: 6,
+                          ),
+                          Text(
+                            "Back to all topics",
+                            style: TextStyle(
+                              fontFamily: 'Nunito',
+                              fontSize: 14,
+                              fontWeight: FontWeight.w800,
+                              color: cat.color,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
                 ],
               ),
             ),
@@ -1015,21 +1408,46 @@ class _ChildFAQScreenState extends State<ChildFAQScreen>
 }
 
 // ── Triangle painter for speech bubble pointer ────────────────────────────────
-class _TrianglePainter extends CustomPainter {
+class _TrianglePainter
+    extends
+        CustomPainter {
   final Color color;
-  _TrianglePainter(this.color);
+  _TrianglePainter(
+    this.color,
+  );
 
   @override
-  void paint(Canvas canvas, Size size) {
+  void paint(
+    Canvas canvas,
+    Size size,
+  ) {
     final paint = Paint()..color = color;
     final path = Path()
-      ..moveTo(0, size.height)
-      ..lineTo(size.width / 2, 0)
-      ..lineTo(size.width, size.height)
+      ..moveTo(
+        0,
+        size.height,
+      )
+      ..lineTo(
+        size.width /
+            2,
+        0,
+      )
+      ..lineTo(
+        size.width,
+        size.height,
+      )
       ..close();
-    canvas.drawPath(path, paint);
+    canvas.drawPath(
+      path,
+      paint,
+    );
   }
 
   @override
-  bool shouldRepaint(_TrianglePainter old) => old.color != color;
+  bool
+  shouldRepaint(
+    _TrianglePainter old,
+  ) =>
+      old.color !=
+      color;
 }

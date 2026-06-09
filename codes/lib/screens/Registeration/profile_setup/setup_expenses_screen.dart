@@ -35,6 +35,7 @@ class _SetupExpensesScreenState
       'name': TextEditingController(),
       'amount': TextEditingController(),
       'dueDate': null,
+      'dueDateController': TextEditingController(),
       'category': null,
       'customCategory': TextEditingController(),
       'errors':
@@ -63,6 +64,7 @@ class _SetupExpensesScreenState
             'amount': TextEditingController(),
             'dueDate': null,
             'category': null,
+            'dueDateController': TextEditingController(),
             'customCategory': TextEditingController(),
             'errors':
                 <
@@ -642,15 +644,6 @@ class _SetupExpensesScreenState
                     );
                   },
                 ).toList(),
-                const DropdownMenuItem(
-                  value: 'Custom',
-                  child: Text(
-                    "Custom Category",
-                    style: TextStyle(
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
               ],
               onChanged:
                   (
@@ -713,11 +706,7 @@ class _SetupExpensesScreenState
             ),
 
             TextField(
-              controller: TextEditingController(
-                text:
-                    expense['dueDate']?.toString() ??
-                    '',
-              ),
+              controller: expense['dueDateController'],
               keyboardType: TextInputType.number,
               inputFormatters: [
                 FilteringTextInputFormatter.digitsOnly,

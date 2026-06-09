@@ -85,6 +85,7 @@ class _SetupIncomeScreenState
       'source': TextEditingController(),
       'amount': TextEditingController(),
       'day': null,
+      'dayController': TextEditingController(),
       'errors':
           <
             String,
@@ -105,6 +106,7 @@ class _SetupIncomeScreenState
             'source': TextEditingController(),
             'amount': TextEditingController(),
             'day': null,
+            'dayController': TextEditingController(),
             'errors':
                 <
                   String,
@@ -608,11 +610,7 @@ class _SetupIncomeScreenState
             ),
 
             TextField(
-              controller: TextEditingController(
-                text:
-                    income['day']?.toString() ??
-                    '',
-              ),
+              controller: income['dayController'],
               keyboardType: TextInputType.number,
               inputFormatters: [
                 FilteringTextInputFormatter.digitsOnly,

@@ -193,6 +193,144 @@ class _AddChildPageState
     );
   }
 
+  Future<
+    void
+  >
+  _showUsernameTakenDialog() async {
+    await showDialog<
+      void
+    >(
+      context: context,
+      barrierDismissible: true,
+      builder:
+          (
+            ctx,
+          ) {
+            return Dialog(
+              backgroundColor: const Color(
+                0xFF141427,
+              ),
+              insetPadding: const EdgeInsets.symmetric(
+                horizontal: 32,
+                vertical: 24,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(
+                  40,
+                ),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  24,
+                  32,
+                  24,
+                  24,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 80,
+                      height: 80,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: const Color(
+                          0xFF1F1F33,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.redAccent.withOpacity(
+                              0.6,
+                            ),
+                            blurRadius: 18,
+                            spreadRadius: 2,
+                          ),
+                        ],
+                        border: Border.all(
+                          color: Colors.redAccent,
+                          width: 3,
+                        ),
+                      ),
+                      child: const Center(
+                        child: Icon(
+                          Icons.error_outline,
+                          color: Colors.redAccent,
+                          size: 42,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(
+                      height: 24,
+                    ),
+                    const Text(
+                      'Username Already Used',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(
+                      height: 12,
+                    ),
+                    const Text(
+                      'This child username is already taken. Please choose a different username.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 14,
+                        height: 1.5,
+                      ),
+                    ),
+                    const SizedBox(
+                      height: 28,
+                    ),
+                    SizedBox(
+                      width: 120,
+                      height: 44,
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.of(
+                          ctx,
+                        ).pop(),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(
+                            0xFF704EF4,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(
+                              999,
+                            ),
+                          ),
+                          elevation: 16,
+                          shadowColor:
+                              const Color(
+                                0xFF704EF4,
+                              ).withOpacity(
+                                0.7,
+                              ),
+                        ),
+                        child: const Text(
+                          'OK',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(
+                      height: 8,
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+    );
+  }
+
   void _showConfirmationDialog() {
     if (!_formKey.currentState!.validate()) return;
 
@@ -331,21 +469,16 @@ class _AddChildPageState
           .select(
             'child_id',
           )
-          .eq(
-            'guardian_id',
-            guardianUserId,
-          )
           .ilike(
             'user_name',
             username,
           )
           .maybeSingle();
-
       if (existing !=
           null) {
-        _showError(
-          'This child username already exists.',
-        );
+        if (mounted) {
+          await _showUsernameTakenDialog();
+        }
         return;
       }
 

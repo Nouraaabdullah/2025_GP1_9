@@ -924,9 +924,8 @@ class _SpendingInsightPageState
     final leftToSpend =
         limit -
         spent;
-    final color = colorFromIconOrSeed(
-      categoryId: category.id,
-      iconHex: category.color,
+    final color = _hexToColor(
+      category.color,
     );
 
     // Parse the icon

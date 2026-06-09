@@ -13,6 +13,7 @@ import 'dart:convert';
 import 'package:surra_application/screens/profile/add_child_page.dart';
 import 'package:surra_application/screens/notifications/notification_bell.dart';
 import 'package:surra_application/screens/profile/guardian_child_statistics_page.dart';
+import 'package:auto_size_text/auto_size_text.dart';
 
 class ProfileMainPage
     extends
@@ -117,6 +118,138 @@ class _ProfileMainPageState
       );
     }
     return profileId;
+  }
+
+  Future<
+    void
+  >
+  _showDeleteSuccessDialog() async {
+    await showDialog<
+      void
+    >(
+      context: context,
+      barrierDismissible: true,
+      builder:
+          (
+            ctx,
+          ) {
+            return Dialog(
+              backgroundColor: const Color(
+                0xFF141427,
+              ),
+              insetPadding: const EdgeInsets.symmetric(
+                horizontal: 32,
+                vertical: 24,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(
+                  40,
+                ),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  24,
+                  32,
+                  24,
+                  24,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 80,
+                      height: 80,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: const Color(
+                          0xFF1F1F33,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.greenAccent.withOpacity(
+                              0.5,
+                            ),
+                            blurRadius: 18,
+                            spreadRadius: 2,
+                          ),
+                        ],
+                        border: Border.all(
+                          color: Colors.greenAccent,
+                          width: 3,
+                        ),
+                      ),
+                      child: const Center(
+                        child: Icon(
+                          Icons.check,
+                          color: Colors.greenAccent,
+                          size: 42,
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(
+                      height: 24,
+                    ),
+
+                    const Text(
+                      'Child Deleted',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+
+                    const SizedBox(
+                      height: 12,
+                    ),
+
+                    const Text(
+                      'The child account has been deleted successfully.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 14,
+                        height: 1.5,
+                      ),
+                    ),
+
+                    const SizedBox(
+                      height: 28,
+                    ),
+
+                    SizedBox(
+                      width: 120,
+                      height: 44,
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.of(
+                          ctx,
+                        ).pop(),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(
+                            0xFF704EF4,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(
+                              999,
+                            ),
+                          ),
+                        ),
+                        child: const Text(
+                          'OK',
+                          style: TextStyle(
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+    );
   }
 
   Future<
@@ -344,7 +477,6 @@ class _ProfileMainPageState
       );
     }
   }
-
 
   Future<
     void
@@ -1356,6 +1488,26 @@ class _ProfileMainPageState
 
       await _sb
           .from(
+            'Notification',
+          )
+          .delete()
+          .eq(
+            'profile_id',
+            profileId,
+          );
+
+      await _sb
+          .from(
+            'Goal',
+          )
+          .delete()
+          .eq(
+            'profile_id',
+            profileId,
+          );
+
+      await _sb
+          .from(
             'User_Profile',
           )
           .delete()
@@ -1372,15 +1524,7 @@ class _ProfileMainPageState
         },
       );
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Child account deleted successfully.',
-          ),
-        ),
-      );
+      await _showDeleteSuccessDialog();
 
       await _refreshData();
     } catch (
@@ -1498,8 +1642,10 @@ class _ProfileMainPageState
                                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                         children: [
                                           Expanded(
-                                            child: Text(
+                                            child: AutoSizeText(
                                               'Welcome ${data.fullName}',
+                                              maxLines: 1,
+                                              minFontSize: 16,
                                               overflow: TextOverflow.ellipsis,
                                               style: const TextStyle(
                                                 color: Colors.white,
@@ -1611,14 +1757,16 @@ class _ProfileMainPageState
                                         data,
                                       ),
                                       const SizedBox(
-                                        height: 60,
+                                        height: 24,
                                       ),
-                                      _buildChildrenSummarySection(
-                                        data,
-                                      ),
-                                      const SizedBox(
-                                        height: 2,
-                                      ),
+                                      if (data.children.isNotEmpty) ...[
+                                        _buildChildrenSummarySection(
+                                          data,
+                                        ),
+                                        const SizedBox(
+                                          height: 2,
+                                        ),
+                                      ],
                                     ],
                                   ),
                                 ),
@@ -1979,7 +2127,6 @@ class _ProfileMainPageState
                                                       dynamic
                                                     >{};
 
-
                                                 // --- A: DB fields ---
                                                 final bool hasDbFields =
                                                     goldRow.containsKey(
@@ -2146,6 +2293,23 @@ class _ProfileMainPageState
                                 ),
 
                                 // =================== END GOLD TRENDS ===================
+                                const SizedBox(
+                                  height: 14,
+                                ),
+
+                                if (data.children.isEmpty)
+                                  Padding(
+                                    padding: const EdgeInsets.fromLTRB(
+                                      20,
+                                      0,
+                                      20,
+                                      0,
+                                    ),
+                                    child: _buildChildrenSummarySection(
+                                      data,
+                                    ),
+                                  ),
+
                                 const SizedBox(
                                   height: 14,
                                 ),
@@ -3465,7 +3629,7 @@ class _GoldTrendCard
               right: pad,
               bottom: 16,
               child: Container(
-                height: 100,
+                height: 104,
                 padding: const EdgeInsets.fromLTRB(
                   16,
                   12,

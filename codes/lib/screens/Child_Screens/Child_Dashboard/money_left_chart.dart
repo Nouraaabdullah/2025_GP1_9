@@ -11,6 +11,7 @@ class MoneyLeftSemicircleGauge
   final String label;
   final double? expenses;
   final double? earnings;
+  final Color labelColor;
 
   const MoneyLeftSemicircleGauge({
     super.key,
@@ -18,6 +19,7 @@ class MoneyLeftSemicircleGauge
     required this.label,
     this.expenses,
     this.earnings,
+    this.labelColor = AppColors.kText,
   });
 
   @override
@@ -137,19 +139,27 @@ class _MoneyLeftSemicircleGaugeState
               0,
               double.infinity,
             );
-    final base =
-        ern;
+    final base = ern;
 
     double sweepExp = 0;
     double sweepErn = 0;
 
-if (base > 0) {
-  final used = exp.clamp(0, base);
-  sweepExp = 180.0 * (used / base);
-  sweepErn = 180.0 - sweepExp;
-} else {
-  sweepErn = 180.0;
-}
+    if (base >
+        0) {
+      final used = exp.clamp(
+        0,
+        base,
+      );
+      sweepExp =
+          180.0 *
+          (used /
+              base);
+      sweepErn =
+          180.0 -
+          sweepExp;
+    } else {
+      sweepErn = 180.0;
+    }
 
     return Center(
       child: GestureDetector(
@@ -225,8 +235,7 @@ if (base > 0) {
 
               final expVal = exp;
               final ernVal = ern;
-              final baseVal =
-                  ernVal;
+              final baseVal = ernVal;
               double expSweep = 0;
               double ernSweep = 0;
 
@@ -239,7 +248,9 @@ if (base > 0) {
                           baseVal,
                         ) /
                         baseVal);
-                ernSweep = math.pi - expSweep;
+                ernSweep =
+                    math.pi -
+                    expSweep;
               } else {
                 ernSweep = math.pi;
               }
@@ -355,7 +366,7 @@ if (base > 0) {
                     deflate: _deflate,
                   ),
                 ),
- 
+
               Positioned.fill(
                 child: Align(
                   alignment: const Alignment(
@@ -365,9 +376,9 @@ if (base > 0) {
                   child: Text(
                     widget.label,
                     textAlign: TextAlign.center,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontFamily: AppTextStyles.nunito,
-                      color: AppColors.kText,
+                      color: widget.labelColor,
                       fontSize: 16,
                       fontWeight: FontWeight.w900,
                     ),

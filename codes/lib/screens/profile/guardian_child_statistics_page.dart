@@ -2502,6 +2502,7 @@ class _GuardianChildStatisticsPageState
                   label: '${(percentLeft * 100).round()}% of\nmoney left',
                   expenses: totalExpenses.toDouble(),
                   earnings: totalEarnings.toDouble(),
+                  labelColor: Colors.white,
                 ),
                 const SizedBox(
                   height: 8,
